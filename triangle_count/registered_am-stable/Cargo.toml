@@ -1,0 +1,32 @@
+[package]
+name = "triangle_count"
+version = "0.1.0"
+authors = ["frie869 <ryan.friese@pnnl.gov>"]
+edition = "2018"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+lamellar = { path = "../../../lamellar-runtime" , features = ["stable"] }
+lazy_static = "1.3.0"
+parking_lot = "0.9"
+graph = { path = "../graph" }
+
+[profile.release]
+opt-level=3
+lto=true
+codegen-units=1
+debug = true 
+
+[[bin]]
+name = "tc_lamellar"
+path = "src/tc_lamellar.rs"
+
+[[bin]]
+name = "tc_lamellar_get"
+path = "src/tc_lamellar_get.rs"
+
+[[bin]]
+name = "tc_lamellar_buffered"
+path = "src/tc_lamellar_buffered.rs"
+
+

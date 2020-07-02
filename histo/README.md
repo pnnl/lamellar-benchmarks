@@ -10,6 +10,7 @@ A initial implementation of the Histo benchmark (https://github.com/jdevinney/ba
 
 NEWS
 ----
+July 2020: Second alpha release
 Feb 2020: First alpha release
 
 BUILD REQUIREMENTS
@@ -37,13 +38,13 @@ In the following, assume a root directory ${ROOT}
 0. download Lamellar to ${ROOT}/lamellar-runtime  -- or update Cargo.toml to point to the proper location
     `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
 
-1. Compile benchmark
+1. cd into registered-am or remote-closure directory and Compile benchmark 
 
 `cargo build (--release)`
 
     executables located at ./target/debug(release)/<benchmark variant>
 
-    where `<benchmark variant>` in {`histo, histo_static, histo_buffered_updates, histo_buffered_updates_static`}.
+    where `<benchmark variant>` in {`histo_dma, histo_static, histo_buffered_updates_dma, histo_buffered_updates_static`}.
 
 
 TESTING
@@ -65,6 +66,9 @@ The benchmarks are designed to be run with on multiple compute nodes (1 node is 
 
 HISTORY
 -------
+- version 0.2:
+  - update to match Lamellar v0.2 api
+  - implement registered AM version
 - version 0.1:
   - initial implementations
   - use static array

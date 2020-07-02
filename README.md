@@ -10,13 +10,14 @@ A collection of benchmarks to test the functionality and performance of the Lame
 
 NEWS
 ----
+July 2020: Second alpha release
 Feb 2020: First alpha release
 
 BUILD REQUIREMENTS
 ------------------
 These benchmarks requires the following dependencies:
 
-* [Lamellar](https://gitlab.pnnl.gov/lamellar/lamellar-runtime)
+* [Lamellar](https://github.com/pnnl/lamellar-runtime)
 At the time of release, Lamellar has been tested with the following external packages:
 
 | **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** | **LAMELLAR** |
@@ -39,6 +40,9 @@ In the following, assume a root directory ${ROOT}
 
 HISTORY
 -------
+- version 0.2:
+  - histo
+  - triangle count
 - version 0.1:
   - histo
   - triangle count

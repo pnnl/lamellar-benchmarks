@@ -10,6 +10,7 @@ A initial implementation of graph triangle counting implemented in Rust for the 
 
 NEWS
 ----
+July 2020: Second alpha release
 Feb 2020: First alpha release
 
 BUILD REQUIREMENTS
@@ -37,7 +38,7 @@ In the following, assume a root directory ${ROOT}
 0. download Lamellar to ${ROOT}/lamellar-runtime  -- or update Cargo.toml to point to the proper location
     `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
 
-1. Compile benchmark
+1. cd into registered-am or remote-closure directory Compile benchmark
 
 `cargo build (--release)`
 
@@ -67,6 +68,9 @@ This graph along with larger scale graphs can be downloaded at (http://networkre
 
 HISTORY
 -------
+- version 0.2:
+  - update to match Lamellar v0.2 api
+  - implement registered AM version
 - version 0.1:
   - Active message based implementation
   - ROFI remote memory window based implementation
@@ -74,7 +78,7 @@ HISTORY
   
 NOTES
 -----
-as of Lamellar 0.1.0 tc_lamellar_get only works with the Rofi Lamellae
+as of Lamellar 0.2.0 tc_lamellar_get only works with the Rofi Lamellae
 
 STATUS
 ------

@@ -1,0 +1,21 @@
+[package]
+name = "graph"
+version = "0.1.0"
+authors = ["frie869 <ryan.friese@pnnl.gov>"]
+edition = "2018"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+csv = "1"
+
+[profile.release]
+opt-level=3
+lto=true
+codegen-units=1
+debug = true 
+
+
+[lib]
+name="graph"
+path="src/lib.rs"
+
