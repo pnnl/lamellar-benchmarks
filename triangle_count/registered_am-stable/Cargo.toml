@@ -1,12 +1,12 @@
 [package]
 name = "triangle_count"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["frie869 <ryan.friese@pnnl.gov>"]
 edition = "2018"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-lamellar = { path = "../../../lamellar-runtime" , features = ["stable"] }
+lamellar = "0.2.1" #add features = ["enable-rofi"] to use rofi lamellae 
 lazy_static = "1.3.0"
 parking_lot = "0.9"
 graph = { path = "../graph" }

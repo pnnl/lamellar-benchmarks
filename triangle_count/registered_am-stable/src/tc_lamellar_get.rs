@@ -187,7 +187,7 @@ fn main() {
                 println!("node: {:?} {:?} {:?}", node, edges.len(), size);
                 //64K entries * 4bytes == 128KB per message
                 let req = world.exec_am_all(GraphAM { edges: edges });
-                req.am_get_all();
+                req.get_all();
                 edges = vec![];
                 size = 0;
             }
@@ -196,7 +196,7 @@ fn main() {
         }
         edges.push(vec![]); // to set the last offset
         let req = world.exec_am_all(GraphAM { edges: edges });
-        req.am_get_all();
+        req.get_all();
     }
     drop(g);
     world.barrier();

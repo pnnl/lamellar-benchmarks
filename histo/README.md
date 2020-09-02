@@ -10,6 +10,7 @@ A initial implementation of the Histo benchmark (https://github.com/jdevinney/ba
 
 NEWS
 ----
+Sept 2020: Update for Lamellar 0.2.1 release
 July 2020: Second alpha release
 Feb 2020: First alpha release
 
@@ -17,7 +18,7 @@ BUILD REQUIREMENTS
 ------------------
 These benchmarks requires the following dependencies:
 
-* [Lamellar](https://github.com/pnnl/lamellar-runtime)
+* [Lamellar](https://github.com/pnnl/lamellar-runtime) - now on [crates.io](https://crates.io/crates/lamellar)
 
 * Crates listed in Cargo.toml
 
@@ -25,7 +26,7 @@ At the time of release, Lamellar has been tested with the following external pac
 
 | **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** | **LAMELLAR** |
 |--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|-------------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   | 0.1.0        |
+| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   | 0.2.1        |
 
 The OFI_DIR environment variable must be specified with the location of the OFI installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation.
@@ -62,6 +63,8 @@ The benchmarks are designed to be run with on multiple compute nodes (1 node is 
 3. Run histo_buffered_updates(_static)
 
 `mpiexec -n 2 ./target/release/histo_buffered_updates(_static) 10000000 100`  (argument = number of updates to perform, number of updates to buffer)
+
+Note that if using the "local" lamellae, simply execute the binary directly
 
 
 HISTORY
