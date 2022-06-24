@@ -1,0 +1,145 @@
+use lamellar::array::{
+    ArithmeticOps,  Distribution, ElementArithmeticOps, LamellarArray,
+    LamellarWriteArray,  ReadOnlyArray, UnsafeArray, DistributedIterator
+};
+use lamellar::{ LamellarWorld};
+use parking_lot::Mutex;
+use rand::prelude::*;
+use std::sync::Arc;
+use std::time::Instant;
+
+const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
+
+fn histo<T: ElementArithmeticOps>(
+    array_type: &str,
+    counts: LamellarWriteArray<T>,
+    rand_index: &ReadOnlyArray<usize>,
+    world: &LamellarWorld,
+    my_pe: usize,
+    num_pes: usize,
+    l_num_updates: usize,
+    one: T,
+    prev_amt: f64,
+) -> f64 {
+    let now = Instant::now();
+
+
+    //the actual histo
+    counts.add(rand_index, one);
+
+    //-----------------
+    if my_pe == 0 {
+        println!("{:?} issue time {:?} ", my_pe, now.elapsed());
+    }
+    counts.wait_all();
+    if my_pe == 0 {
+        println!(
+            "local run time {:?} local mups: {:?}",
+            now.elapsed(),
+            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
+        );
+    }
+    counts.barrier();
+    let global_time = now.elapsed().as_secs_f64();
+    if my_pe == 0 {
+        println!(
+            "global time {:?} MB {:?} MB/s: {:?}",
+            global_time,
+            (world.MB_sent() - prev_amt),
+            (world.MB_sent() - prev_amt) / global_time,
+        );
+        println!(
+            "MUPS: {:?}, {:?}",
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
+            array_type
+        );
+    }
+    println!("pe {:?} sum {:?}", my_pe, counts.sum().get());
+    counts.barrier();
+    world.MB_sent()
+}
+
+// srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let world = lamellar::LamellarWorldBuilder::new().build();
+    let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
+    let global_count = COUNTS_LOCAL_LEN * num_pes;
+    let l_num_updates = args
+        .get(1)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| 1000);
+
+    let counts = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Cyclic);
+    let rand_index =
+        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, Distribution::Block);
+    let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
+
+    // initialize arrays
+    let counts_init = counts.dist_iter_mut().for_each(|x| *x = 0);
+    // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
+    unsafe {
+        let mut rng = rng.lock();
+        for elem in rand_index.local_as_mut_slice().iter_mut() {
+            *elem = rng.gen_range(0, global_count);
+        }
+    }
+    counts_init.wait();
+    //counts.wait_all(); equivalent in this case to the above statement
+
+    let rand_index = rand_index.into_read_only();
+    world.barrier();
+
+    if my_pe == 0 {
+        println!("unsafe histo");
+    }
+    let prev_amt = histo(
+        "unsafe",
+        counts.clone().into(),
+        &rand_index,
+        &world,
+        my_pe,
+        num_pes,
+        l_num_updates,
+        1,
+        0.0,
+    );
+    counts.dist_iter_mut().for_each(|x| *x = 0).wait();
+    counts.barrier();
+
+    let counts = counts.into_local_lock_atomic();
+    if my_pe == 0 {
+        println!("local lock atomic histo");
+    }
+    let prev_amt = histo(
+        "local_lock",
+        counts.clone().into(),
+        &rand_index,
+        &world,
+        my_pe,
+        num_pes,
+        l_num_updates,
+        1,
+        prev_amt,
+    );
+    counts.dist_iter_mut().for_each(|x| *x = 0).wait();
+    counts.barrier();
+
+    let counts = counts.into_atomic();
+    if my_pe == 0 {
+        println!("atomic histo");
+    }
+    histo(
+        "atomic",
+        counts.clone().into(),
+        &rand_index,
+        &world,
+        my_pe,
+        num_pes,
+        l_num_updates,
+        1,
+        prev_amt,
+    );
+    
+}

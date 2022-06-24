@@ -6,7 +6,7 @@ Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST
 SUMMARY
 -------
 
-A initial implementation of the Histo benchmark (https://github.com/jdevinney/bale/tree/master/apps/histo_src) implemented in Rust for the Lamellar runtime
+Am implementation of the Histo benchmark (https://github.com/jdevinney/bale/tree/master/apps/histo_src) implemented in Rust for the Lamellar runtime
 
 NEWS
 ----
