@@ -1,4 +1,4 @@
-use lamellar::{ActiveMessaging, SharedMemoryRegion,LocalMemoryRegion, RemoteMemoryRegion, LamellarTaskGroup, LamellarWorld, LamellarRequest};
+use lamellar::{ActiveMessaging, LamellarWorld, LamellarRequest, SharedMemoryRegion,LocalMemoryRegion, RemoteMemoryRegion, LamellarTaskGroup};
 
 use rand::prelude::*;
 use std::time::Instant;

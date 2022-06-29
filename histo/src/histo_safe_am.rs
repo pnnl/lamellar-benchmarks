@@ -1,10 +1,12 @@
-use lamellar::{ActiveMessaging, LocalMemoryRegion, SharedMemoryRegion, RemoteMemoryRegion};
+use lamellar::{ActiveMessaging, LamellarWorld, LamellarRequest, LocalMemoryRegion, SharedMemoryRegion, RemoteMemoryRegion};
 
 use rand::prelude::*;
 use std::time::Instant;
 use std::sync::atomic::{AtomicUsize,Ordering};
 
 const COUNTS_LOCAL_LEN: usize = 10000000;
+
+//===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoAM {
@@ -46,6 +48,23 @@ impl LamellarAM for LaunchAm {
     }
 }
 
+fn histo(l_num_updates: usize, num_threads: usize, world: &LamellarWorld,  rand_index: &LocalMemoryRegion<usize>, counts: &SharedMemoryRegion<usize>) -> Vec<Box<(dyn LamellarRequest<Output = ()> + 'static)>> {
+    let slice_size = l_num_updates as f32/num_threads as f32;
+    let mut launch_tasks = vec!{};
+    for tid in 0..num_threads{
+        let start = (tid as f32*slice_size).round() as usize;
+        let end = ((tid+1) as f32 * slice_size).round() as usize;
+        launch_tasks.push(world.exec_am_local(
+            LaunchAm{
+                rand_index: rand_index.sub_region(start..end),
+                counts: counts.clone(),
+            }
+        ));
+    }
+    launch_tasks
+}
+
+//===== HISTO END ======
 
 // srun -N <num nodes> target/release/histo <num updates>
 fn main() {
@@ -78,36 +97,23 @@ fn main() {
         Err(_) => 1,
     };
     let num_threads = std::cmp::max(num_threads/2,1);
-    let slice_size = l_num_updates as f32/num_threads as f32;
     world.barrier();
     let now = Instant::now();
-    for tid in 0..num_threads{
-        let start = (tid as f32*slice_size).round() as usize;
-        let end = ((tid+1) as f32 * slice_size).round() as usize;
-        world.exec_am_local(
-            LaunchAm{
-                rand_index: rand_index.sub_region(start..end),
-                counts: counts.clone(),
-            }
-        );
-    }
-    // for idx in rand_index.as_slice().unwrap() {
-    //     let rank = idx % num_pes;
-    //     let offset = idx / num_pes;
+    let launch_tasks = histo(l_num_updates, num_threads, &world, &rand_index, &counts);
 
-    //     world.exec_am_pe(
-    //         rank,
-    //         HistoAM{
-    //             offset: offset,
-    //             counts: counts.clone(),
-    //         },
-    //     );
-    // }
+   
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed());
     }
-    world.wait_all();
+    for task in launch_tasks{
+        task.get();
+    }
+    if my_pe == 0 {
+        println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
+    }
 
+    world.wait_all();
+    
     if my_pe == 0 {
         println!(
             "local run time {:?} local mups: {:?}",
