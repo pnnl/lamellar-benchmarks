@@ -7,9 +7,11 @@ SUMMARY
 -------
 
 A initial implementation of graph triangle counting implemented in Rust for the Lamellar runtime
+Including non buffered and buffered versions.
 
 NEWS
 ----
+July 2022: Update for Lamellar 0.4.x release
 Sept 2020: Update for Lamellar 0.2.1 release
 July 2020: Second alpha release
 Feb 2020: First alpha release
@@ -45,7 +47,7 @@ In the following, assume a root directory ${ROOT}
 
     executables located at ./target/debug(release)/<benchmark variant>
 
-    where `<benchmark variant>` in {`tc_lamellar, tc_lamellar_get, tc_lamellar_buffered`}.
+    where `<benchmark variant>` in {`triangle_count, triangle_count_buffered`}.
 
 
 Note that if using the "local" lamellae, simply execute the binary directly
@@ -59,9 +61,9 @@ The benchmarks are designed to be run with on multiple compute nodes (1 node is 
 
 `salloc -N 2 -p compute`
 
-2. Run tc_lamellar(_*) using `mpiexec` launcher.
+2. Run triangle_count(_buffered) using `mpiexec` launcher.
 
-`mpiexec -n 2 ./target/release/tc_lamellar(_*) graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of updates to perform)
+`mpiexec -n 2 ./target/release/triangle_count(_buffered) graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
 
 GRAPHS
 ------
@@ -72,6 +74,9 @@ This graph along with larger scale graphs can be downloaded at (http://networkre
 
 HISTORY
 -------
+- version 0.4:
+  - update to match Lamellar v0.4 api
+  - new underlying graph implementation
 - version 0.2:
   - update to match Lamellar v0.2 api
   - implement registered AM version
@@ -82,7 +87,7 @@ HISTORY
   
 NOTES
 -----
-as of Lamellar 0.2.0 tc_lamellar_get only works with the Rofi Lamellae
+
 
 STATUS
 ------
