@@ -1,9 +1,13 @@
-use lamellar::{ActiveMessaging, SharedMemoryRegion,LocalMemoryRegion, RemoteMemoryRegion, LamellarTaskGroup,LamellarWorld,LamellarRequest};
+use lamellar::{
+    ActiveMessaging, LamellarRequest, LamellarTaskGroup, LamellarWorld, LocalMemoryRegion,
+    RemoteMemoryRegion, SharedMemoryRegion,
+};
 
 use rand::prelude::*;
 use std::time::Instant;
 
-use std::sync::atomic::{AtomicUsize,Ordering};
+use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MB on each pe
 
@@ -12,7 +16,7 @@ const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MB on each pe
 #[lamellar::AmData(Clone, Debug)]
 struct HistoBufferedAM {
     buff: std::vec::Vec<usize>,
-    counts: SharedMemoryRegion<usize>
+    counts: SharedMemoryRegion<usize>,
 }
 
 #[lamellar::am]
@@ -54,10 +58,10 @@ impl LamellarAM for LaunchAm {
                 let buff = buffs[rank].clone();
                 task_group.exec_am_pe(
                     rank,
-                    HistoBufferedAM{
+                    HistoBufferedAM {
                         buff: buff,
-                        counts: self.counts.clone()
-                    }
+                        counts: self.counts.clone(),
+                    },
                 );
                 buffs[rank].clear();
             }
@@ -68,9 +72,9 @@ impl LamellarAM for LaunchAm {
             if buff.len() > 0 {
                 task_group.exec_am_pe(
                     rank,
-                    HistoBufferedAM{
+                    HistoBufferedAM {
                         buff: buff,
-                        counts: self.counts.clone()
+                        counts: self.counts.clone(),
                     },
                 );
             }
@@ -78,19 +82,24 @@ impl LamellarAM for LaunchAm {
     }
 }
 
-fn histo(l_num_updates: usize, num_threads: usize, world: &LamellarWorld,  rand_index: &LocalMemoryRegion<usize>, counts: &SharedMemoryRegion<usize>, buffer_amt: usize) -> Vec<Box<(dyn LamellarRequest<Output = ()> + 'static)>> {
-    let slice_size = l_num_updates as f32/num_threads as f32; 
-    let mut launch_tasks = vec!{};
-    for tid in 0..num_threads{
-        let start = (tid as f32*slice_size).round() as usize;
-        let end = ((tid+1) as f32 * slice_size).round() as usize;
-        launch_tasks.push(world.exec_am_local(
-            LaunchAm{
-                rand_index: rand_index.sub_region(start..end),
-                counts: counts.clone(),
-                buffer_amt: buffer_amt
-            }
-        ));
+fn histo(
+    l_num_updates: usize,
+    num_threads: usize,
+    world: &LamellarWorld,
+    rand_index: &LocalMemoryRegion<usize>,
+    counts: &SharedMemoryRegion<usize>,
+    buffer_amt: usize,
+) -> Vec<impl Future<Output = ()>> {
+    let slice_size = l_num_updates as f32 / num_threads as f32;
+    let mut launch_tasks = vec![];
+    for tid in 0..num_threads {
+        let start = (tid as f32 * slice_size).round() as usize;
+        let end = ((tid + 1) as f32 * slice_size).round() as usize;
+        launch_tasks.push(world.exec_am_local(LaunchAm {
+            rand_index: rand_index.sub_region(start..end),
+            counts: counts.clone(),
+            buffer_amt: buffer_amt,
+        }));
     }
     launch_tasks
 }
@@ -105,7 +114,6 @@ fn main() {
     let num_pes = world.num_pes();
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
-    
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
@@ -126,26 +134,34 @@ fn main() {
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     unsafe {
-        for elem in counts.as_mut_slice().unwrap().iter_mut(){
+        for elem in counts.as_mut_slice().unwrap().iter_mut() {
             *elem = 0;
         }
-        for elem in rand_index.as_mut_slice().unwrap().iter_mut(){
-            *elem =  rng.gen_range(0, global_count);
+        for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
+            *elem = rng.gen_range(0, global_count);
         }
     }
 
     //get number of updates to perform from first command line argument otherwise set to 1000 updates
     world.barrier();
     let now = Instant::now();
-    let launch_tasks = histo(l_num_updates, num_threads, &world, &rand_index, &counts, buffer_amt);
-   
+    let launch_tasks = histo(
+        l_num_updates,
+        num_threads,
+        &world,
+        &rand_index,
+        &counts,
+        buffer_amt,
+    );
 
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
     }
-    for task in launch_tasks{
-        task.get();
-    }
+    world.block_on(async move {
+        for task in launch_tasks {
+            task.await;
+        }
+    });
     if my_pe == 0 {
         println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
     }
@@ -172,9 +188,13 @@ fn main() {
             global_time,
             world.MB_sent(),
             world.MB_sent() / global_time,
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) /global_time
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
         );
     }
 
-    println!("pe {:?} sum {:?}",my_pe,counts.as_slice().unwrap().iter().sum::<usize>());
+    println!(
+        "pe {:?} sum {:?}",
+        my_pe,
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    );
 }

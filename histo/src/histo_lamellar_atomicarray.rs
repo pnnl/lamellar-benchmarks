@@ -1,5 +1,5 @@
 use lamellar::array::{
-    ArithmeticOps,  Distribution, UnsafeArray, DistributedIterator, ReadOnlyArray, AtomicArray
+    ArithmeticOps, AtomicArray, DistributedIterator, Distribution, ReadOnlyArray, UnsafeArray,
 };
 use parking_lot::Mutex;
 use rand::prelude::*;
@@ -15,7 +15,7 @@ fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
 //===== HISTO END ======
 
 const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
-// srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+                                             // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -41,7 +41,7 @@ fn main() {
             *elem = rng.gen_range(0, global_count);
         }
     }
-    counts_init.wait();
+    world.block_on(counts_init);
     let counts = unsafe_counts.into_atomic();
     //counts.wait_all(); equivalent in this case to the above statement
     let rand_index = rand_index.into_read_only();
@@ -75,5 +75,5 @@ fn main() {
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
         );
     }
-    println!("pe {:?} sum {:?}", my_pe, counts.sum().get());    
+    println!("pe {:?} sum {:?}", my_pe, counts.sum().get());
 }

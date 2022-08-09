@@ -1,8 +1,9 @@
-use lamellar::{ActiveMessaging, Darc, LamellarWorld, LamellarRequest};
+use lamellar::{ActiveMessaging, Darc, LamellarRequest, LamellarWorld};
 
 use rand::prelude::*;
+use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use std::sync::atomic::{AtomicUsize,Ordering};
 
 const COUNTS_LOCAL_LEN: usize = 10000000;
 
@@ -17,7 +18,7 @@ struct HistoAM {
 #[lamellar::am]
 impl LamellarAM for HistoAM {
     fn exec(self) {
-        self.counts[self.offset].fetch_add(1,Ordering::Relaxed);
+        self.counts[self.offset].fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -32,32 +33,35 @@ impl LamellarAM for LaunchAm {
     fn exec(self) {
         for idx in &self.rand_index {
             let rank = idx % lamellar::num_pes;
-            let offset = idx /  lamellar::num_pes;    
+            let offset = idx / lamellar::num_pes;
             lamellar::world.exec_am_pe(
                 rank,
-                HistoAM{
+                HistoAM {
                     offset: offset,
                     counts: self.counts.clone(),
                 },
             );
         }
-        
     }
 }
 
-fn histo(l_num_updates: usize, num_threads: usize, world: &LamellarWorld, mut rand_index: Vec<usize>, counts: &Darc<Vec<AtomicUsize>>) -> Vec<Box<(dyn LamellarRequest<Output = ()> + 'static)>> {
-    let slice_size = l_num_updates as f32/num_threads as f32;
-    let mut launch_tasks = vec!{};
-    for tid in 0..num_threads{
-        let start = (tid as f32*slice_size).round() as usize;
-        let end = ((tid+1) as f32 * slice_size).round() as usize;
-        let split_index = rand_index.len() - (end-start);
-        launch_tasks.push(world.exec_am_local(
-            LaunchAm{
-                rand_index: rand_index.split_off(split_index),
-                counts: counts.clone(),
-            }
-        ));
+fn histo(
+    l_num_updates: usize,
+    num_threads: usize,
+    world: &LamellarWorld,
+    mut rand_index: Vec<usize>,
+    counts: &Darc<Vec<AtomicUsize>>,
+) -> Vec<impl Future<Output = ()>> {
+    let slice_size = l_num_updates as f32 / num_threads as f32;
+    let mut launch_tasks = vec![];
+    for tid in 0..num_threads {
+        let start = (tid as f32 * slice_size).round() as usize;
+        let end = ((tid + 1) as f32 * slice_size).round() as usize;
+        let split_index = rand_index.len() - (end - start);
+        launch_tasks.push(world.exec_am_local(LaunchAm {
+            rand_index: rand_index.split_off(split_index),
+            counts: counts.clone(),
+        }));
     }
     launch_tasks
 }
@@ -79,18 +83,19 @@ fn main() {
     for _ in 0..COUNTS_LOCAL_LEN {
         counts_data.push(AtomicUsize::new(0));
     }
-    let counts = Darc::new(&world,counts_data).expect("unable to create darc");   
-    
+    let counts = Darc::new(&world, counts_data).expect("unable to create darc");
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
-    let rand_index = (0..l_num_updates).into_iter().map(|_| rng.gen_range(0, global_count)).collect::<Vec<usize>>();
+    let rand_index = (0..l_num_updates)
+        .into_iter()
+        .map(|_| rng.gen_range(0, global_count))
+        .collect::<Vec<usize>>();
 
     //create multiple launch tasks, that iterated through portions of rand_index in parallel
     let num_threads = match std::env::var("LAMELLAR_THREADS") {
         Ok(n) => n.parse::<usize>().unwrap(),
         Err(_) => 1,
     };
-    let num_threads = std::cmp::max(num_threads/2,1);
-    
+    let num_threads = std::cmp::max(num_threads / 2, 1);
     world.barrier();
     let now = Instant::now();
     let launch_tasks = histo(l_num_updates, num_threads, &world, rand_index, &counts);
@@ -98,9 +103,11 @@ fn main() {
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed());
     }
-    for task in launch_tasks{
-        task.get();
-    }
+    world.block_on(async move {
+        for task in launch_tasks {
+            task.await;
+        }
+    });
     if my_pe == 0 {
         println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
     }
@@ -128,9 +135,16 @@ fn main() {
             global_time,
             world.MB_sent(),
             world.MB_sent() / global_time,
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) /global_time
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
         );
     }
 
-    println!("pe {:?} sum {:?}",my_pe,counts.iter().map(|e| e.load(Ordering::Relaxed)).sum::<usize>());
+    println!(
+        "pe {:?} sum {:?}",
+        my_pe,
+        counts
+            .iter()
+            .map(|e| e.load(Ordering::Relaxed))
+            .sum::<usize>()
+    );
 }

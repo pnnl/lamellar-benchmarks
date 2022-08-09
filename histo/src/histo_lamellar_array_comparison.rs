@@ -1,8 +1,8 @@
 use lamellar::array::{
-    ArithmeticOps,  Distribution, ElementArithmeticOps, LamellarArray,
-    LamellarWriteArray,  ReadOnlyArray, UnsafeArray, DistributedIterator
+    ArithmeticOps, DistributedIterator, Distribution, ElementArithmeticOps, LamellarArray,
+    LamellarWriteArray, ReadOnlyArray, UnsafeArray,
 };
-use lamellar::{ LamellarWorld};
+use lamellar::LamellarWorld;
 use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
@@ -22,7 +22,6 @@ fn histo<T: ElementArithmeticOps>(
     prev_amt: f64,
 ) -> f64 {
     let now = Instant::now();
-
 
     //the actual histo
     counts.add(rand_index, one);
@@ -85,7 +84,7 @@ fn main() {
             *elem = rng.gen_range(0, global_count);
         }
     }
-    counts_init.wait();
+    world.block_on(counts_init);
     //counts.wait_all(); equivalent in this case to the above statement
 
     let rand_index = rand_index.into_read_only();
@@ -105,7 +104,7 @@ fn main() {
         1,
         0.0,
     );
-    counts.dist_iter_mut().for_each(|x| *x = 0).wait();
+    world.block_on(counts.dist_iter_mut().for_each(|x| *x = 0));
     counts.barrier();
 
     let counts = counts.into_local_lock_atomic();
@@ -123,7 +122,7 @@ fn main() {
         1,
         prev_amt,
     );
-    counts.dist_iter_mut().for_each(|x| *x = 0).wait();
+    world.block_on(counts.dist_iter_mut().for_each(|x| *x = 0));
     counts.barrier();
 
     let counts = counts.into_atomic();
@@ -141,5 +140,4 @@ fn main() {
         1,
         prev_amt,
     );
-    
 }
