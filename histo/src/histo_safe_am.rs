@@ -20,7 +20,7 @@ struct HistoAM {
 
 #[lamellar::am]
 impl LamellarAM for HistoAM {
-    fn exec(self) {
+    async fn exec(self) {
         // this casts the underlying entry to an atomicusize to perform atomic updates
         let elem = unsafe {
             ((&mut self.counts.as_mut_slice().unwrap()[self.offset] as *mut usize)
@@ -40,7 +40,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec(self) {
+    async fn exec(self) {
         for idx in self.rand_index.as_slice().unwrap() {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;

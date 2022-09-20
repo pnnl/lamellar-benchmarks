@@ -21,7 +21,7 @@ struct HistoBufferedAM {
 
 #[lamellar::am]
 impl LamellarAM for HistoBufferedAM {
-    fn exec(self) {
+    async fn exec(self) {
         // cast the shared memory region from usize to atomicusize
         let slice = unsafe {
             let slice = self.counts.as_mut_slice().unwrap();
@@ -43,7 +43,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec(self) {
+    async fn exec(self) {
         let now = Instant::now();
         let num_pes = lamellar::num_pes;
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =

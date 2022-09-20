@@ -1,11 +1,10 @@
 use lamellar::{
-    ActiveMessaging, Darc,  LamellarWorld, LocalRwDarc,
-     RemoteMemoryRegion, LocalMemoryRegion, LamellarTaskGroup,
-     LamellarTeam
+    ActiveMessaging, Darc, LamellarTaskGroup, LamellarTeam, LamellarWorld, LocalMemoryRegion,
+    LocalRwDarc, RemoteMemoryRegion,
 };
-use std::sync::Arc;
 use std::error::Error;
 use std::path::Path;
+use std::sync::Arc;
 // use std::marker::PhantomData;
 
 use std::collections::BTreeMap;
@@ -129,7 +128,7 @@ impl GraphData {
             GraphData::MapGraph(graph) => graph.lamellar_neighbors(node),
         }
     }
-    pub fn node_is_local(&self, node: &u32) -> bool { 
+    pub fn node_is_local(&self, node: &u32) -> bool {
         match self {
             GraphData::MapGraph(graph) => graph.node_is_local(node),
         }
@@ -144,7 +143,7 @@ struct RelabelMapAm {
 }
 #[lamellar::local_am]
 impl LamellarAM for RelabelMapAm {
-    fn exec() {
+    async fn exec() {
         let relabled = unsafe { self.relabeled.as_mut_slice().unwrap() };
         for (i, node) in self.nodes.iter().enumerate() {
             relabled[*node as usize] = (i + self.start_index) as u32;
@@ -159,7 +158,7 @@ struct RelabelAm {
 }
 #[lamellar::local_am]
 impl LamellarAM for RelabelAm {
-    fn exec() {
+    async fn exec() {
         let relabled = self.relabeled.as_slice().unwrap();
         for nodes in &self.nodes {
             let old_nodes = &nodes.0;
@@ -172,7 +171,6 @@ impl LamellarAM for RelabelAm {
     }
 }
 
-
 #[lamellar::AmData]
 struct LocalNeighborsAM {
     graph: LocalRwDarc<GraphData>,
@@ -181,11 +179,11 @@ struct LocalNeighborsAM {
 
 #[lamellar::am]
 impl LamellarAM for LocalNeighborsAM {
-    fn exec() {
+    async fn exec() {
         let mut graph = self.graph.write();
-        let mut remotes: Vec<(u32,LocalMemoryRegion<u32>)> = vec![]; 
+        let mut remotes: Vec<(u32, LocalMemoryRegion<u32>)> = vec![];
         for (node, neighbors) in &self.node_and_neighbors {
-            remotes.push((*node,graph.add_local_neighbors(*node, neighbors.clone())));
+            remotes.push((*node, graph.add_local_neighbors(*node, neighbors.clone())));
         }
         lamellar::world.exec_am_all(RemoteNeighborsAM {
             graph: self.graph.clone(),
@@ -201,7 +199,7 @@ struct RemoteNeighborsAM {
 }
 #[lamellar::am]
 impl LamellarAM for RemoteNeighborsAM {
-    fn exec() {
+    async fn exec() {
         let mut graph = self.graph.write();
         for (node, neighbors) in &self.node_and_neighbors {
             graph.add_remote_neighbors(*node, neighbors.clone());
@@ -218,7 +216,6 @@ pub struct Graph {
 
 impl Graph {
     pub fn new(fpath: &str, graph_type: GraphType, world: LamellarWorld) -> Graph {
-        
         let my_pe = world.my_pe();
         let graph = match graph_type {
             _map_graph => GraphData::MapGraph(MapGraph::new(world.team().clone())),
@@ -226,13 +223,17 @@ impl Graph {
         let graph = LocalRwDarc::try_new(world.team(), graph).unwrap(); // we are creating with the world team so should be valid on all pes
 
         Graph::load(fpath, &world, &graph).expect("error reading graph");
-        if my_pe == 0 {println!("Done loading graph!");}
+        if my_pe == 0 {
+            println!("Done loading graph!");
+        }
         let g = Graph {
             world: world,
             graph: graph.into_darc(),
             my_pe: my_pe,
         };
-        if my_pe == 0 { println!("Done creating graph!");}
+        if my_pe == 0 {
+            println!("Done creating graph!");
+        }
         g.barrier();
         g
     }
@@ -305,7 +306,6 @@ impl Graph {
             num_edges
         );
 
-
         let relabeled = world.alloc_local_mem_region::<u32>(num_nodes);
 
         let mut end_index = num_nodes;
@@ -359,14 +359,17 @@ impl Graph {
         world.wait_all();
         println!("reorder  time: {:?}", start.elapsed().as_secs_f64());
         let task_group = LamellarTaskGroup::new(world.team());
-        let mut pe_neigh_lists: HashMap<usize,Vec<(u32,LocalMemoryRegion<u32>)>> = HashMap::new();
-        for pe in 0..world.num_pes(){
-            pe_neigh_lists.insert(pe,vec![]);
+        let mut pe_neigh_lists: HashMap<usize, Vec<(u32, LocalMemoryRegion<u32>)>> = HashMap::new();
+        for pe in 0..world.num_pes() {
+            pe_neigh_lists.insert(pe, vec![]);
         }
         for old_node in 0..neigh_list.len() {
             let new_node = relabeled.as_slice().unwrap()[old_node] as usize;
             let pe = new_node % world.num_pes();
-            pe_neigh_lists.get_mut(&pe).unwrap().push((new_node as u32, neigh_list[old_node].clone()));
+            pe_neigh_lists
+                .get_mut(&pe)
+                .unwrap()
+                .push((new_node as u32, neigh_list[old_node].clone()));
         }
         for (pe, neigh_lists) in pe_neigh_lists.iter_mut() {
             task_group.exec_am_pe(
@@ -396,7 +399,7 @@ impl Graph {
         self.graph.iter()
     }
 
-    pub fn barrier(&self){
+    pub fn barrier(&self) {
         self.world.barrier();
     }
 
@@ -416,7 +419,8 @@ impl Graph {
         self.graph.num_nodes()
     }
 
-    pub fn node_is_local(&self, node: &u32) -> bool { //probably should abstract this out to the graphops trait
+    pub fn node_is_local(&self, node: &u32) -> bool {
+        //probably should abstract this out to the graphops trait
         *node as usize % self.num_pes() == self.my_pe()
     }
 }

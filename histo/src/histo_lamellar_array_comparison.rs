@@ -10,7 +10,7 @@ use std::time::Instant;
 
 const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
 
-fn histo<T: ElementArithmeticOps>(
+fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
     array_type: &str,
     counts: LamellarWriteArray<T>,
     rand_index: &ReadOnlyArray<usize>,
@@ -24,7 +24,7 @@ fn histo<T: ElementArithmeticOps>(
     let now = Instant::now();
 
     //the actual histo
-    counts.add(rand_index, one);
+    counts.batch_add(rand_index, one);
 
     //-----------------
     if my_pe == 0 {
@@ -53,7 +53,7 @@ fn histo<T: ElementArithmeticOps>(
             array_type
         );
     }
-    println!("pe {:?} sum {:?}", my_pe, counts.sum().get());
+    println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
     counts.barrier();
     world.MB_sent()
 }

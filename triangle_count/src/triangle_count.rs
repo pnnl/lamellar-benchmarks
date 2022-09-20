@@ -11,7 +11,7 @@ struct CntAm {
 
 #[lamellar::am]
 impl LamellarAM for CntAm {
-    fn exec() {
+    async fn exec() {
         self.final_cnt.fetch_add(self.cnt, Ordering::Relaxed);
     }
 }
@@ -26,7 +26,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec() {
+    async fn exec() {
         let task_group = LamellarTaskGroup::new(lamellar::world.clone());
         let graph_data = self.graph.data();
         for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
@@ -77,7 +77,7 @@ impl TcAm {
 
 #[lamellar::am]
 impl LamellarAM for TcAm {
-    fn exec() {
+    async fn exec() {
         let mut cnt = 0;
         for node_1 in self
             .neighbors

@@ -19,7 +19,7 @@ struct HistoBufferedAM {
 
 #[lamellar::am]
 impl LamellarAM for HistoBufferedAM {
-    fn exec(self) {
+    async fn exec(self) {
         for o in &self.buff {
             unsafe { self.counts.as_mut_slice().unwrap()[*o] += 1 }; //this update would be unsafe and has potential for races / dropped updates
         }
@@ -35,7 +35,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec(self) {
+    async fn exec(self) {
         let num_pes = lamellar::num_pes;
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];

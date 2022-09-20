@@ -15,7 +15,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec() {
+    async fn exec() {
         let task_group = LamellarTaskGroup::new(lamellar::world.clone());
         let graph_data = self.graph.data();
         let mut buffer = vec![];
@@ -81,7 +81,7 @@ impl BufferedTcAm {
 
 #[lamellar::am]
 impl LamellarAM for BufferedTcAm {
-    fn exec() {
+    async fn exec() {
         let mut cnt = 0;
         for (_node_0, neighbors) in &self.data {
             // this loop is not present in the non-buffered version

@@ -19,7 +19,7 @@ struct HistoAM {
 
 #[lamellar::am]
 impl LamellarAM for HistoAM {
-    fn exec(self) {
+    async fn exec(self) {
         unsafe { self.counts.as_mut_slice().unwrap()[self.offset] += 1 }; //this is unsafe and has potential for races / dropped updates
     }
 }
@@ -32,7 +32,7 @@ struct LaunchAm {
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
-    fn exec(self) {
+    async fn exec(self) {
         for idx in self.rand_index.as_slice().unwrap() {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
