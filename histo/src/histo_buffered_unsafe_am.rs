@@ -182,9 +182,9 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        counts.as_slice().unwrap().iter().sum::<usize>()
-    );
+    // println!(
+    //     "pe {:?} sum {:?}",
+    //     my_pe,
+    //     counts.as_slice().unwrap().iter().sum::<usize>()
+    // );
 }

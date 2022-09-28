@@ -49,7 +49,6 @@ fn main() {
 
     let now = Instant::now();
     histo(&counts, &rand_index);
-
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed());
     }
@@ -75,5 +74,5 @@ fn main() {
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
         );
     }
-    println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
+    // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
 }
