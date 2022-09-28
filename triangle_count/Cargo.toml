@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 csv = "1"
-lamellar = { git = "https://github.com/pnnl/lamellar-runtime", branch = "asyncify", features = ["enable-rofi"] }   #add features = ["enable-rofi"] to use rofi lamellae
+lamellar = { git = "https://github.com/pnnl/lamellar-runtime", branch = "dev", features = ["enable-rofi"] }   #add features = ["enable-rofi"] to use rofi lamellae
 parking_lot = "0.11"
 async-std = "1.6.4"
 
