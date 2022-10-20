@@ -125,6 +125,7 @@ fn main() {
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
 
     for buf_size in [10, 100, 1000, 10000, 100000].iter() {
+        // for buf_size in [100000].iter() {
         if my_pe == 0 {
             println!("using buf_size: {:?}", buf_size);
         }

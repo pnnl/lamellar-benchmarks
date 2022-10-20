@@ -14,8 +14,8 @@ fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
 
 //===== HISTO END ======
 
-const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
-                                             // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+const COUNTS_LOCAL_LEN: usize = 1000000;//100_000_000; //this will be 800MB on each pe
+                                        // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -26,6 +26,12 @@ fn main() {
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
+
+    if my_pe == 0 {
+        println!("updates total {}", l_num_updates * num_pes);
+        println!("updates per pe {}", l_num_updates);
+        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+    }
 
     let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Cyclic);
     let rand_index =
@@ -64,7 +70,7 @@ fn main() {
     let global_time = now.elapsed().as_secs_f64();
     if my_pe == 0 {
         println!(
-            "global time {:?} MB {:?} MB/s: {:?}",
+            "global time {:?} MB {:?} MB/s: {:?} ",
             global_time,
             (world.MB_sent()),
             (world.MB_sent()) / global_time,
@@ -73,6 +79,16 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
         );
+        println!(
+            "Secs: {:?}",
+             global_time,
+        );
+
+        println!(
+            "GB/s Injection rate: {:?}",
+            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
+        );
+        println!("(({l_num_updates}*{num_pes})/1_000_000) ");
     }
     // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
 }

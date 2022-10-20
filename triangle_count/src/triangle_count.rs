@@ -12,6 +12,7 @@ struct CntAm {
 #[lamellar::am]
 impl LamellarAM for CntAm {
     async fn exec() {
+        println!("here 1");
         self.final_cnt.fetch_add(self.cnt, Ordering::Relaxed);
     }
 }
@@ -78,6 +79,7 @@ impl TcAm {
 #[lamellar::am]
 impl LamellarAM for TcAm {
     async fn exec() {
+        // println!("here");
         let mut cnt = 0;
         for node_1 in self
             .neighbors
@@ -111,6 +113,7 @@ fn main() {
     let my_pe = world.my_pe();
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
+    graph.dump_to_bin(&format!("{file}.bin"));
     let final_cnt = Darc::new(&world, AtomicUsize::new(0)).unwrap(); // initialize our local counter (which is accessible to all PEs)
 
     if my_pe == 0 {
