@@ -52,6 +52,12 @@ In the following, assume a root directory ${ROOT}
 
 Note that if using the "local" lamellae, simply execute the binary directly
 
+OPTIONS
+-------
+
+For use with distributed HPC systems, lamellar installationmay require additional steps.  See the Lamellar [documentation](https://github.com/pnnl/lamellar-runtime#using-lamellar) for details.
+
+The user may also set the number of worker threads via a environmental variable.  See the Lamellare [documentation](https://github.com/pnnl/lamellar-runtime#environment-variables) for details.
 
 TESTING
 -------
