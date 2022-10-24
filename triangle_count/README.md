@@ -57,13 +57,15 @@ TESTING
 -------
 The benchmarks are designed to be run with on multiple compute nodes (1 node is valid). Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentaiton for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the jbo manager and runtime launcher (e.g., MPI, please refer to the BUILING REQUIREMENTS section for a list of tested software versions).
 
-1. Allocates two compute nodes on the cluster:
+1. Unzip the data file `./input_graphs/graph500-scale18-ef16_adj.tsv.tar.gz`
+
+2. Allocate two compute nodes on the cluster:
 
 `salloc -N 2 -p compute`
 
-2. Run triangle_count(_buffered) using `mpiexec` launcher.
+3. Run triangle_count(_buffered) using `mpiexec` launcher.
 
-`mpiexec -n 2 ./target/release/triangle_count(_buffered) graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
+`mpiexec -n 2 ./target/release/triangle_count(_buffered) ./input_graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
 
 GRAPHS
 ------
