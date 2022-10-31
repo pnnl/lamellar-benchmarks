@@ -501,6 +501,10 @@ impl Graph {
         *node as usize % self.num_pes() == self.my_pe()
     }
 
+    /// Save to binary format.
+    /// 
+    /// This format is faster to read than loading and parsing from `.tsv` format.
+    /// In practice this turns out to be convenient when running many experiments.
     pub fn dump_to_bin(&self, name: &str) {
         let mut file = BufWriter::new(File::create(name).expect("error dumping graph"));
         bincode::serialize_into(&mut file,&self.num_nodes()).unwrap();
