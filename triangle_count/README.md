@@ -11,6 +11,7 @@ Including non buffered and buffered versions.
 
 NEWS
 ----
+
 July 2022: Update for Lamellar 0.4.x release
 Sept 2020: Update for Lamellar 0.2.1 release
 July 2020: Second alpha release
@@ -18,6 +19,7 @@ Feb 2020: First alpha release
 
 BUILD REQUIREMENTS
 ------------------
+
 These benchmarks requires the following dependencies:
 
 * [Lamellar](https://github.com/pnnl/lamellar-runtime) - now on [crates.io](https://crates.io/crates/lamellar)
@@ -35,13 +37,15 @@ The ROFI_DIR environment variable must be specified with the location of the ROF
 
 BUILDING PACKAGE
 ----------------
+
 In the following, assume a root directory ${ROOT}
-0. download Benchmarks to ${ROOT}/Benchmarks 
+
+1. download Benchmarks to ${ROOT}/Benchmarks 
     `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-benchmarks`
-0. download Lamellar to ${ROOT}/lamellar-runtime  -- or update Cargo.toml to point to the proper location
+2. download Lamellar to ${ROOT}/lamellar-runtime  -- or update Cargo.toml to point to the proper location
     `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
 
-1. cd into registered-am or remote-closure directory Compile benchmark
+3. cd into registered-am or remote-closure directory Compile benchmark
 
 `cargo build (--release)`
 
@@ -52,21 +56,29 @@ In the following, assume a root directory ${ROOT}
 
 Note that if using the "local" lamellae, simply execute the binary directly
 
+OPTIONS
+-------
+
+For use with distributed HPC systems, lamellar installation may require additional steps.  See the Lamellar [documentation](https://github.com/pnnl/lamellar-runtime#using-lamellar) for details.
+
+The user may also set the number of worker threads via a environmental variable.  See the Lamellare [documentation](https://github.com/pnnl/lamellar-runtime#environment-variables) for details.
 
 TESTING
 -------
+
 The benchmarks are designed to be run with on multiple compute nodes (1 node is valid). Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentaiton for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the jbo manager and runtime launcher (e.g., MPI, please refer to the BUILING REQUIREMENTS section for a list of tested software versions).
 
-1. Allocates two compute nodes on the cluster:
+1. Unzip the data file `./input_graphs/graph500-scale18-ef16_adj.tsv.tar.gz`
+2. Allocate two compute nodes on the cluster:
 
 `salloc -N 2 -p compute`
+3. Run triangle_count(_buffered) using `mpiexec` launcher.
 
-2. Run triangle_count(_buffered) using `mpiexec` launcher.
-
-`mpiexec -n 2 ./target/release/triangle_count(_buffered) graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
+`mpiexec -n 2 ./target/release/triangle_count(_buffered) ./input_graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
 
 GRAPHS
 ------
+
 We have provided the graph500-scale18-ef16_adj.tsv data set in the graphs directory.
 (*note untar first: `tar -xzvf graph500-scale18-ef16_adj.tsv.tar.gz`)
 This graph along with larger scale graphs can be downloaded at (http://networkrepository.com/graph500.php)
@@ -74,6 +86,7 @@ This graph along with larger scale graphs can be downloaded at (http://networkre
 
 HISTORY
 -------
+
 - version 0.4:
   - update to match Lamellar v0.4 api
   - new underlying graph implementation
@@ -91,20 +104,24 @@ NOTES
 
 STATUS
 ------
+
 Lamellar is still under development, thus not all intended features are yet
 implemented. Benchmark will be updated to utilize new features.
 
 CONTACTS
 --------
+
 Ryan Friese     - ryan.friese@pnnl.gov  
 Roberto Gioiosa - roberto.gioiosa@pnnl.gov  
 Mark Raugas     - mark.raugas@pnnl.gov  
 
-## License
+License
+-------
 
 This project is licensed under the BSD License - see the [LICENSE.md](LICENSE.md) file for details.
 
-## Acknowledgments
+Acknowledgments
+---------------
 
 This work was supported by the High Performance Data Analytics (HPDA) Program at Pacific Northwest National Laboratory (PNNL),
 a multi-program DOE laboratory operated by Battelle.
