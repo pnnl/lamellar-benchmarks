@@ -1,7 +1,8 @@
-use lamellar::{ActiveMessaging, Darc};
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, CompareExchangeOps, LocalLockAtomicArray,DistributedIterator, Distribution, ReadOnlyArray, UnsafeArray, SerialIterator
+    ArithmeticOps, AtomicArray, CompareExchangeOps, DistributedIterator, Distribution,
+    LocalLockAtomicArray, ReadOnlyArray, SerialIterator, UnsafeArray,
 };
+use lamellar::{ActiveMessaging, Darc};
 use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
@@ -13,32 +14,38 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count =  args
+    let global_count = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000); //size of permuted array
-    let target_factor =  args
+    let target_factor = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 10); //multiplication factor for target array
 
     if my_pe == 0 {
         println!("array size {}", global_count);
-        println!("target array size {}", global_count*target_factor);
+        println!("target array size {}", global_count * target_factor);
     }
 
     // start with unsafe because they are faster to initialize than AtomicArrays
     let darts_array = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Block);
-    let target_array = UnsafeArray::<usize>::new(world.team(), global_count*target_factor, Distribution::Block);
+    let target_array = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count * target_factor,
+        Distribution::Block,
+    );
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     // initialize arrays
-    let darts_init = darts_array.dist_iter_mut().enumerate().for_each(|(i,x)| *x = i); // each PE some slice in [0..global_count]
+    let darts_init = darts_array
+        .dist_iter_mut()
+        .enumerate()
+        .for_each(|(i, x)| *x = i); // each PE some slice in [0..global_count]
     let target_init = target_array.dist_iter_mut().for_each(|x| *x = usize::MAX);
     world.block_on(darts_init);
     world.block_on(target_init);
     world.wait_all();
-
 
     let darts_array = darts_array.into_read_only();
     let mut local_darts = darts_array.local_data(); //will use this slice for first iteration
@@ -51,67 +58,85 @@ fn main() {
     let now = Instant::now();
 
     // ====== perform the actual random permute========//
-    let rand_index = (0..local_darts.len()).map(|_|rng.gen_range(0, global_count*target_factor)).collect::<Vec<usize>>();
-    let mut remaining_darts = world.block_on(target_array.batch_compare_exchange(&rand_index,usize::MAX,local_darts)).iter().enumerate().filter_map(|(i,elem)| {
-            match elem{
-                Ok(_val) => None, //the dart stuck!
+    let rand_index = (0..local_darts.len())
+        .map(|_| rng.gen_range(0, global_count * target_factor))
+        .collect::<Vec<usize>>();
+      
+    // launch initial set of darts, and collect any that didnt stick    
+    let mut remaining_darts = world
+        .block_on(target_array.batch_compare_exchange(&rand_index, usize::MAX, local_darts))
+        .iter()
+        .enumerate()
+        .filter_map(|(i, elem)| {
+            match elem {
+                Ok(_val) => None,               //the dart stuck!
                 Err(_) => Some(local_darts[i]), //something else was there, try again
             }
-        }).collect::<Vec<usize>>();
+        })
+        .collect::<Vec<usize>>();
+
+    // continue launching remaining darts until they all stick
     while remaining_darts.len() > 0 {
-        let rand_index = (0..remaining_darts.len()).map(|_|rng.gen_range(0, global_count*target_factor)).collect::<Vec<usize>>();
-        remaining_darts = world.block_on(target_array.batch_compare_exchange(&rand_index,usize::MAX,remaining_darts.clone())).iter().enumerate().filter_map(|(i,elem)| {
-            match elem{
-                Ok(_val) => None, //the dart stuck!
-                Err(_) => Some(remaining_darts[i]), //something else was there, try again
-            }
-        }).collect::<Vec<usize>>();
+        let rand_index = (0..remaining_darts.len())
+            .map(|_| rng.gen_range(0, global_count * target_factor))
+            .collect::<Vec<usize>>();
+        remaining_darts = world
+            .block_on(target_array.batch_compare_exchange(
+                &rand_index,
+                usize::MAX,
+                remaining_darts.clone(),
+            ))
+            .iter()
+            .enumerate()
+            .filter_map(|(i, elem)| {
+                match elem {
+                    Ok(_val) => None,                   //the dart stuck!
+                    Err(_) => Some(remaining_darts[i]), //something else was there, try again
+                }
+            })
+            .collect::<Vec<usize>>();
     }
     world.wait_all(); //my work is done
     if my_pe == 0 {
-        println!(
-            "local run time {:?} ",
-            now.elapsed(),
-        );
+        println!("local run time {:?} ", now.elapsed(),);
     }
     world.barrier(); //all work is done
     if my_pe == 0 {
-        println!(
-            "permute time {:?} ",
-            now.elapsed(),
-        );
+        println!("permute time {:?} ", now.elapsed(),);
     }
     let collect_start = Instant::now();
-    let the_array = world.block_on(target_array.dist_iter().filter_map(|elem| {
-        let elem = elem.load(); //elements are atomic so we cant just read directly
-        if elem < usize::MAX {
-            Some(elem)
-        }
-        else {
-            None
-        }
-    }).collect::<ReadOnlyArray<usize>>(Distribution::Block)); //need to work on collect performance from within the runtime
-    // =============================================================//
-    
+    let the_array = world.block_on(
+        target_array
+            .dist_iter()
+            .filter_map(|elem| {
+                let elem = elem.load(); //elements are atomic so we cant just read directly
+                if elem < usize::MAX {
+                    Some(elem)
+                } else {
+                    None
+                }
+            })
+            .collect::<ReadOnlyArray<usize>>(Distribution::Block),
+    ); //need to work on collect performance from within the runtime
+       // =============================================================//
+
     let global_time = now.elapsed().as_secs_f64();
     if my_pe == 0 {
-        println!("collect time: {:?}",collect_start.elapsed());
+        println!("collect time: {:?}", collect_start.elapsed());
         println!(
             "global time {:?} MB {:?} MB/s: {:?} ",
             global_time,
             (world.MB_sent()),
             (world.MB_sent()) / global_time,
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
         let sum = world.block_on(the_array.sum());
-        println!("reduced sum: {sum} calculated sum {} ",(global_count*(global_count+1)/2)-global_count);
-        if sum != (global_count*(global_count+1)/2)-global_count {
+        println!(
+            "reduced sum: {sum} calculated sum {} ",
+            (global_count * (global_count + 1) / 2) - global_count
+        );
+        if sum != (global_count * (global_count + 1) / 2) - global_count {
             println!("Error! randperm not as expected");
         }
     }
 }
-
-

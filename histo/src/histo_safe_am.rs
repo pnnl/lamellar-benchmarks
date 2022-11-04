@@ -110,7 +110,7 @@ fn main() {
     }
 
     //create multiple launch tasks, that iterated through portions of rand_index in parallel
-    
+
     world.barrier();
     let now = Instant::now();
     let launch_tasks = histo(l_num_updates, num_threads, &world, &rand_index, &counts);

@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const COUNTS_LOCAL_LEN: usize = 1000000;//100_000_000; //this will be 800MB on each pe
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
 
 //===== HISTO BEGIN ======
 
@@ -131,12 +131,11 @@ fn main() {
             Err(_) => 1,
         });
 
-
-        if my_pe == 0 {
-            println!("updates total {}", l_num_updates * num_pes);
-            println!("updates per pe {}", l_num_updates);
-            println!("table size per pe{}", COUNTS_LOCAL_LEN);
-        }
+    if my_pe == 0 {
+        println!("updates total {}", l_num_updates * num_pes);
+        println!("updates per pe {}", l_num_updates);
+        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+    }
 
     let rand_index = world.alloc_local_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
@@ -188,16 +187,13 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
         println!(
             "GB/s Injection rate: {:?}",
             (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
         );
     }
-    
+
     if my_pe == 0 {
         println!(
             "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} (({l_num_updates}*{num_pes})/1_000_000) ",

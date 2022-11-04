@@ -81,7 +81,6 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
 
-
     let num_threads = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())

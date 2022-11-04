@@ -14,8 +14,8 @@ fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
 
 //===== HISTO END ======
 
-const COUNTS_LOCAL_LEN: usize = 1000000;//100_000_000; //this will be 800MB on each pe
-                                        // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
+                                         // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -79,10 +79,7 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
 
         println!(
             "GB/s Injection rate: {:?}",
