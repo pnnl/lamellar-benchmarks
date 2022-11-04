@@ -44,7 +44,7 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        let now = Instant::now();
+        // let now = Instant::now();
         let num_pes = lamellar::num_pes;
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];

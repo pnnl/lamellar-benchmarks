@@ -124,7 +124,7 @@ fn main() {
     // can use multiple threads to initiate the triangle counting active message.
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
 
-    for buf_size in [10, 100, 1000, 10000, 100000].iter() {
+    for buf_size in [10, 100, 1000, 10000, 100000, 1000000].iter() {
         // for buf_size in [100000].iter() {
         if my_pe == 0 {
             println!("using buf_size: {:?}", buf_size);
@@ -166,7 +166,7 @@ fn main() {
         let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
         if my_pe == 0 {
             println!(
-                "triangles counted: {:?} global time: {:?}",
+                "triangles counted: {:?}\nglobal time: {:?}",
                 final_cnt_sum,
                 timer.elapsed().as_secs_f64()
             );

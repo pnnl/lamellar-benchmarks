@@ -88,6 +88,13 @@ fn main() {
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
+    let num_threads = args
+        .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let rand_index = world.alloc_local_mem_region(l_num_updates);
@@ -103,11 +110,7 @@ fn main() {
     }
 
     //create multiple launch tasks, that iterated through portions of rand_index in parallel
-    let num_threads = match std::env::var("LAMELLAR_THREADS") {
-        Ok(n) => n.parse::<usize>().unwrap(),
-        Err(_) => 1,
-    };
-    let num_threads = std::cmp::max(num_threads / 2, 1);
+    
     world.barrier();
     let now = Instant::now();
     let launch_tasks = histo(l_num_updates, num_threads, &world, &rand_index, &counts);

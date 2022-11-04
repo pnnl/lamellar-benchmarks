@@ -318,7 +318,7 @@ impl Graph {
                     temp_neighbor_list[node as usize] = EdgeList::Vec(bincode::deserialize_from::<_,Vec<u32>>(&mut rdr).unwrap());
                     num_edges += temp_neighbor_list[node as usize].len();
                     if node % 1000000 == 0 {
-                        println!("{:?} nodes loaded", cur_node);
+                        println!("{:?} nodes loaded", node);
                     }
                 }
                 indices = (0..num_nodes).collect::<Vec<_>>();
@@ -449,14 +449,30 @@ impl Graph {
                 .push((new_node as u32, neigh_list[old_node].clone()));
         }
         
+        
+        
+        // let num_batches = 10;
         for (pe, neigh_lists) in pe_neigh_lists.iter_mut() {
-            task_group.exec_am_pe(
-                *pe,
-                LocalNeighborsAM {
-                    graph: graph.clone(),
-                    node_and_neighbors: neigh_lists.clone(),
-                },
-            );
+            let batch_size = neigh_lists.len()/10;
+
+            while neigh_lists.len() > batch_size{
+                task_group.exec_am_pe(
+                    *pe,
+                    LocalNeighborsAM {
+                        graph: graph.clone(),
+                        node_and_neighbors: neigh_lists.split_off(neigh_lists.len()-batch_size),
+                    },
+                );
+            }
+            if neigh_lists.len() > 0 {
+                task_group.exec_am_pe(
+                    *pe,
+                    LocalNeighborsAM {
+                        graph: graph.clone(),
+                        node_and_neighbors: neigh_lists.clone(),
+                    },
+                );
+            }
         }
         println!("distribute issue time: {:?}", start.elapsed().as_secs_f64());
         world.wait_all();
