@@ -1,4 +1,5 @@
-use lamellar::{ActiveMessaging, Darc, LamellarTaskGroup};
+use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
 
 use std::sync::atomic::{AtomicUsize, Ordering};

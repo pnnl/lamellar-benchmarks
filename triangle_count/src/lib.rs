@@ -1,7 +1,6 @@
-use lamellar::{
-    ActiveMessaging, Darc, LamellarTaskGroup, LamellarTeam, LamellarWorld, LocalMemoryRegion,
-    LocalRwDarc, RemoteMemoryRegion,
-};
+use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
@@ -80,11 +79,11 @@ trait GraphOps {
     fn add_local_neighbors(
         &mut self,
         node: u32,
-        neighbors: LocalMemoryRegion<u32>,
-    ) -> LocalMemoryRegion<u32>;
-    fn add_remote_neighbors(&mut self, node: u32, neighbors: LocalMemoryRegion<u32>);
+        neighbors: OneSidedMemoryRegion<u32>,
+    ) -> OneSidedMemoryRegion<u32>;
+    fn add_remote_neighbors(&mut self, node: u32, neighbors: OneSidedMemoryRegion<u32>);
     fn neighbors(&self, node: &u32) -> std::slice::Iter<'_, u32>;
-    fn lamellar_neighbors(&self, node: &u32) -> LocalMemoryRegion<u32>;
+    fn lamellar_neighbors(&self, node: &u32) -> OneSidedMemoryRegion<u32>;
     fn num_nodes(&self) -> usize;
     fn node_is_local(&self, node: &u32) -> bool;
 }
@@ -114,13 +113,13 @@ impl GraphOps for GraphData {
     fn add_local_neighbors(
         &mut self,
         node: u32,
-        neighbors: LocalMemoryRegion<u32>,
-    ) -> LocalMemoryRegion<u32> {
+        neighbors: OneSidedMemoryRegion<u32>,
+    ) -> OneSidedMemoryRegion<u32> {
         match self {
             GraphData::MapGraph(graph) => graph.add_local_neighbors(node, neighbors),
         }
     }
-    fn add_remote_neighbors(&mut self, node: u32, neighbors: LocalMemoryRegion<u32>) {
+    fn add_remote_neighbors(&mut self, node: u32, neighbors: OneSidedMemoryRegion<u32>) {
         match self {
             GraphData::MapGraph(graph) => graph.add_remote_neighbors(node, neighbors),
         }
@@ -130,7 +129,7 @@ impl GraphOps for GraphData {
             GraphData::MapGraph(graph) => graph.neighbors(node),
         }
     }
-    fn lamellar_neighbors(&self, node: &u32) -> LocalMemoryRegion<u32> {
+    fn lamellar_neighbors(&self, node: &u32) -> OneSidedMemoryRegion<u32> {
         match self {
             GraphData::MapGraph(graph) => graph.lamellar_neighbors(node),
         }
@@ -158,7 +157,7 @@ impl GraphData {
             GraphData::MapGraph(graph) => graph.neighbors(node),
         }
     }
-    pub fn local_neighbors(&self, node: &u32) -> LocalMemoryRegion<u32> {
+    pub fn local_neighbors(&self, node: &u32) -> OneSidedMemoryRegion<u32> {
         match self {
             GraphData::MapGraph(graph) => graph.lamellar_neighbors(node),
         }
@@ -174,7 +173,7 @@ impl GraphData {
 struct RelabelMapAm {
     start_index: usize,
     nodes: Vec<u32>,
-    relabeled: LocalMemoryRegion<u32>,
+    relabeled: OneSidedMemoryRegion<u32>,
 }
 #[lamellar::local_am]
 impl LamellarAM for RelabelMapAm {
@@ -188,13 +187,13 @@ impl LamellarAM for RelabelMapAm {
 
 #[lamellar::AmLocalData]
 struct RelabelAm {
-    nodes: Vec<(EdgeList, LocalMemoryRegion<u32>, usize)>,
-    relabeled: LocalMemoryRegion<u32>,
+    nodes: Vec<(EdgeList, OneSidedMemoryRegion<u32>, usize)>,
+    relabeled: OneSidedMemoryRegion<u32>,
 }
 #[lamellar::local_am]
 impl LamellarAM for RelabelAm {
     async fn exec() {
-        let relabled = self.relabeled.as_slice().unwrap();
+        let relabled = unsafe {self.relabeled.as_slice().unwrap()};
         for nodes in &self.nodes {
             let old_nodes = &nodes.0;
             let new_nodes = unsafe { nodes.1.as_mut_slice().unwrap() };
@@ -214,14 +213,14 @@ impl LamellarAM for RelabelAm {
 #[lamellar::AmData]
 struct LocalNeighborsAM {
     graph: LocalRwDarc<GraphData>,
-    node_and_neighbors: Vec<(u32, LocalMemoryRegion<u32>)>,
+    node_and_neighbors: Vec<(u32, OneSidedMemoryRegion<u32>)>,
 }
 
 #[lamellar::am]
 impl LamellarAM for LocalNeighborsAM {
     async fn exec() {
         let mut graph = self.graph.write();
-        let mut remotes: Vec<(u32, LocalMemoryRegion<u32>)> = vec![];
+        let mut remotes: Vec<(u32, OneSidedMemoryRegion<u32>)> = vec![];
         for (node, neighbors) in &self.node_and_neighbors {
             remotes.push((*node, graph.add_local_neighbors(*node, neighbors.clone())));
         }
@@ -235,7 +234,7 @@ impl LamellarAM for LocalNeighborsAM {
 #[lamellar::AmData]
 struct RemoteNeighborsAM {
     graph: LocalRwDarc<GraphData>,
-    node_and_neighbors: Vec<(u32, LocalMemoryRegion<u32>)>,
+    node_and_neighbors: Vec<(u32, OneSidedMemoryRegion<u32>)>,
 }
 #[lamellar::am]
 impl LamellarAM for RemoteNeighborsAM {
@@ -260,7 +259,7 @@ impl Graph {
         let graph = match graph_type {
             _map_graph => GraphData::MapGraph(MapGraph::new(world.team().clone())),
         };
-        let graph = LocalRwDarc::try_new(world.team(), graph).unwrap(); // we are creating with the world team so should be valid on all pes
+        let graph = LocalRwDarc::new(world.team(), graph).unwrap(); // we are creating with the world team so should be valid on all pes
 
         Graph::load(fpath, &world, &graph).expect("error reading graph");
         if my_pe == 0 {
@@ -397,7 +396,7 @@ impl Graph {
 
         println!("ind len {}", indices.len());
 
-        let relabeled = world.alloc_local_mem_region::<u32>(num_nodes);
+        let relabeled = world.alloc_one_sided_mem_region::<u32>(num_nodes);
         let relabeled_slice = unsafe { relabeled.as_mut_slice().unwrap() };
 
         let mut cnt = 0;
@@ -425,7 +424,7 @@ impl Graph {
             }
             let nodes_len = nodes.len();
             size += nodes_len;
-            let temp = world.alloc_local_mem_region::<u32>(std::cmp::max(nodes_len, 1));
+            let temp = world.alloc_one_sided_mem_region::<u32>(std::cmp::max(nodes_len, 1));
             neigh_list.push(temp.clone());
             temp_nodes.push((nodes, temp, i));
             i += 1;
@@ -441,12 +440,12 @@ impl Graph {
         println!("reorder  time: {:?}", start.elapsed().as_secs_f64());
 
         let task_group = LamellarTaskGroup::new(world.team());
-        let mut pe_neigh_lists: HashMap<usize, Vec<(u32, LocalMemoryRegion<u32>)>> = HashMap::new();
+        let mut pe_neigh_lists: HashMap<usize, Vec<(u32, OneSidedMemoryRegion<u32>)>> = HashMap::new();
         for pe in 0..world.num_pes() {
             pe_neigh_lists.insert(pe, vec![]);
         }
         for old_node in 0..neigh_list.len() {
-            let new_node = relabeled.as_slice().unwrap()[old_node] as usize;
+            let new_node = unsafe{relabeled.as_slice().unwrap()[old_node] as usize};
             let pe = new_node % world.num_pes();
             pe_neigh_lists
                 .get_mut(&pe)

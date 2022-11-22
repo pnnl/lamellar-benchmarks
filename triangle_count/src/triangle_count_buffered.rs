@@ -1,7 +1,6 @@
-use lamellar::{
-    array::{AtomicArray, DistributedIterator, Distribution},
-    ActiveMessaging, Darc, LamellarTaskGroup,
-};
+use lamellar::active_messaging::prelude::*;
+use lamellar::array::prelude::*;
+use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
 
 #[lamellar::AmLocalData]

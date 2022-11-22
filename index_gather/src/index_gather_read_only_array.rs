@@ -1,14 +1,11 @@
-use lamellar::array::{
-    AccessOps,ReadOnlyOps, DistributedIterator, Distribution, ReadOnlyArray, UnsafeArray,
-};
-use lamellar::{LocalMemoryRegion,RemoteMemoryRegion};
-use parking_lot::Mutex;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use rand::prelude::*;
-use std::sync::Arc;
 use std::time::Instant;
 
-fn index_gather(array: &ReadOnlyArray<usize>, rand_index: &LocalMemoryRegion<usize>) {
-    array.batch_load(rand_index);
+fn index_gather(array: &ReadOnlyArray<usize>, rand_index: OneSidedMemoryRegion<usize>) {
+    let rand_slice = unsafe {rand_index.as_slice().expect("PE on world team")}; // Safe as we are the only consumer of this mem region
+    array.batch_load(rand_slice);
 }
 
 const COUNTS_LOCAL_LEN: usize = 1000000; //this will be 800MBB on each pe
@@ -30,15 +27,15 @@ fn main() {
             println!("table size per pe{}", COUNTS_LOCAL_LEN);
         }
 
-    let unsafe_array = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Cyclic);
-    let rand_index = world.alloc_local_mem_region(l_num_updates);
+    let unsafe_array = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
+    let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     // initialize arrays
-    let array_init = unsafe_array
+    let array_init = unsafe {unsafe_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = i);
+        .for_each(|(i, x)| *x = i)};
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
@@ -55,7 +52,7 @@ fn main() {
     }
 
     let now = Instant::now();
-    index_gather(&array, &rand_index);
+    index_gather(&array, rand_index);
 
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed());

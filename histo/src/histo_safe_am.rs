@@ -1,7 +1,5 @@
-use lamellar::{
-    ActiveMessaging, LamellarRequest, LamellarWorld, LocalMemoryRegion, RemoteMemoryRegion,
-    SharedMemoryRegion,
-};
+use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
 use std::future::Future;
@@ -34,14 +32,14 @@ impl LamellarAM for HistoAM {
 
 #[lamellar::AmLocalData(Clone, Debug)]
 struct LaunchAm {
-    rand_index: LocalMemoryRegion<usize>,
+    rand_index: OneSidedMemoryRegion<usize>,
     counts: SharedMemoryRegion<usize>,
 }
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        for idx in self.rand_index.as_slice().unwrap() {
+        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
             lamellar::world.exec_am_pe(
@@ -59,7 +57,7 @@ fn histo(
     l_num_updates: usize,
     num_threads: usize,
     world: &LamellarWorld,
-    rand_index: &LocalMemoryRegion<usize>,
+    rand_index: &OneSidedMemoryRegion<usize>,
     counts: &SharedMemoryRegion<usize>,
 ) -> Vec<impl Future<Output = ()>> {
     let slice_size = l_num_updates as f32 / num_threads as f32;
@@ -97,7 +95,7 @@ fn main() {
         });
 
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
-    let rand_index = world.alloc_local_mem_region(l_num_updates);
+    let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
     //initialize arrays
     unsafe {
@@ -157,6 +155,6 @@ fn main() {
     println!(
         "pe {:?} sum {:?}",
         my_pe,
-        counts.as_slice().unwrap().iter().sum::<usize>()
+        unsafe {counts.as_slice().unwrap().iter().sum::<usize>()}
     );
 }

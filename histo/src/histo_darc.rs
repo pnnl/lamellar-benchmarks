@@ -1,4 +1,5 @@
-use lamellar::{ActiveMessaging, Darc, LamellarRequest, LamellarWorld};
+use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
 
 use rand::prelude::*;
 use std::future::Future;

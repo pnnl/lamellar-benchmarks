@@ -1,19 +1,11 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, CompareExchangeOps, DistributedIterator, Distribution,
-    LocalLockAtomicArray, ReadOnlyArray, SerialIterator, UnsafeArray,
-};
-use lamellar::{ActiveMessaging, Darc};
-use parking_lot::Mutex;
+use lamellar::array::prelude::*;
 use rand::prelude::*;
-use std::sync::Arc;
 use std::time::Instant;
 
-use std::collections::HashMap;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let num_pes = world.num_pes();
     let global_count = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
@@ -29,26 +21,26 @@ fn main() {
     }
 
     // start with unsafe because they are faster to initialize than AtomicArrays
-    let darts_array = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Block);
+    let darts_array = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Block);
     let target_array = UnsafeArray::<usize>::new(
         world.team(),
         global_count * target_factor,
-        Distribution::Block,
+        lamellar::array::Distribution::Block,
     );
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     // initialize arrays
-    let darts_init = darts_array
+    let darts_init = unsafe{darts_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = i); // each PE some slice in [0..global_count]
-    let target_init = target_array.dist_iter_mut().for_each(|x| *x = usize::MAX);
+        .for_each(|(i, x)| *x = i)}; // each PE some slice in [0..global_count]
+    let target_init = unsafe{target_array.dist_iter_mut().for_each(|x| *x = usize::MAX)};
     world.block_on(darts_init);
     world.block_on(target_init);
     world.wait_all();
 
     let darts_array = darts_array.into_read_only();
-    let mut local_darts = darts_array.local_data(); //will use this slice for first iteration
+    let local_darts = darts_array.local_data(); //will use this slice for first iteration
 
     let target_array = target_array.into_atomic();
     world.barrier();
@@ -116,7 +108,7 @@ fn main() {
                     None
                 }
             })
-            .collect::<ReadOnlyArray<usize>>(Distribution::Block),
+            .collect::<ReadOnlyArray<usize>>(lamellar::array::Distribution::Block),
     ); //need to work on collect performance from within the runtime
        // =============================================================//
 

@@ -8,7 +8,6 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.3.0"
 rand = "0.6"
-#lamellar = { version = "0.4" }
 lamellar = { git = "https://github.com/pnnl/lamellar-runtime", branch = "dev", features = ["enable-rofi"] }
 parking_lot = { version = "0.12" }
 tracing = "0.1"
