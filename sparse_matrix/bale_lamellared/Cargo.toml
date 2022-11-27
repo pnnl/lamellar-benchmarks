@@ -1,0 +1,18 @@
+[package]
+name = "lamellar_sparse_matrix"
+version = "0.1.0"
+authors = ["wwc"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand="0.7"
+regex="1"
+lamellar = { path = "/Users/roek189/OneDrive - PNNL/Desktop/a/r/c/l/r/lamellar/lamellar-runtime" }
+# lamellar = { git = "https://github.com/pnnl/lamellar-runtime", branch = "dev" }   # add features = ["enable-rofi"] to use rofi lamellae
+
+
+[[bin]]
+name="test"
+path="src/test.rs"
