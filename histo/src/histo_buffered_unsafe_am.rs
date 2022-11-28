@@ -1,14 +1,12 @@
-use lamellar::{
-    ActiveMessaging, LamellarRequest, LamellarTaskGroup, LamellarWorld, LocalMemoryRegion,
-    RemoteMemoryRegion, SharedMemoryRegion,
-};
+use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
 
-const COUNTS_LOCAL_LEN: usize =  1000000;//100_000_000; //this will be 800MB on each pe
-//===== HISTO BEGIN ======
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
+                                         //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoBufferedAM {
@@ -27,7 +25,7 @@ impl LamellarAM for HistoBufferedAM {
 
 #[lamellar::AmLocalData(Clone, Debug)]
 struct LaunchAm {
-    rand_index: LocalMemoryRegion<usize>,
+    rand_index: OneSidedMemoryRegion<usize>,
     counts: SharedMemoryRegion<usize>,
     buffer_amt: usize,
 }
@@ -39,7 +37,7 @@ impl LamellarAM for LaunchAm {
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
-        for idx in self.rand_index.as_slice().unwrap() {
+        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
 
@@ -76,7 +74,7 @@ fn histo(
     l_num_updates: usize,
     num_threads: usize,
     world: &LamellarWorld,
-    rand_index: &LocalMemoryRegion<usize>,
+    rand_index: &OneSidedMemoryRegion<usize>,
     counts: &SharedMemoryRegion<usize>,
     buffer_amt: usize,
 ) -> Vec<impl Future<Output = ()>> {
@@ -121,13 +119,13 @@ fn main() {
             Err(_) => 1,
         });
 
-        if my_pe == 0 {
-            println!("updates total {}", l_num_updates * num_pes);
-            println!("updates per pe {}", l_num_updates);
-            println!("table size per pe{}", COUNTS_LOCAL_LEN);
-        }
+    if my_pe == 0 {
+        println!("updates total {}", l_num_updates * num_pes);
+        println!("updates per pe {}", l_num_updates);
+        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+    }
 
-    let rand_index = world.alloc_local_mem_region(l_num_updates);
+    let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     unsafe {
@@ -176,16 +174,13 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
         println!(
             "GB/s Injection rate: {:?}",
             (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
         );
     }
-    
+
     if my_pe == 0 {
         println!(
             "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",

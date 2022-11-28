@@ -1,6 +1,6 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, DistributedIterator, Distribution, ReadOnlyArray, UnsafeArray,
-};
+use lamellar::active_messaging::prelude::*;
+use lamellar::array::prelude::*;
+
 use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
@@ -9,13 +9,13 @@ use std::time::Instant;
 //===== HISTO BEGIN ======
 
 fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
-    counts.batch_add(rand_index, 1);
+    counts.batch_add(rand_index.local_data(), 1);
 }
 
 //===== HISTO END ======
 
-const COUNTS_LOCAL_LEN: usize = 1000000;//100_000_000; //this will be 800MB on each pe
-                                        // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
+                                         // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -33,13 +33,13 @@ fn main() {
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
 
-    let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, Distribution::Cyclic);
+    let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
     let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, Distribution::Block);
+        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
     // initialize arrays
-    let counts_init = unsafe_counts.dist_iter_mut().for_each(|x| *x = 0);
+    let counts_init = unsafe {unsafe_counts.dist_iter_mut().for_each(|x| *x = 0)};
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         let mut rng = rng.lock();
@@ -79,10 +79,7 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
 
         println!(
             "GB/s Injection rate: {:?}",
