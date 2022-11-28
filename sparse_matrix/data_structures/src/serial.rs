@@ -4,9 +4,6 @@
 
 
 
-
-
-
 /// Apply row and column permutations to a sparse matrix (without explicit structural nonzero values)
 /// 
 /// The entries in each row of the permuted matrix are **not** sorted.
@@ -50,4 +47,35 @@ pub fn permute_vec_of_vec(
     // }    
 
     return permuted
+}
+
+/// Generate a vec-of-vec matrix (without explicit coefficients) of size
+/// `numrows x numcols` such that each entry is structurally nonzero with
+/// probability `probability`.
+pub fn erdos_renyi( numrows: usize, numcols: usize, probability: f64 ) -> Vec<Vec<usize>> {
+
+    use rand::distributions::{Bernoulli, Distribution};
+    let d = Bernoulli::new( probability ).unwrap();
+
+    let mut matrix = Vec::with_capacity( numrows );
+    for _ in 0 .. numrows {
+        let mut vec = Vec::new();
+        for p in 0 .. numcols {
+            let is_nonzero = d.sample(&mut rand::thread_rng());
+            if is_nonzero {
+                vec.push(p);
+            }
+        }
+        matrix.push(vec);
+    }
+    return matrix
+}
+
+/// Generate the inverse of a permutation represented by a vector.
+pub fn invert_perumtation( perm: Vec<usize> ) -> Vec<usize> {
+    let mut inverse: Vec< usize > = (0 .. perm.len()).collect();
+    for (indexold, indexnew) in perm.iter().cloned().enumerate() {
+        inverse[indexnew] = indexold;
+    }
+    return inverse
 }
