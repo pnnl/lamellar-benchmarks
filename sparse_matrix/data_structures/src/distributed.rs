@@ -20,10 +20,13 @@ use std::sync::atomic::{Ordering, AtomicBool};
 /// The matrix need not contain explicit values for the structural nonzero coefficients.
 #[derive(Debug, Clone)]
 pub struct SparseMat {
-    pub numrows: usize, // the total number of rows in the matrix
-    pub numcols: usize, // the nonzeros have values between 0 and numcols
-    pub nnz: usize,     // total number of nonzeros in the matrix
-    /// the row offsets into the arrays nonzeros and values, size is nrows+1,
+    /// The total number of rows in the matrix
+    pub numrows: usize, 
+    /// The column indices of the structural nonzeros
+    pub numcols: usize, 
+    /// The number of structural nonzeros
+    pub nnz: usize,     
+    /// The row offsets into the arrays nonzeros and values, size is nrows+1,
     /// rowptr[nrows+1] is nnz
     pub rowptr: ReadOnlyArray<usize>,
     /// The nonzero column indicies
@@ -481,6 +484,22 @@ pub fn print_read_only_array<T: Dist + std::fmt::Debug>(
         .for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
     array.wait_all();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

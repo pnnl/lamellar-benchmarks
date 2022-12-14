@@ -1,5 +1,5 @@
 [package]
-name = "lamellar_sparse_matrix"
+name = "data_structures"
 version = "0.1.0"
 authors = ["Gregory Roek, Erdal Mutlu, Ryan Friese, and the Lamellar Developers"]
 edition = "2018"
