@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 data_structures = { path = "data_structures" }
-aaa = { path = "aaa" }
+rand="0.7"
+sparsemat  = { git = "https://github.com/jdevinney/bale.git",     branch = "master" }
+tabled = "0.10.0"

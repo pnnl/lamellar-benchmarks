@@ -4,10 +4,17 @@
 
 use lamellar::{LamellarWorld, IndexedDistributedIterator, LamellarArray, LamellarArrayIterators, SubArray, Dist, IndexedLocalIterator, LocalIterator, AccessOps, ActiveMessaging};
 use lamellar::array::{UnsafeArray, Distribution, DistributedIterator, ReadOnlyArray, ReadOnlyOps };
+use lamellar::LamellarWorldBuilder;  
+use lamellar::StridedArch; 
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{Ordering, AtomicBool};
+
+use crate::serial;
+use sparsemat as bale;
+
+use tabled::{Table, Tabled};
 
 
 //  ----------------------------------------------------------------
@@ -106,8 +113,17 @@ impl SparseMat {
     /// - the permuted matrix
     /// - a Vec<usize> representing the row permutation (inverse to `rperminv`)
     /// - a Vec<(f64, usize, usize)> called "decorated ranges," used for debugging
-    pub fn permute_fax(&self, rperminv: &ReadOnlyArray<usize>, cperminv: &ReadOnlyArray<usize>, world: LamellarWorld ) 
-            -> (SparseMat, Vec<usize>, Vec<(f64, usize,usize)> ) {
+    pub fn permute_like_serial_bale(&self, rperminv: &ReadOnlyArray<usize>, cperminv: &ReadOnlyArray<usize>, world: & LamellarWorld ) 
+            ->  (
+                    SparseMat, 
+                    Vec<usize>, 
+                    Vec<(f64, usize,usize)>,
+                    HashMap< &str, f64 >,
+                ) 
+        {
+        // wait for all other processes to finish so we can get a clean read on time
+        world.barrier();
+        let timer_total = std::time::Instant::now();            
 
         
         // we'll handle values in future versions of this code
@@ -119,13 +135,15 @@ impl SparseMat {
 
         // Preallocate the new sparse matrix + a distributed array representing the inverse of the row permutation
         // -----------------------------------------------------------------------------------------------------------------        
-        let numrows                         =   self.numrows();
-        let numcols                         =   self.numcols();
-        let nnz                                 =   self.nnz();
-        let nzval                               =   None;
-        let othr_rowptr  = UnsafeArray::<usize>::new(world.team(), numcols+1 , Distribution::Cyclic).into_atomic();        
-        let othr_nzind = UnsafeArray::<usize>::new(world.team(), nnz , Distribution::Cyclic).into_atomic();
-        let rperm   =   UnsafeArray::<usize>::new(world.team(), numrows , Distribution::Cyclic).into_atomic();        
+        let numrows         =   self.numrows();
+        let numcols         =   self.numcols();
+        let nnz             =   self.nnz();
+        let nzval           =   None;
+        let othr_rowptr     =   UnsafeArray::<usize>::new( world.team(), numcols+1 , Distribution::Cyclic).into_atomic();        
+        let othr_nzind      =   UnsafeArray::<usize>::new( world.team(), nnz ,       Distribution::Cyclic).into_atomic();
+        let rperm           =   UnsafeArray::<usize>::new( world.team(), numrows ,   Distribution::Cyclic).into_atomic();   
+        
+        let mut times                   =   HashMap::new(); // a hashmap to track a few run times
 
         // Invert the row permutation
         // -----------------------------------------------------------------------------------------------------------------        
@@ -162,16 +180,19 @@ impl SparseMat {
         let self_rowptr_clone = self.rowptr.clone();  // a clone that can be consumed
         let self_nzind_clone = self.nzind.clone();    // a clone that can be consumed
 
+
         // Write each row of the permuted matrix in a for-loop
+        world.barrier();
+        let timer = std::time::Instant::now();
         for rindexnew in 0 .. numrows
         {
             let rindexold = rperm.block_on(rperm.load( rindexnew ));
             {
                 // define the section of self.nzind that we will copy into the permuted matrix
-                let read_range_start = self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold )); //.await;
-                let read_range_end = self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold +1 )); //.await;
-                let read_range  =   read_range_start .. read_range_end;
-                let subarrayold     =   self_nzind_clone.sub_array(read_range);
+                let read_range_start    =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold )); //.await;
+                let read_range_end      =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold +1 )); //.await;
+                let read_range          =   read_range_start .. read_range_end;
+                let subarrayold         =   self_nzind_clone.sub_array(read_range);
 
                 // define a clone that can be consumed
                 let othr_nzind_clone = othr_nzind.clone();  // NB: we get an error if we move this                                                                                 
@@ -203,6 +224,8 @@ impl SparseMat {
             // update the row offset pattern of the new array
             othr_rowptr.block_on( othr_rowptr.store( rindexnew+1, nnzwritten ) );            
         }
+        times.insert( "rows",  timer.elapsed().as_secs_f64() );        
+
 
         // we're done updating rowptr, so conver to read-only
         let rowptr = othr_rowptr.into_read_only();
@@ -210,21 +233,25 @@ impl SparseMat {
         // Update the nonzero indices
         // -----------------------------------------------------------------------------------------------------------------            
 
+        world.barrier();
+        let timer = std::time::Instant::now();
         let nzind = 
                     vec_to_unsafe_array( 
                             & world.block_on( cperminv.batch_load( othr_nzind.local_data() ) ), 
                             world 
                         )
                         .into_read_only();
+        times.insert( "colind", timer.elapsed().as_secs_f64() );                          
     
         // Return 
         // -----------------------------------------------------------------------------------------------------------------            
         
-        println!("{:?}", "FINISHED PERMUTE FAX");
+        times.insert("total",  timer_total.elapsed().as_secs_f64() );                          
         return  (   
                     SparseMat { numrows, numcols, nnz, rowptr, nzind, nzval }, 
                     read_only_array_to_vec(&rperm ),
-                    decorated_ranges
+                    decorated_ranges,
+                    times,
                 )
                 
     }    
@@ -247,8 +274,8 @@ impl SparseMat {
         }
 
         // format as a sparse matrix
-        let rowptr = vec_to_unsafe_array( & rowptr_vec, world.clone() ).into_read_only();
-        let nzind  = vec_to_unsafe_array( & nzind_vec,  world ).into_read_only();
+        let rowptr = vec_to_unsafe_array( & rowptr_vec, & world ).into_read_only();
+        let nzind  = vec_to_unsafe_array( & nzind_vec,  & world ).into_read_only();
         let nzval = None;
 
         return SparseMat{ numrows, numcols, nnz, nzind, nzval, rowptr }
@@ -354,8 +381,8 @@ impl SparseMat {
 
 
 /// Convert Vec to UnsafeArray.
-pub fn vec_to_unsafe_array<T:Dist + Clone>( vec: &Vec<T>, world: LamellarWorld ) -> UnsafeArray<T> {
-    let array = UnsafeArray::<T>::new(world.team(), vec.len() , Distribution::Cyclic); 
+pub fn vec_to_unsafe_array<T:Dist + Clone>( vec: &Vec<T>, world: & LamellarWorld ) -> UnsafeArray<T> {
+    let array = UnsafeArray::<T>::new( world.team(), vec.len() , Distribution::Cyclic); 
     let vec_clone = vec.clone(); // not ideal to copy the data, i just haven't had time to figure out a fix
     unsafe {
         array
@@ -488,6 +515,263 @@ pub fn print_read_only_array<T: Dist + std::fmt::Debug>(
 
 
 
+//  ----------------------------------------------------------------
+//  HELPER FUNCTIONS FOR UNIT TESTING
+//  ---------------------------------------------------------------- 
+
+
+/// A struct used as a plug-in for the `tabled` crate, which prints tables;
+/// Specifically, each instance of this struct will become a row in a table.
+#[derive(Tabled,Clone)]
+pub struct RunTimes {
+    pub numpes:                 usize,
+    pub numrows:                usize,
+    pub numcols:                usize,
+    pub nnz:                    usize,
+    pub bale_serial:            f64,
+    pub lamellar_serial:        f64,
+    pub lamellar_dist_total:    f64,
+    pub lamellar_dist_rows:     f64,
+    pub lamellar_dist_colind:   f64,
+}   
+
+
+
+/// Compare the results of matrix permutation via three methods (Bale serial, vec-of-vec serial, and Lamellar distributed)
+/// 
+/// - We ignore structural nonzero coefficients (only focus on sparcity pattern)
+/// - For each matrix, we compute its permutation 3 different ways
+///   - The original Bale implementation
+///   - A simple vec-of-vec implementation
+///   - The distributed Lamellar implementation
+/// - Matrices must have at least one nonzero coefficient, else Lamellar throws an error (we could correct for this with case handling; shoudl we?)
+pub fn test_permutation(
+    // matrix_vecvec:      & Vec< Vec< usize > >,
+    // rperminv:           & Vec< usize >,
+    // cperminv:           & Vec< usize >,
+    matrix_bale:    & bale::SparseMat,
+    rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
+    cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
+    verbose:        bool,
+    ) 
+    -> RunTimes
+    {
+
+        
+    // ------------------------
+    // PARSE INPUT
+    // ------------------------ 
+
+    let rperminv            =   perm_bale_to_perm_vec( rperminv_bale );
+    let cperminv            =   perm_bale_to_perm_vec( cperminv_bale ); 
+    let numrows             =   rperminv.len();     
+    let numcols             =   cperminv.len();
+    let matrix_vecvec       =   matrix_bale_to_matrix_vecvec( matrix_bale );  // format a new matrix   
+    let nnz                 =   matrix_vecvec.iter().map(|x| x.len()).sum();     
+    println!("number of rows: {:?}",numrows);
+    println!("number of cols: {:?}",nnz);   
+
+    // ------------------------
+    // CREATE A WORLD
+    // ------------------------     
+ 
+    let world       =    LamellarWorldBuilder::new().build(); // the world
+    let team    =    world.create_team_from_arch(StridedArch::new(
+                                                0,                                    // start pe
+                                                1,                                      // stride
+                                                world.num_pes()                   //num_pes in team
+                                            )).expect("PE in world team");    
+
+    // ------------------------
+    // SERIAL COMPUTATIONS 
+    // ------------------------      
+
+    // permute with Bale
+    // -----------------
+
+    world.barrier();
+    let timer = std::time::Instant::now();  // start timer
+    let permuted_serial_bale           =   matrix_bale.permute(&rperminv_bale, &cperminv_bale);
+    let time_bale_serial = timer.elapsed().as_secs_f64();
+    println!("bale serial time: {:?}", time_bale_serial );                                                
+
+    // permute the vecofvec
+    // --------------------
+
+    world.barrier();    
+    let timer = std::time::Instant::now();  // start timer    
+    let permuted_vecvec = serial::permute_vec_of_vec(
+                                                & matrix_vecvec, 
+                                                & rperminv, 
+                                                & cperminv,
+                                            );  
+    let time_lamellar_serial            =  timer.elapsed().as_secs_f64(); 
+    println!("lamellar serial time: {:?}", time_lamellar_serial );                                            
+                                         
+
+    // ------------------------
+    // DISTRIBUTED COMPUTATIONS
+    // ------------------------
+
+
+    // initialize
+    // ----------
+    
+    let my_pe       =   world.my_pe();
+    let nzind       =   UnsafeArray::<usize>::new( &team, nnz,          Distribution::Block); 
+    let rowptr      =   UnsafeArray::<usize>::new( &team, numrows + 1,  Distribution::Block).into_atomic(); 
+    let rperminv    =   UnsafeArray::<usize>::new( &team, numrows,      Distribution::Block).into_atomic(); 
+    let cperminv    =   UnsafeArray::<usize>::new( &team, numrows,      Distribution::Block).into_atomic();         
+
+
+    // copy data from the bale matrix to the lamellar arrays
+    // ----------------------------------------------------------
+
+    rowptr.store(0, 0);
+    for p in 0..numrows {
+        rowptr.store(p+1,matrix_bale.offset[p+1]);
+        rperminv.store(p, rperminv_bale.entry(p) );            
+        cperminv.store(p, cperminv_bale.entry(p) ); 
+    }
+    for p in 0..nnz {
+        nzind.store(p, matrix_bale.nonzero[p] );                    
+    }
+    rowptr.wait_all(); rperminv.wait_all(); cperminv.wait_all(); nzind.wait_all();
+
+
+    // make the lamellar arrays read-only
+    // ----------------------------------
+
+    let rowptr      =   rowptr.into_read_only();
+    let nzind       =   nzind.into_read_only();
+    let rperminv    =   rperminv.into_read_only();
+    let cperminv    =   cperminv.into_read_only();
+
+
+    // permute
+    // -------
+
+    let nzval = None;
+
+    let matrix = SparseMat{ numrows, numcols, nnz, rowptr, nzind, nzval, };
+    let (permuted, rperm_lamellar, decorated_ranges, distributed_run_times ) 
+            = matrix.permute_like_serial_bale( &rperminv, &cperminv, &world );
+
+    world.barrier(); // wait for processes to finish    
+
+    if my_pe == 0 {
+        println!("lamellar distributed time: {:?}", distributed_run_times["total"]);
+    };
+
+    // ------------------------
+    // PRINT DIAGONSTICS (IF DESIRED)
+    // ------------------------
+
+
+    if verbose {
+        println!("");
+        println!("PERMUTATIONS");        
+        println!("rperm lamellar {:?}", & rperm_lamellar );        
+        println!("rperm vector   {:?}", & rperminv_bale.inverse().perm() );  
+
+        println!("");
+        println!("INVERSE PERMUTATIONS");
+        println!("row bale:  {:?}", perm_bale_to_perm_vec( rperminv_bale ) );
+        println!("row array: {:?}", read_only_array_to_vec(&rperminv) );        
+        println!("col bale:  {:?}", perm_bale_to_perm_vec( cperminv_bale ) );        
+        println!("col array: {:?}", read_only_array_to_vec(&cperminv) );  
+
+        println!("");
+        println!("ORIGINAL MATRICES");
+        println!("vecvec from matrix          {:?}", matrix.to_vec_of_rowvec() );
+        println!("vecvec from matrix_vecvec:  {:?}", &matrix_vecvec);
+        println!("vecvec from matrix_bale:    {:?}", matrix_bale_to_matrix_vecvec(matrix_bale));
+
+        println!("");
+        println!("PERMUTED MATRICES");
+        println!("vecvec from permuted         {:?}", permuted.to_vec_of_rowvec() );
+        println!("vecvec from permuted_vecvec: {:?}", &permuted_vecvec);
+        println!("vecvec from permuted_serial_bale:   {:?}", matrix_bale_to_matrix_vecvec( &permuted_serial_bale));
+
+        println!("");
+        println!("COMPONENTS - PERMUTED");
+        println!("rowptr {:?}", read_only_array_to_vec( &permuted.rowptr) );
+        println!("nzind {:?}", read_only_array_to_vec( &permuted.nzind) );        
+
+        println!("");
+        println!("COMPONENTS - ORIGINAL");
+        println!("rowptr {:?}", read_only_array_to_vec( &matrix.rowptr) );
+        println!("decorated_ranges {:?}", decorated_ranges );       
+        println!("rperm lamellar {:?}", &rperm_lamellar ); 
+    }
+    
+
+    // -------------------------------------------------------------
+    // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
+    // -------------------------------------------------------------
+
+
+    assert_eq!( &matrix_vecvec,   &matrix.to_vec_of_rowvec() );
+    assert_eq!( &matrix_vecvec,   &matrix_bale_to_matrix_vecvec(matrix_bale) );   
+    assert_eq!( &permuted_vecvec, &permuted.to_vec_of_rowvec() );
+    assert_eq!( &permuted_vecvec, &matrix_bale_to_matrix_vecvec(&permuted_serial_bale) );  
+    
+    return RunTimes{
+            numrows, 
+            numcols,
+            nnz, 
+            bale_serial:            time_bale_serial, 
+            lamellar_serial:        time_lamellar_serial, 
+            lamellar_dist_total:    distributed_run_times["total"],
+            lamellar_dist_rows:     distributed_run_times["rows"],
+            lamellar_dist_colind:   distributed_run_times["colind"],                        
+            numpes:                 world.num_pes(),
+        }
+
+}    
+
+
+/// Convert a vector-of-row-vectors sparse matrix to a bale sparse matrix.
+fn vecvec_matrix_to_bale_matrix( vecvec: Vec<Vec<usize>>, numcols: usize) -> bale::SparseMat {
+
+    let nnz = vecvec.iter().map(|x| x.len()).sum();
+    let numrows = vecvec.len();
+
+    let mut matrix_bale = bale::SparseMat::new( numrows, numcols, nnz, );
+
+    for p in 0 .. numrows {
+        matrix_bale.offset[p+1] = matrix_bale.offset[p] + vecvec[p].len();
+        matrix_bale
+            .nonzero[ matrix_bale.offset[p] .. matrix_bale.offset[p+1] ]
+            .clone_from_slice( & vecvec[p][..] );
+    }
+    return matrix_bale
+}
+
+/// Export a copy of the matrix in vec-of-vec format.
+pub fn matrix_bale_to_matrix_vecvec( matrix_bale: & bale::SparseMat ) -> Vec<Vec<usize>> {
+    let mut vecvec = Vec::with_capacity( matrix_bale.numrows() );
+    for rindex in 0 .. matrix_bale.numrows() {
+        let new_vec = matrix_bale.nonzero[ matrix_bale.offset[rindex] .. matrix_bale.offset[rindex+1] ].iter().cloned().collect();
+        vecvec.push( new_vec );
+    }
+    return vecvec
+}    
+
+/// Convert a Bale Perm to a Vec< usize >
+pub fn perm_bale_to_perm_vec( perm_bale: & bale::Perm ) -> Vec<usize> {
+    let mut perm = Vec::with_capacity( perm_bale.len() );
+    for p in 0 .. perm_bale.len() {
+        perm.push( perm_bale.entry(p) )
+    }
+    return perm
+    // let perm_vec = Vec::with_capacity( perm_bale.len() );
+    // let inner_data = perm_bale.perm();
+    // for p in 0 .. inner_data.len() {
+    //     perm_vec[p] = inner_data[p].clone();
+    // }
+    // return perm_vec;
+}
 
 
 
@@ -510,7 +794,7 @@ pub fn print_read_only_array<T: Dist + std::fmt::Debug>(
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use crate::serial;
     use sparsemat as bale;
@@ -587,208 +871,9 @@ mod tests {
     }
 
 
-    //  ----------------------------------------------------------------
-    //  HELPER FUNCTIONS
-    //  ---------------------------------------------------------------- 
-
-
-    /// Compare the results of matrix permutation via three methods (Bale serial, vec-of-vec serial, and Lamellar distributed)
-    /// 
-    /// - We ignore structural nonzero coefficients (only focus on sparcity pattern)
-    /// - For each matrix, we compute its permutation 3 different ways
-    ///   - The original Bale implementation
-    ///   - A simple vec-of-vec implementation
-    ///   - The distributed Lamellar implementation
-    /// - Matrices must have at least one nonzero coefficient, else Lamellar throws an error (we could correct for this with case handling; shoudl we?)
-    fn test_permutation(
-        // matrix_vecvec:      & Vec< Vec< usize > >,
-        // rperminv:           & Vec< usize >,
-        // cperminv:           & Vec< usize >,
-        matrix_bale:    & bale::SparseMat,
-        rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
-        cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
-        verbose:        bool,
-        ) {
-    
-           
-
-        // ------------------------
-        // SERIAL COMPUTATIONS 
-        // ------------------------      
-
-        // permute with Bale
-        let permuted_bale           =   matrix_bale.permute(&rperminv_bale, &cperminv_bale);
-
-        // permute the vecofvec
-        let rperminv            =   perm_bale_to_perm_vec( rperminv_bale );
-        let cperminv            =   perm_bale_to_perm_vec( cperminv_bale ); 
 
 
 
-        let matrix_vecvec = matrix_bale_to_matrix_vecvec( matrix_bale );
-
-        let permuted_vecvec = serial::permute_vec_of_vec(
-                                                    & matrix_vecvec, 
-                                                    & rperminv, 
-                                                    & cperminv,
-                                                );     
-                                                
-        let numrows = rperminv.len();     
-        let numcols = cperminv.len();
-        let nnz = matrix_vecvec.iter().map(|x| x.len()).sum();                                                    
-
-
-        // ------------------------
-        // DISTRIBUTED COMPUTATIONS
-        // ------------------------
-
-
-        // initialize
-        // ----------
-        
-        let world = LamellarWorldBuilder::new().build(); // the world
-        let nzind                   =   UnsafeArray::<usize>::new(&world,nnz,Distribution::Block); 
-        let rowptr =   UnsafeArray::<usize>::new(&world,numrows + 1,Distribution::Block).into_atomic(); 
-        let rperminv    =   UnsafeArray::<usize>::new(&world,numrows,Distribution::Block).into_atomic(); 
-        let cperminv    =   UnsafeArray::<usize>::new(&world,numrows,Distribution::Block).into_atomic();         
-
-
-        // copy data from the bale matrix to the lamellar arrays
-        // ----------------------------------------------------------
-
-        rowptr.store(0, 0);
-        for p in 0..numrows {
-            rowptr.store(p+1,matrix_bale.offset[p+1]);
-            rperminv.store(p, rperminv_bale.entry(p) );            
-            cperminv.store(p, cperminv_bale.entry(p) ); 
-        }
-        for p in 0..nnz {
-            nzind.store(p, matrix_bale.nonzero[p] );                    
-        }
-        rowptr.wait_all(); rperminv.wait_all(); cperminv.wait_all(); nzind.wait_all();
-
-
-        // make the lamellar arrays read-only
-        // ----------------------------------
-
-        let rowptr = rowptr.into_read_only();
-        let nzind = nzind.into_read_only();
-        let rperminv = rperminv.into_read_only();
-        let cperminv = cperminv.into_read_only();
-
-
-        // permute
-        // -------
-
-        let nzval = None;
-        let matrix = SparseMat{ numrows, numcols, nnz, rowptr, nzind, nzval, };
-        let (permuted, rperm_lamellar, decorated_ranges) 
-                = matrix.permute_fax( &rperminv, &cperminv, world);
-
-
-        // ------------------------
-        // PRINT DIAGONSTICS (IF DESIRED)
-        // ------------------------
-
-
-        if verbose {
-            println!("");
-            println!("PERMUTATIONS");        
-            println!("rperm lamellar {:?}", & rperm_lamellar );        
-            println!("rperm vector   {:?}", & rperminv_bale.inverse().perm() );  
-
-            println!("");
-            println!("INVERSE PERMUTATIONS");
-            println!("row bale:  {:?}", perm_bale_to_perm_vec( rperminv_bale ) );
-            println!("row array: {:?}", read_only_array_to_vec(&rperminv) );        
-            println!("col bale:  {:?}", perm_bale_to_perm_vec( cperminv_bale ) );        
-            println!("col array: {:?}", read_only_array_to_vec(&cperminv) );  
-
-            println!("");
-            println!("ORIGINAL MATRICES");
-            println!("vecvec from matrix          {:?}", matrix.to_vec_of_rowvec() );
-            println!("vecvec from matrix_vecvec:  {:?}", &matrix_vecvec);
-            println!("vecvec from matrix_bale:    {:?}", matrix_bale_to_matrix_vecvec(matrix_bale));
-
-            println!("");
-            println!("PERMUTED MATRICES");
-            println!("vecvec from permuted         {:?}", permuted.to_vec_of_rowvec() );
-            println!("vecvec from permuted_vecvec: {:?}", &permuted_vecvec);
-            println!("vecvec from permuted_bale:   {:?}", matrix_bale_to_matrix_vecvec( &permuted_bale));
-
-            println!("");
-            println!("COMPONENTS - PERMUTED");
-            println!("rowptr {:?}", read_only_array_to_vec( &permuted.rowptr) );
-            println!("nzind {:?}", read_only_array_to_vec( &permuted.nzind) );        
-
-            println!("");
-            println!("COMPONENTS - ORIGINAL");
-            println!("rowptr {:?}", read_only_array_to_vec( &matrix.rowptr) );
-            println!("decorated_ranges {:?}", decorated_ranges );       
-            println!("rperm lamellar {:?}", &rperm_lamellar ); 
-        }
-        
-
-        // -------------------------------------------------------------
-        // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
-        // -------------------------------------------------------------
-
-
-        assert_eq!( &matrix_vecvec,   &matrix.to_vec_of_rowvec() );
-        assert_eq!( &matrix_vecvec,   &matrix_bale_to_matrix_vecvec(matrix_bale) );   
-        assert_eq!( &permuted_vecvec, &permuted.to_vec_of_rowvec() );
-        assert_eq!( &permuted_vecvec, &matrix_bale_to_matrix_vecvec(&permuted_bale) );                           
-    }    
-
-
-    /// Convert a vector-of-row-vectors sparse matrix to a bale sparse matrix.
-    fn vecvec_matrix_to_bale_matrix( vecvec: Vec<Vec<usize>>, numcols: usize) -> bale::SparseMat {
-
-        let nnz = vecvec.iter().map(|x| x.len()).sum();
-        let numrows = vecvec.len();
-
-        let mut matrix_bale = bale::SparseMat::new( numrows, numcols, nnz, );
-
-        for p in 0 .. numrows {
-            matrix_bale.offset[p+1] = matrix_bale.offset[p] + vecvec[p].len();
-            matrix_bale
-                .nonzero[ matrix_bale.offset[p] .. matrix_bale.offset[p+1] ]
-                .clone_from_slice( & vecvec[p][..] );
-        }
-        return matrix_bale
-    }
-
-    /// Export a copy of the matrix in vec-of-vec format.
-    pub fn matrix_bale_to_matrix_vecvec( matrix_bale: & bale::SparseMat ) -> Vec<Vec<usize>> {
-        let mut vecvec = Vec::with_capacity( matrix_bale.numrows() );
-        for rindex in 0 .. matrix_bale.numrows() {
-            let new_vec = matrix_bale.nonzero[ matrix_bale.offset[rindex] .. matrix_bale.offset[rindex+1] ].iter().cloned().collect();
-            vecvec.push( new_vec );
-        }
-        return vecvec
-    }    
-
-    /// Convert a Bale Perm to a Vec< usize >
-    pub fn perm_bale_to_perm_vec( perm_bale: & bale::Perm ) -> Vec<usize> {
-        let mut perm = Vec::with_capacity( perm_bale.len() );
-        for p in 0 .. perm_bale.len() {
-            perm.push( perm_bale.entry(p) )
-        }
-        return perm
-        // let perm_vec = Vec::with_capacity( perm_bale.len() );
-        // let inner_data = perm_bale.perm();
-        // for p in 0 .. inner_data.len() {
-        //     perm_vec[p] = inner_data[p].clone();
-        // }
-        // return perm_vec;
-    }
-
-    // /// Convert a permutation represented as a Vec<usize> to a bale Perm
-    // pub fn perm_vec_to_perm_bale(perm_vec: Vec<usize>){
-    //     let mut perm_bale = bale::Perm::new( perm_vec.len() );
-    //     let mut inner_data = perm_bale.perm();
-    //     for 
-    // } 
 
     //  ----------------------------------------------------------------
     //  MISCELLANEOUS
