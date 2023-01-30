@@ -10,7 +10,7 @@ edition = "2018"
 csv = "1"
 rand="0.7"
 regex="1"
-lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "dev"    }   # add features = ["enable-rofi"] to use rofi lamellae
+lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "dev", features = ["enable-rofi"]    }   # add features = ["enable-rofi"] to use rofi lamellae
 sparsemat  = { git = "https://github.com/jdevinney/bale.git",     branch = "master" }
 tabled = "0.10.0"
 

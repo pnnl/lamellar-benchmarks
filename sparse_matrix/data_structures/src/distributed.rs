@@ -3,7 +3,8 @@
 //! See the unit tests at the bottom of `lamellar_spmat_distributed.rs` for some examples.  These can be used as a starting point for benchmarks.
 
 use lamellar::{LamellarWorld, IndexedDistributedIterator, LamellarArray, LamellarArrayIterators, SubArray, Dist, IndexedLocalIterator, LocalIterator, AccessOps, ActiveMessaging};
-use lamellar::array::{UnsafeArray, Distribution, DistributedIterator, ReadOnlyArray, ReadOnlyOps };
+use lamellar::array::{AtomicArray, UnsafeArray, Distribution, DistributedIterator, ReadOnlyArray, ReadOnlyOps };
+use lamellar::LamellarArrayCompareReduce;
 use lamellar::LamellarWorldBuilder;  
 use lamellar::StridedArch; 
 
@@ -120,9 +121,11 @@ impl SparseMat {
                     Vec<(f64, usize,usize)>,
                     HashMap< &str, f64 >,
                 ) 
-        {
+        {            
+        println!("VERY FIRST LINE OF permute_like_serial_bale");
+
         // wait for all other processes to finish so we can get a clean read on time
-        world.barrier();
+        let my_pe = world.my_pe();
         let timer_total = std::time::Instant::now();            
 
         
@@ -139,9 +142,9 @@ impl SparseMat {
         let numcols         =   self.numcols();
         let nnz             =   self.nnz();
         let nzval           =   None;
-        let othr_rowptr     =   UnsafeArray::<usize>::new( world.team(), numcols+1 , Distribution::Cyclic).into_atomic();        
-        let othr_nzind      =   UnsafeArray::<usize>::new( world.team(), nnz ,       Distribution::Cyclic).into_atomic();
-        let rperm           =   UnsafeArray::<usize>::new( world.team(), numrows ,   Distribution::Cyclic).into_atomic();   
+        let othr_rowptr     =   AtomicArray::<usize>::new( world.team(), numcols+1 , Distribution::Cyclic);        
+        let othr_nzind      =   AtomicArray::<usize>::new( world.team(), nnz ,       Distribution::Cyclic);
+        let rperm           =   AtomicArray::<usize>::new( world.team(), numrows ,   Distribution::Cyclic);   
         
         let mut times                   =   HashMap::new(); // a hashmap to track a few run times
 
@@ -152,6 +155,7 @@ impl SparseMat {
         // The following loop needs to modify the entries in rperm, but the array we modify
         // will be comsumed by the closure.  So we clone rperm, and use the clone in the loop.
         // The clone will be consumed but the entries of rperm will be updated.
+        println!("made it to just before rperminv");
         let rperm_clone = rperm.clone(); 
         rperminv.dist_iter()
             .enumerate()
@@ -161,6 +165,7 @@ impl SparseMat {
             );
         // wait for all updates to finish            
         world.wait_all(); 
+        world.barrier();
         // all updates to rperm have finished, so we can make it read-only        
         let rperm = rperm.into_read_only(); 
 
@@ -182,16 +187,20 @@ impl SparseMat {
 
 
         // Write each row of the permuted matrix in a for-loop
-        world.barrier();
         let timer = std::time::Instant::now();
         for rindexnew in 0 .. numrows
         {
             let rindexold = rperm.block_on(rperm.load( rindexnew ));
             {
                 // define the section of self.nzind that we will copy into the permuted matrix
+                // !!! this is probably unnecessary
                 let read_range_start    =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold )); //.await;
                 let read_range_end      =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold +1 )); //.await;
                 let read_range          =   read_range_start .. read_range_end;
+                println!("{:?}", self_nzind_clone.len() );
+                if read_range_end > self_nzind_clone.len() {
+                    println!("!!! read_range_end > self_nzind_clone.len()");
+                }
                 let subarrayold         =   self_nzind_clone.sub_array(read_range);
 
                 // define a clone that can be consumed
@@ -212,17 +221,23 @@ impl SparseMat {
                         }
                     );
                 world.wait_all();
+                world.barrier();
                 
                 // update the variable that tracks the number of structural nonzeros we've
                 // written to the last k rows
                 nnzwritten += read_range_end - read_range_start;    
 
                 // update a variable used for debugging
-                decorated_ranges.push( (rindexold as f64, read_range_start, read_range_end) );                
+                decorated_ranges.push( (rindexold as f64, read_range_start, read_range_end) );                             
             }
-
-            // update the row offset pattern of the new array
-            othr_rowptr.block_on( othr_rowptr.store( rindexnew+1, nnzwritten ) );            
+            world.wait_all();
+            world.barrier(); 
+            // update the row offset pattern of the new array  
+            if my_pe == 0 {
+                othr_rowptr.block_on( othr_rowptr.store( rindexnew+1, nnzwritten ) );          
+            }
+            world.wait_all();
+            world.barrier();              
         }
         times.insert( "rows",  timer.elapsed().as_secs_f64() );        
 
@@ -230,11 +245,16 @@ impl SparseMat {
         // we're done updating rowptr, so conver to read-only
         let rowptr = othr_rowptr.into_read_only();
 
+        // sanity check
+        let maxind = othr_nzind.block_on(othr_nzind.max());
+        if maxind >= cperminv.len() {
+            println!("!!! error: maxind >= cperminv.len()");
+        }        
+
         // Update the nonzero indices
         // -----------------------------------------------------------------------------------------------------------------            
 
-        world.barrier();
-        let timer = std::time::Instant::now();
+        let timer = std::time::Instant::now();        
         let nzind = 
                     vec_to_unsafe_array( 
                             & world.block_on( cperminv.batch_load( othr_nzind.local_data() ) ), 
@@ -535,8 +555,6 @@ pub struct RunTimes {
     pub lamellar_dist_colind:   f64,
 }   
 
-
-
 /// Compare the results of matrix permutation via three methods (Bale serial, vec-of-vec serial, and Lamellar distributed)
 /// 
 /// - We ignore structural nonzero coefficients (only focus on sparcity pattern)
@@ -549,6 +567,7 @@ pub fn test_permutation(
     // matrix_vecvec:      & Vec< Vec< usize > >,
     // rperminv:           & Vec< usize >,
     // cperminv:           & Vec< usize >,
+    world:          & LamellarWorld,
     matrix_bale:    & bale::SparseMat,
     rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
     cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
@@ -568,37 +587,45 @@ pub fn test_permutation(
     let numcols             =   cperminv.len();
     let matrix_vecvec       =   matrix_bale_to_matrix_vecvec( matrix_bale );  // format a new matrix   
     let nnz                 =   matrix_vecvec.iter().map(|x| x.len()).sum();     
-    println!("number of rows: {:?}",numrows);
-    println!("number of cols: {:?}",nnz);   
+
+    let my_pe       =   world.my_pe();    
+    if my_pe == 0 {
+        println!("number of rows: {:?}",numrows);
+        println!("number of colinds: {:?}",nnz);  
+    }
+ 
 
     // ------------------------
-    // CREATE A WORLD
+    // CREATE A TEAM
     // ------------------------     
  
-    let world       =    LamellarWorldBuilder::new().build(); // the world
-    let team    =    world.create_team_from_arch(StridedArch::new(
-                                                0,                                    // start pe
-                                                1,                                      // stride
-                                                world.num_pes()                   //num_pes in team
-                                            )).expect("PE in world team");    
+    // let team    =    world.create_team_from_arch(StridedArch::new(
+    //                                             0,                                    // start pe
+    //                                             1,                                      // stride
+    //                                             world.num_pes()                   //num_pes in team
+    //                                         )).expect("PE in world team");    
 
-    // ------------------------
-    // SERIAL COMPUTATIONS 
-    // ------------------------      
+    // // ------------------------
+    // // SERIAL COMPUTATIONS 
+    // // ------------------------      
 
-    // permute with Bale
-    // -----------------
+    // // permute with Bale
+    // // -----------------
 
+    world.wait_all();
     world.barrier();
     let timer = std::time::Instant::now();  // start timer
     let permuted_serial_bale           =   matrix_bale.permute(&rperminv_bale, &cperminv_bale);
     let time_bale_serial = timer.elapsed().as_secs_f64();
-    println!("bale serial time: {:?}", time_bale_serial );                                                
+    if my_pe == 0 {
+        println!("bale serial time: {:?}", time_bale_serial );
+    }
 
-    // permute the vecofvec
-    // --------------------
 
-    world.barrier();    
+    // // permute the vecofvec
+    // // --------------------
+
+    // world.barrier();    
     let timer = std::time::Instant::now();  // start timer    
     let permuted_vecvec = serial::permute_vec_of_vec(
                                                 & matrix_vecvec, 
@@ -606,37 +633,72 @@ pub fn test_permutation(
                                                 & cperminv,
                                             );  
     let time_lamellar_serial            =  timer.elapsed().as_secs_f64(); 
-    println!("lamellar serial time: {:?}", time_lamellar_serial );                                            
+    if my_pe == 0 {    
+        println!("lamellar serial time: {:?}", time_lamellar_serial );
+    }
                                          
 
     // ------------------------
     // DISTRIBUTED COMPUTATIONS
     // ------------------------
 
+    println!("initiating distributed computations");
 
     // initialize
     // ----------
     
-    let my_pe       =   world.my_pe();
-    let nzind       =   UnsafeArray::<usize>::new( &team, nnz,          Distribution::Block); 
-    let rowptr      =   UnsafeArray::<usize>::new( &team, numrows + 1,  Distribution::Block).into_atomic(); 
-    let rperminv    =   UnsafeArray::<usize>::new( &team, numrows,      Distribution::Block).into_atomic(); 
-    let cperminv    =   UnsafeArray::<usize>::new( &team, numrows,      Distribution::Block).into_atomic();         
+    
+    println!("pre rowptr");        
+    let rowptr      =   AtomicArray::<usize>::new( world, numrows + 1,  Distribution::Block); 
+    println!("pre rperminv");        
+    let rperminv    =   AtomicArray::<usize>::new( world, numrows,      Distribution::Block); 
+    println!("pre cperminv");        
+    let cperminv    =   AtomicArray::<usize>::new( world, numrows,      Distribution::Block);  
+    println!("pre nzind");    
+    let nzind       =   UnsafeArray::<usize>::new( world, nnz,          Distribution::Block);            
 
+    println!("before wait all");
+    world.wait_all();
+    println!("before barrier");    
+    world.barrier();
+    println!("after both");      
 
     // copy data from the bale matrix to the lamellar arrays
     // ----------------------------------------------------------
 
-    rowptr.store(0, 0);
-    for p in 0..numrows {
-        rowptr.store(p+1,matrix_bale.offset[p+1]);
-        rperminv.store(p, rperminv_bale.entry(p) );            
-        cperminv.store(p, cperminv_bale.entry(p) ); 
-    }
-    for p in 0..nnz {
-        nzind.store(p, matrix_bale.nonzero[p] );                    
-    }
+    // println!("settingup rperminv");
+    // rowptr.store(0, 0);
+    // for p in 0..numrows {
+    //     rowptr.block_on(    rowptr.store(p+1,matrix_bale.offset[p+1])   );
+    //     rperminv.block_on(  rperminv.store(p, rperminv_bale.entry(p) )  );            
+    //     cperminv.block_on(  cperminv.store(p, cperminv_bale.entry(p) )  ); 
+    // }
+    // for p in 0..numrows {
+    //     rowptr.block_on(rowptr.store(p+1,matrix_bale.offset[p+1]));
+    // }
+    // rowptr.wait_all();
+    // for p in 0..numrows {
+    //     rperminv.store(p, rperminv_bale.entry(p) );            
+    // }
+    // rperminv.wait_all();
+    // for p in 0..numrows {
+    //     cperminv.store(p, cperminv_bale.entry(p) ); 
+    // }    
+    // cperminv.wait_all();        
+
+
+    // world.barrier();
+    println!("settingup nzind: nnz={:?},  matrix_bale.nonzero.len()={:?}", nnz, matrix_bale.nonzero.len() );   
+    if my_pe == 0 {
+        for p in 0..nnz {
+            nzind.store(p, matrix_bale.nonzero[p] );                    
+        }
+        nzind.wait_all();        
+    } 
+    // world.barrier();    
+    println!("DONE settingup nzind");      
     rowptr.wait_all(); rperminv.wait_all(); cperminv.wait_all(); nzind.wait_all();
+    println!("DONE DONE settingup nzind");      
 
 
     // make the lamellar arrays read-only
@@ -653,7 +715,9 @@ pub fn test_permutation(
 
     let nzval = None;
 
+    println!("CREATING SPARSE MATRIX");    
     let matrix = SparseMat{ numrows, numcols, nnz, rowptr, nzind, nzval, };
+    println!("about to distributed_permute");      
     let (permuted, rperm_lamellar, decorated_ranges, distributed_run_times ) 
             = matrix.permute_like_serial_bale( &rperminv, &cperminv, &world );
 
@@ -727,8 +791,71 @@ pub fn test_permutation(
             lamellar_dist_colind:   distributed_run_times["colind"],                        
             numpes:                 world.num_pes(),
         }
+    // return RunTimes{
+    //         numrows, 
+    //         numcols,
+    //         nnz, 
+    //         bale_serial:            0., 
+    //         lamellar_serial:        0., 
+    //         lamellar_dist_total:    0.,
+    //         lamellar_dist_rows:     0.,
+    //         lamellar_dist_colind:   0.,                        
+    //         numpes:                 0,
+    //     }    
 
 }    
+
+
+
+
+pub fn bale_serial_agrees_with_lamellar_serial(
+    // matrix_vecvec:      & Vec< Vec< usize > >,
+    // rperminv:           & Vec< usize >,
+    // cperminv:           & Vec< usize >,
+    world:          & LamellarWorld,
+    matrix_bale:    & bale::SparseMat,
+    rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
+    cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
+    verbose:        bool,
+    ) 
+    -> RunTimes
+    {
+        
+    // ------------------------
+    // PARSE INPUT
+    // ------------------------ 
+
+    let rperminv            =   perm_bale_to_perm_vec( rperminv_bale );
+    let cperminv            =   perm_bale_to_perm_vec( cperminv_bale ); 
+    let numrows             =   rperminv.len();     
+    let numcols             =   cperminv.len();
+    let matrix_vecvec       =   matrix_bale_to_matrix_vecvec( matrix_bale );  // format a new matrix   
+    let nnz                 =   matrix_vecvec.iter().map(|x| x.len()).sum();     
+
+    let my_pe       =   world.my_pe();    
+    if my_pe == 0 {
+        println!("number of rows: {:?}",numrows);
+        println!("number of colinds: {:?}",nnz);  
+    }
+ 
+    let permuted_serial_bale           =   matrix_bale.permute(&rperminv_bale, &cperminv_bale);
+    let permuted_vecvec = serial::permute_vec_of_vec(
+                                                & matrix_vecvec, 
+                                                & rperminv, 
+                                                & cperminv,
+                                            );      
+
+    // -------------------------------------------------------------
+    // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
+    // -------------------------------------------------------------
+
+    assert_eq!( &matrix_vecvec,   &matrix_bale_to_matrix_vecvec(matrix_bale) );   
+    assert_eq!( &permuted_vecvec, &matrix_bale_to_matrix_vecvec(&permuted_serial_bale) );  
+}    
+
+
+
+
 
 
 /// Convert a vector-of-row-vectors sparse matrix to a bale sparse matrix.
@@ -827,7 +954,8 @@ pub mod tests {
         let mut cperminv_bale = bale::Perm::new(3); // this generates the length-3 identity permutation
     
         let verbose = false;
-        test_permutation(&matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );        
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        test_permutation(&world, &matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );        
        
     }    
 
@@ -853,6 +981,9 @@ pub mod tests {
         let simple                  =   false;
         let seed: i64                  =   rand::thread_rng().gen();
 
+        // create the world
+        let wolrd = LamellarWorldBuilder::new().build();
+
         for numrows in (5 .. 50).step_by(10) {
 
             // randomly generate a sparse matrix and permutation
@@ -865,7 +996,8 @@ pub mod tests {
 
             // test the lamellar implementation matrix permutation
             let verbose = false;
-            test_permutation(& matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );
+            bale_serial_agrees_with_lamellar_serial( & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );
+            test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );
        
         }    
     }
