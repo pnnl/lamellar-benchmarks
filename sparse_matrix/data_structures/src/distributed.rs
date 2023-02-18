@@ -4,16 +4,18 @@
 
 use lamellar::{LamellarWorld, IndexedDistributedIterator, LamellarArray, LamellarArrayIterators, SubArray, Dist, IndexedLocalIterator, LocalIterator, AccessOps, ActiveMessaging};
 use lamellar::array::{AtomicArray, UnsafeArray, Distribution, DistributedIterator, ReadOnlyArray, ReadOnlyOps };
+use lamellar::LamellarArrayMutIterators;
 use lamellar::LamellarArrayCompareReduce;
 use lamellar::LamellarWorldBuilder;  
 use lamellar::StridedArch; 
+use lamellar::OneSidedIterator;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{Ordering, AtomicBool};
 
 use crate::serial;
-use sparsemat as bale;
+use crate::bale::sparsemat as bale;
 
 use tabled::{Table, Tabled};
 
@@ -28,11 +30,11 @@ use tabled::{Table, Tabled};
 /// The matrix need not contain explicit values for the structural nonzero coefficients.
 #[derive(Debug, Clone)]
 pub struct SparseMat {
-    /// The total number of rows in the matrix
+    /// number of rows
     pub numrows: usize, 
-    /// The column indices of the structural nonzeros
+    /// number of columns
     pub numcols: usize, 
-    /// The number of structural nonzeros
+    /// number of structural nonzeros
     pub nnz: usize,     
     /// The row offsets into the arrays nonzeros and values, size is nrows+1,
     /// rowptr[nrows+1] is nnz
@@ -46,8 +48,8 @@ pub struct SparseMat {
 impl SparseMat {
     /// a new sparse matrix without values
     pub fn new(numrows: usize, numcols: usize, nnz: usize, world: LamellarWorld) -> SparseMat {
-        let rowptr  = UnsafeArray::<usize>::new(world.team(), numcols+1 , Distribution::Cyclic).into_read_only();
-        let nzind = UnsafeArray::<usize>::new(world.team(), nnz , Distribution::Cyclic).into_read_only();
+        let rowptr  = ReadOnlyArray::<usize>::new(world.team(), numcols+1 , Distribution::Block);
+        let nzind = ReadOnlyArray::<usize>::new(world.team(), nnz , Distribution::Block);
         SparseMat {
             numrows,
             numcols,
@@ -55,23 +57,6 @@ impl SparseMat {
             rowptr,
             nzind,
             nzval: None,
-        }
-    }
-
-    /// a new sparse matrix with values
-    pub fn new_with_values(numrows: usize, numcols: usize, nnz: usize, world: LamellarWorld) -> SparseMat {
-        let rowptr  = UnsafeArray::<usize>::new(world.team(), numcols+1 , Distribution::Cyclic).into_read_only();
-        let nzind = UnsafeArray::<usize>::new(world.team(), nnz , Distribution::Cyclic).into_read_only();
-
-        let value_inner             =   UnsafeArray::<f64>::new(world.team(), nnz , Distribution::Cyclic).into_read_only();
-        let nzval: Option<ReadOnlyArray<f64>> =   Some(value_inner);
-        SparseMat {
-            numrows,
-            numcols,
-            nnz,
-            rowptr,
-            nzind,
-            nzval,
         }
     }
 
@@ -96,10 +81,10 @@ impl SparseMat {
     /// The entries in each row of the permuted matrix are **not** sorted.
     /// (It seems that the original Bale serial implementation of matrix permutation
     /// does not always sort, either -- this is supported by some of the unit tests
-    /// in the `lamellar_spmat_distributed.rs` file).
+    /// in the `data_structures/src/distributed.rs` file).
     /// 
-    /// **NB** The suffix "_fax" indicates that this is as close as we can come to a
-    /// facsimile of the serial Rust code for matrix permutatino provided in Bale.
+    /// **NB** The suffix "_like_serial_bale" indicates that this is as close as we can come to a
+    /// facsimile of the serial Rust code for matrix permutation provided in Bale.
     /// Essentially, we run a serial for-loop over the rows of the permuted matrix,
     /// in order, using distributed arrays only to accelerate the transfer of each
     /// row.
@@ -114,48 +99,61 @@ impl SparseMat {
     /// - the permuted matrix
     /// - a Vec<usize> representing the row permutation (inverse to `rperminv`)
     /// - a Vec<(f64, usize, usize)> called "decorated ranges," used for debugging
-    pub fn permute_like_serial_bale(&self, rperminv: &ReadOnlyArray<usize>, cperminv: &ReadOnlyArray<usize>, world: & LamellarWorld ) 
+    pub fn permute_like_serial_bale(
+                &self, 
+                cperminv:       &   ReadOnlyArray<usize>, 
+                rperminv:       &   ReadOnlyArray<usize>, 
+                world:          &   LamellarWorld,
+                verbose_debug:      bool,
+            ) 
             ->  (
                     SparseMat, 
                     Vec<usize>, 
                     Vec<(f64, usize,usize)>,
                     HashMap< &str, f64 >,
                 ) 
-        {            
-        println!("VERY FIRST LINE OF permute_like_serial_bale");
+        {                  
+            
 
         // wait for all other processes to finish so we can get a clean read on time
+        // -----------------------------------------------------------------------------------------------------------------        
         let my_pe = world.my_pe();
         let timer_total = std::time::Instant::now();            
 
         
-        // we'll handle values in future versions of this code
+        // we'll handle matrix coefficients in future versions of this code
         // -----------------------------------------------------------------------------------------------------------------
         if let Some(_) = &self.nzval {
             todo!()
         }
 
+        // a hashmap to track a few run times
+        // -----------------------------------------------------------------------------------------------------------------        
+        let mut times                   =   HashMap::new(); 
 
-        // Preallocate the new sparse matrix + a distributed array representing the inverse of the row permutation
+
+        // Preallocate a new sparse matrix + a distributed array representing the inverse of the row permutation
         // -----------------------------------------------------------------------------------------------------------------        
         let numrows         =   self.numrows();
         let numcols         =   self.numcols();
         let nnz             =   self.nnz();
         let nzval           =   None;
-        let othr_rowptr     =   AtomicArray::<usize>::new( world.team(), numcols+1 , Distribution::Cyclic);        
-        let othr_nzind      =   AtomicArray::<usize>::new( world.team(), nnz ,       Distribution::Cyclic);
-        let rperm           =   AtomicArray::<usize>::new( world.team(), numrows ,   Distribution::Cyclic);   
-        
-        let mut times                   =   HashMap::new(); // a hashmap to track a few run times
+        let othr_rowptr     =   AtomicArray::<usize>::new( world.team(), numcols+1 , Distribution::Block);        
+        let othr_nzind      =   AtomicArray::<usize>::new( world.team(), nnz ,       Distribution::Block);
+        let rperm           =   AtomicArray::<usize>::new( world.team(), numrows ,   Distribution::Block);           
+        if verbose_debug {
+            println!("check matrices have equal size --- numrow {numrows} numcols {numcols} nnz {nnz}");                
+        }
 
         // Invert the row permutation
         // -----------------------------------------------------------------------------------------------------------------        
-        // This helps by allowing us to run a (serial) for-loop in ascending order of the new rows    
+        // This helps by allowing us to run a (serial) for-loop in ascending order of the rows in the *new* matrix
+        // (that is, for i = 0, 1, .., we update the ith row of the new matrix by pulling data from the rperm[i] row
+        // of the old matrix)
         
         // The following loop needs to modify the entries in rperm, but the array we modify
-        // will be comsumed by the closure.  So we clone rperm, and use the clone in the loop.
+        // will be comsumed by the closure.  So use a clone of rperm in the loop.
         // The clone will be consumed but the entries of rperm will be updated.
-        println!("made it to just before rperminv");
         let rperm_clone = rperm.clone(); 
         rperminv.dist_iter()
             .enumerate()
@@ -168,7 +166,6 @@ impl SparseMat {
         world.barrier();
         // all updates to rperm have finished, so we can make it read-only        
         let rperm = rperm.into_read_only(); 
-
 
 
         // Populate othr_rowptr and othr_nzind
@@ -197,10 +194,6 @@ impl SparseMat {
                 let read_range_start    =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold )); //.await;
                 let read_range_end      =   self_rowptr_clone.block_on(self_rowptr_clone.load(rindexold +1 )); //.await;
                 let read_range          =   read_range_start .. read_range_end;
-                println!("{:?}", self_nzind_clone.len() );
-                if read_range_end > self_nzind_clone.len() {
-                    println!("!!! read_range_end > self_nzind_clone.len()");
-                }
                 let subarrayold         =   self_nzind_clone.sub_array(read_range);
 
                 // define a clone that can be consumed
@@ -234,7 +227,8 @@ impl SparseMat {
             world.barrier(); 
             // update the row offset pattern of the new array  
             if my_pe == 0 {
-                othr_rowptr.block_on( othr_rowptr.store( rindexnew+1, nnzwritten ) );          
+                othr_rowptr.block_on( othr_rowptr.store( rindexnew+1, nnzwritten ) );  
+                if verbose_debug { println!( "nnzwritten = {:?}", nnzwritten ); }                
             }
             world.wait_all();
             world.barrier();              
@@ -255,12 +249,22 @@ impl SparseMat {
         // -----------------------------------------------------------------------------------------------------------------            
 
         let timer = std::time::Instant::now();        
-        let nzind = 
-                    vec_to_unsafe_array( 
-                            & world.block_on( cperminv.batch_load( othr_nzind.local_data() ) ), 
-                            world 
-                        )
-                        .into_read_only();
+
+        // relabel the contiguous batch of indices stored locally on this pe
+        let remapped_indices = world.block_on( cperminv.batch_load( othr_nzind.local_data() ) );
+        world.barrier();
+
+        // encode the destinations where we will write the remapped indices as a vector
+        let first_global_index = othr_nzind.first_global_index_for_pe( my_pe ).unwrap() ;
+        let last_global_index  = first_global_index + remapped_indices.len();           
+        let insert_range: Vec<usize> = ( first_global_index .. last_global_index ).collect();
+
+        // write the remapped indices to their destinations
+        othr_nzind.batch_store( insert_range, remapped_indices );
+        world.barrier();
+        
+        let nzind = othr_nzind.into_read_only();
+
         times.insert( "colind", timer.elapsed().as_secs_f64() );                          
     
         // Return 
@@ -269,12 +273,13 @@ impl SparseMat {
         times.insert("total",  timer_total.elapsed().as_secs_f64() );                          
         return  (   
                     SparseMat { numrows, numcols, nnz, rowptr, nzind, nzval }, 
-                    read_only_array_to_vec(&rperm ),
+                    read_only_array_to_vec(&rperm, &world ),
                     decorated_ranges,
                     times,
                 )
                 
     }    
+
 
     /// Construct a SparseMat from a vector of vectors.
     pub fn from_vec_of_rowvec( vecvec: Vec< Vec< usize > >, numrows: usize, numcols: usize, world: LamellarWorld ) -> Self {
@@ -294,8 +299,8 @@ impl SparseMat {
         }
 
         // format as a sparse matrix
-        let rowptr = vec_to_unsafe_array( & rowptr_vec, & world ).into_read_only();
-        let nzind  = vec_to_unsafe_array( & nzind_vec,  & world ).into_read_only();
+        let rowptr = vec_to_atomic_array( & rowptr_vec, & world ).into_read_only();
+        let nzind  = vec_to_atomic_array( & nzind_vec,  & world ).into_read_only();
         let nzval = None;
 
         return SparseMat{ numrows, numcols, nnz, nzind, nzval, rowptr }
@@ -303,7 +308,7 @@ impl SparseMat {
     }
         
     /// Generate a Vector-of-Vectors representation of SparseMat.
-    pub fn to_vec_of_rowvec( &self ) -> Vec< Vec< usize > > {
+    pub fn to_vec_of_rowvec( &self, world: &LamellarWorld ) -> Vec< Vec< usize > > {
         
         // println!("nzind: {:?}", self.nzind.local_data().to_vec() );    
         // println!("rowptr: {:?}", self.rowptr.local_data().to_vec() );            
@@ -319,13 +324,15 @@ impl SparseMat {
             ind_alpha = self.rowptr.block_on( self.rowptr.load(p) );
             ind_omega = self.rowptr.block_on( self.rowptr.load(p+1) );
 
+            // println!("{p} (in `to_vec_of_rowvec`) self.nzind = ");
+            // self.nzind.print();
             // println!("{:?}", "add new vec: start");
             // println!("alpha, omega, nnz = {:?}, {:?}, {:?}", ind_alpha, ind_omega, self.nzind.len() );        
             let a = self.nzind.sub_array(ind_alpha .. ind_omega);
             // let x = a.local_data(); raises an error when a is emtpy
-            newrow = read_only_array_to_vec( &a );
+            newrow = read_only_array_to_vec( &a, world );
             vecvec.push( newrow );
-            // println!("{:?}", "add new vec: end");            
+            // println!("{p} -- {:?}", "add new vec: end");            
         }
         
         return vecvec
@@ -354,7 +361,7 @@ impl SparseMat {
 
     //     let numrows     =   self.numrows;
 
-    //     let rowptr  = UnsafeArray::<usize>::new(world.team(), self.numcols+1 , Distribution::Cyclic).into_atomic();        
+    //     let rowptr  = UnsafeArray::<usize>::new(world.team(), self.numcols+1 , Distribution::Block).into_atomic();        
 
     //     // update the new rowptr array
     //     // for each i in  0..numrows
@@ -401,30 +408,48 @@ impl SparseMat {
 
 
 /// Convert Vec to UnsafeArray.
-pub fn vec_to_unsafe_array<T:Dist + Clone>( vec: &Vec<T>, world: & LamellarWorld ) -> UnsafeArray<T> {
-    let array = UnsafeArray::<T>::new( world.team(), vec.len() , Distribution::Cyclic); 
-    let vec_clone = vec.clone(); // not ideal to copy the data, i just haven't had time to figure out a fix
-    unsafe {
-        array
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(
-                    move |x|
-                    { *x.1 = vec_clone[ x.0 ].clone(); }
-                );        
-    }        
-    world.wait_all();
-    return array
+pub fn vec_to_atomic_array<T:Dist + Clone + Default>( vec: &Vec<T>, world: & LamellarWorld ) -> AtomicArray<T> {
+    let array = AtomicArray::<T>::new( world.team(), vec.len() , Distribution::Block); 
+    if world.my_pe() == 0 { //we only need to do the init from pe 0 not all the pes...        
+        let indices = (0..vec.len()).collect::<Vec<_>>();
+        array.batch_store(indices,vec.clone());   //I think...             
+        world.wait_all();
+    }
+    world.barrier();  
+    return array   
+    // DEPRECATED ALTERNATIVE (UNTESTED): 
+    // let array = AtomicArray::<T>::new( world.team(), vec.len() , Distribution::Block); 
+    // let vec_clone = vec.clone(); // not ideal to copy the data, i just haven't had time to figure out a fix
+    // unsafe {
+    //     array
+    //         .dist_iter_mut()
+    //         .enumerate()
+    //         .for_each(
+    //                 move |x|
+    //                 { *x.1 = vec_clone[ x.0 ].clone(); }
+    //             );        
+    // }        
+    // world.wait_all();
+    // return array    
 }
 
 /// Convert ReadOnlyArray to Vec.
-pub fn read_only_array_to_vec<T:Dist+Clone+std::fmt::Debug>( array: &ReadOnlyArray<T> ) -> Vec<T> {
-    
-    if array.len() == 0 { return Vec::with_capacity(0) }
-    else {
-        // println!("num_entries = {:?}", array.len() );
-        return array.local_data().to_vec(); 
-    }
+pub fn read_only_array_to_vec<T:Dist+Clone+std::fmt::Debug>( array: &ReadOnlyArray<T>, world: & LamellarWorld ) -> Vec<T> {
+    array.onesided_iter() //iterate over entire array from a single PE
+         .into_iter() // convert into rust iterator
+         .cloned()
+         .collect::<Vec<_>>()  
+    // DEPRECATED ALTERNATIVE (UNTESTED)  
+    // if array.len() == 0 { return Vec::with_capacity(0) }
+    // else {
+    //     // println!("num_entries = {:?}", array.len() );
+    //     if world.my_pe() == 0 {
+    //         let vec = array.local_data().to_vec(); 
+    //         world.wait_all();
+    //     }
+    //     world.barrier();
+    //     return array.local_data().to_vec(); 
+    // }         
 }
 
 
@@ -539,6 +564,23 @@ pub fn print_read_only_array<T: Dist + std::fmt::Debug>(
 //  HELPER FUNCTIONS FOR UNIT TESTING
 //  ---------------------------------------------------------------- 
 
+/// Returns a string of form "EK X.YZ"
+///
+/// NB: Tried providing an argument for number of significant digits,
+///     but there are a few hurdles:
+///     - Rust's `.round()` only rounds to integer values
+///     - Tried the trick of multiplying by a power of 10, rounding to 
+///       the nearest integer, then scaling back, but sometimes this
+///       creates trailing entries far beyond the intended decimal point
+pub fn sci_notation(x: f64 ) -> String {
+    if x == 0.0 { return String::from("0.00") }
+    let log = x.log10().floor() as i32;
+    let mut val = x * 10.0_f64.powi(-log);    
+    // val = val * 10.0_f64.powi(n_decimals);
+    // val = val.round();
+    // val = val * 10.0_f64.powi(-n_decimals);
+    format!("E{} {:.2}", log, val)
+}
 
 /// A struct used as a plug-in for the `tabled` crate, which prints tables;
 /// Specifically, each instance of this struct will become a row in a table.
@@ -548,11 +590,11 @@ pub struct RunTimes {
     pub numrows:                usize,
     pub numcols:                usize,
     pub nnz:                    usize,
-    pub bale_serial:            f64,
-    pub lamellar_serial:        f64,
-    pub lamellar_dist_total:    f64,
-    pub lamellar_dist_rows:     f64,
-    pub lamellar_dist_colind:   f64,
+    pub bale_serial:            String,
+    pub lamellar_serial:        String,
+    pub lamellar_dist_total:    String,
+    pub lamellar_dist_rows:     String,
+    pub lamellar_dist_colind:   String,
 }   
 
 /// Compare the results of matrix permutation via three methods (Bale serial, vec-of-vec serial, and Lamellar distributed)
@@ -572,6 +614,7 @@ pub fn test_permutation(
     rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
     cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
     verbose:        bool,
+    verbose_debug:  bool,
     ) 
     -> RunTimes
     {
@@ -592,18 +635,8 @@ pub fn test_permutation(
     if my_pe == 0 {
         println!("number of rows: {:?}",numrows);
         println!("number of colinds: {:?}",nnz);  
-    }
- 
-
-    // ------------------------
-    // CREATE A TEAM
-    // ------------------------     
- 
-    // let team    =    world.create_team_from_arch(StridedArch::new(
-    //                                             0,                                    // start pe
-    //                                             1,                                      // stride
-    //                                             world.num_pes()                   //num_pes in team
-    //                                         )).expect("PE in world team");    
+    } 
+    
 
     // // ------------------------
     // // SERIAL COMPUTATIONS 
@@ -642,84 +675,34 @@ pub fn test_permutation(
     // DISTRIBUTED COMPUTATIONS
     // ------------------------
 
-    println!("initiating distributed computations");
-
+    if verbose { println!("initiating distributed computations"); }
+    
     // initialize
     // ----------
     
-    
-    println!("pre rowptr");        
-    let rowptr      =   AtomicArray::<usize>::new( world, numrows + 1,  Distribution::Block); 
-    println!("pre rperminv");        
-    let rperminv    =   AtomicArray::<usize>::new( world, numrows,      Distribution::Block); 
-    println!("pre cperminv");        
-    let cperminv    =   AtomicArray::<usize>::new( world, numrows,      Distribution::Block);  
-    println!("pre nzind");    
-    let nzind       =   UnsafeArray::<usize>::new( world, nnz,          Distribution::Block);            
+    let rowptr          =   vec_to_atomic_array( & matrix_bale.offset,      world ).into_read_only();
+    let rperminv        =   vec_to_atomic_array( rperminv_bale.perm_ref(),  world ).into_read_only();
+    let cperminv        =   vec_to_atomic_array( cperminv_bale.perm_ref(),  world ).into_read_only();
+    let nzind           =   vec_to_atomic_array( & matrix_bale.nonzero,     world ).into_read_only();    
+    if verbose { 
+        println!("lamellar nzind =");
+        nzind.print();
+    }
 
-    println!("before wait all");
-    world.wait_all();
-    println!("before barrier");    
-    world.barrier();
-    println!("after both");      
-
-    // copy data from the bale matrix to the lamellar arrays
-    // ----------------------------------------------------------
-
-    // println!("settingup rperminv");
-    // rowptr.store(0, 0);
-    // for p in 0..numrows {
-    //     rowptr.block_on(    rowptr.store(p+1,matrix_bale.offset[p+1])   );
-    //     rperminv.block_on(  rperminv.store(p, rperminv_bale.entry(p) )  );            
-    //     cperminv.block_on(  cperminv.store(p, cperminv_bale.entry(p) )  ); 
-    // }
-    // for p in 0..numrows {
-    //     rowptr.block_on(rowptr.store(p+1,matrix_bale.offset[p+1]));
-    // }
-    // rowptr.wait_all();
-    // for p in 0..numrows {
-    //     rperminv.store(p, rperminv_bale.entry(p) );            
-    // }
-    // rperminv.wait_all();
-    // for p in 0..numrows {
-    //     cperminv.store(p, cperminv_bale.entry(p) ); 
-    // }    
-    // cperminv.wait_all();        
-
-
-    // world.barrier();
-    println!("settingup nzind: nnz={:?},  matrix_bale.nonzero.len()={:?}", nnz, matrix_bale.nonzero.len() );   
-    if my_pe == 0 {
-        for p in 0..nnz {
-            nzind.store(p, matrix_bale.nonzero[p] );                    
-        }
-        nzind.wait_all();        
-    } 
-    // world.barrier();    
-    println!("DONE settingup nzind");      
     rowptr.wait_all(); rperminv.wait_all(); cperminv.wait_all(); nzind.wait_all();
-    println!("DONE DONE settingup nzind");      
-
-
-    // make the lamellar arrays read-only
-    // ----------------------------------
-
-    let rowptr      =   rowptr.into_read_only();
-    let nzind       =   nzind.into_read_only();
-    let rperminv    =   rperminv.into_read_only();
-    let cperminv    =   cperminv.into_read_only();
-
+    world.barrier();        
 
     // permute
     // -------
 
     let nzval = None;
+    let verbose_debug = false;
 
-    println!("CREATING SPARSE MATRIX");    
+    if verbose_debug{ println!("CREATING SPARSE MATRIX"); }   
     let matrix = SparseMat{ numrows, numcols, nnz, rowptr, nzind, nzval, };
-    println!("about to distributed_permute");      
+    if verbose_debug{ println!("about to distributed_permute"); }      
     let (permuted, rperm_lamellar, decorated_ranges, distributed_run_times ) 
-            = matrix.permute_like_serial_bale( &rperminv, &cperminv, &world );
+            = matrix.permute_like_serial_bale( &rperminv, &cperminv, &world, verbose_debug );
 
     world.barrier(); // wait for processes to finish    
 
@@ -732,76 +715,70 @@ pub fn test_permutation(
     // ------------------------
 
 
-    if verbose {
-        println!("");
-        println!("PERMUTATIONS");        
-        println!("rperm lamellar {:?}", & rperm_lamellar );        
-        println!("rperm vector   {:?}", & rperminv_bale.inverse().perm() );  
+    // if verbose && my_pe == 0 {
+    //     println!("");
+    //     println!("PERMUTATIONS");        
+    //     println!("rperm lamellar {:?}", & rperm_lamellar );        
+    //     println!("rperm vector   {:?}", & rperminv_bale.inverse().perm() );  
 
-        println!("");
-        println!("INVERSE PERMUTATIONS");
-        println!("row bale:  {:?}", perm_bale_to_perm_vec( rperminv_bale ) );
-        println!("row array: {:?}", read_only_array_to_vec(&rperminv) );        
-        println!("col bale:  {:?}", perm_bale_to_perm_vec( cperminv_bale ) );        
-        println!("col array: {:?}", read_only_array_to_vec(&cperminv) );  
+    //     println!("");
+    //     println!("INVERSE PERMUTATIONS");
+    //     println!("row bale:  {:?}", perm_bale_to_perm_vec( rperminv_bale ) );
+    //     println!("row array: {:?}", read_only_array_to_vec(&rperminv, &world) );        
+    //     println!("col bale:  {:?}", perm_bale_to_perm_vec( cperminv_bale ) );        
+    //     println!("col array: {:?}", read_only_array_to_vec(&cperminv, &world) );  
 
-        println!("");
-        println!("ORIGINAL MATRICES");
-        println!("vecvec from matrix          {:?}", matrix.to_vec_of_rowvec() );
-        println!("vecvec from matrix_vecvec:  {:?}", &matrix_vecvec);
-        println!("vecvec from matrix_bale:    {:?}", matrix_bale_to_matrix_vecvec(matrix_bale));
+    //     println!("");
+    //     println!("ORIGINAL MATRICES");
+    //     println!("vecvec from matrix          {:?}", matrix.to_vec_of_rowvec( &world ) );
+    //     println!("vecvec from matrix_vecvec:  {:?}", &matrix_vecvec);
+    //     println!("vecvec from matrix_bale:    {:?}", matrix_bale_to_matrix_vecvec(matrix_bale));
 
-        println!("");
-        println!("PERMUTED MATRICES");
-        println!("vecvec from permuted         {:?}", permuted.to_vec_of_rowvec() );
-        println!("vecvec from permuted_vecvec: {:?}", &permuted_vecvec);
-        println!("vecvec from permuted_serial_bale:   {:?}", matrix_bale_to_matrix_vecvec( &permuted_serial_bale));
+    //     println!("");
+    //     println!("PERMUTED MATRICES");        
+    //     println!("vecvec from permuted         {:?}", permuted.to_vec_of_rowvec( &world ) );
+    //     println!("vecvec from permuted_vecvec: {:?}", &permuted_vecvec);
+    //     println!("vecvec from permuted_serial_bale:   {:?}", matrix_bale_to_matrix_vecvec( &permuted_serial_bale));
 
-        println!("");
-        println!("COMPONENTS - PERMUTED");
-        println!("rowptr {:?}", read_only_array_to_vec( &permuted.rowptr) );
-        println!("nzind {:?}", read_only_array_to_vec( &permuted.nzind) );        
+    //     println!("");
+    //     println!("COMPONENTS - PERMUTED");
+    //     println!("rowptr {:?}", read_only_array_to_vec( &permuted.rowptr, &world) );
+    //     println!("nzind {:?}", read_only_array_to_vec( &permuted.nzind, &world ) );        
 
-        println!("");
-        println!("COMPONENTS - ORIGINAL");
-        println!("rowptr {:?}", read_only_array_to_vec( &matrix.rowptr) );
-        println!("decorated_ranges {:?}", decorated_ranges );       
-        println!("rperm lamellar {:?}", &rperm_lamellar ); 
-    }
+    //     println!("");
+    //     println!("COMPONENTS - ORIGINAL");
+    //     println!("rowptr {:?}", read_only_array_to_vec( &matrix.rowptr, &world ) );
+    //     println!("decorated_ranges {:?}", decorated_ranges );       
+    //     println!("rperm lamellar {:?}", &rperm_lamellar ); 
+    // }
     
 
     // -------------------------------------------------------------
     // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
     // -------------------------------------------------------------
 
+    if verbose_debug {
+        println!("checking whether .to_vec_of_rowvec is the root of our problem");
+        let _ = matrix.to_vec_of_rowvec( &world );
+        println!("if this prints, then .to_vec_of_rowvec probably isn't the root");    
+    }
 
-    assert_eq!( &matrix_vecvec,   &matrix.to_vec_of_rowvec() );
+    assert_eq!( &matrix_vecvec,   &matrix.to_vec_of_rowvec( &world ) );
     assert_eq!( &matrix_vecvec,   &matrix_bale_to_matrix_vecvec(matrix_bale) );   
-    assert_eq!( &permuted_vecvec, &permuted.to_vec_of_rowvec() );
+    assert_eq!( &permuted_vecvec, &permuted.to_vec_of_rowvec( &world ) );
     assert_eq!( &permuted_vecvec, &matrix_bale_to_matrix_vecvec(&permuted_serial_bale) );  
     
     return RunTimes{
             numrows, 
             numcols,
             nnz, 
-            bale_serial:            time_bale_serial, 
-            lamellar_serial:        time_lamellar_serial, 
-            lamellar_dist_total:    distributed_run_times["total"],
-            lamellar_dist_rows:     distributed_run_times["rows"],
-            lamellar_dist_colind:   distributed_run_times["colind"],                        
+            bale_serial:            sci_notation( time_bale_serial                ),// , 3_i32   ), 
+            lamellar_serial:        sci_notation( time_lamellar_serial            ),// , 3_i32   ),
+            lamellar_dist_total:    sci_notation( distributed_run_times["total"]  ),// , 3_i32   ),
+            lamellar_dist_rows:     sci_notation( distributed_run_times["rows"]   ),// , 3_i32   ),
+            lamellar_dist_colind:   sci_notation( distributed_run_times["colind"] ),// , 3_i32   ),                        
             numpes:                 world.num_pes(),
         }
-    // return RunTimes{
-    //         numrows, 
-    //         numcols,
-    //         nnz, 
-    //         bale_serial:            0., 
-    //         lamellar_serial:        0., 
-    //         lamellar_dist_total:    0.,
-    //         lamellar_dist_rows:     0.,
-    //         lamellar_dist_colind:   0.,                        
-    //         numpes:                 0,
-    //     }    
 
 }    
 
@@ -809,16 +786,12 @@ pub fn test_permutation(
 
 
 pub fn bale_serial_agrees_with_lamellar_serial(
-    // matrix_vecvec:      & Vec< Vec< usize > >,
-    // rperminv:           & Vec< usize >,
-    // cperminv:           & Vec< usize >,
     world:          & LamellarWorld,
     matrix_bale:    & bale::SparseMat,
     rperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
     cperminv_bale:  & bale::Perm, // we have to borrow as mutable because otherwise there's no way to access the inner data
     verbose:        bool,
     ) 
-    -> RunTimes
     {
         
     // ------------------------
@@ -830,10 +803,10 @@ pub fn bale_serial_agrees_with_lamellar_serial(
     let numrows             =   rperminv.len();     
     let numcols             =   cperminv.len();
     let matrix_vecvec       =   matrix_bale_to_matrix_vecvec( matrix_bale );  // format a new matrix   
-    let nnz                 =   matrix_vecvec.iter().map(|x| x.len()).sum();     
+    let nnz: usize          =   matrix_vecvec.iter().map(|x| x.len()).sum();     
 
     let my_pe       =   world.my_pe();    
-    if my_pe == 0 {
+    if my_pe == 0 && verbose {
         println!("number of rows: {:?}",numrows);
         println!("number of colinds: {:?}",nnz);  
     }
@@ -892,6 +865,7 @@ pub fn perm_bale_to_perm_vec( perm_bale: & bale::Perm ) -> Vec<usize> {
         perm.push( perm_bale.entry(p) )
     }
     return perm
+    // DEPRECATED ALTERNATIVE (UNTESTED)
     // let perm_vec = Vec::with_capacity( perm_bale.len() );
     // let inner_data = perm_bale.perm();
     // for p in 0 .. inner_data.len() {
@@ -924,7 +898,7 @@ pub fn perm_bale_to_perm_vec( perm_bale: & bale::Perm ) -> Vec<usize> {
 pub mod tests {
 
     use crate::serial;
-    use sparsemat as bale;
+    use crate::bale::sparsemat as bale;
     use lamellar::LamellarWorldBuilder;    
 
     use super::*;
@@ -954,8 +928,9 @@ pub mod tests {
         let mut cperminv_bale = bale::Perm::new(3); // this generates the length-3 identity permutation
     
         let verbose = false;
+        let verbose_debug = false;
         let world = lamellar::LamellarWorldBuilder::new().build();
-        test_permutation(&world, &matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );        
+        test_permutation(&world, &matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug );        
        
     }    
 
@@ -973,7 +948,7 @@ pub mod tests {
     #[test]
     fn permute_erdos_renyi() {
 
-        use sparsemat as bale;
+        use crate::bale::sparsemat as bale;
         use rand::Rng;
 
         // parameters to generate the matrix
@@ -996,8 +971,9 @@ pub mod tests {
 
             // test the lamellar implementation matrix permutation
             let verbose = false;
+            let verbose_debug = false;
             bale_serial_agrees_with_lamellar_serial( & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );
-            test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose );
+            _ = test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug );
        
         }    
     }
@@ -1022,8 +998,8 @@ pub mod tests {
         let world           =       lamellar::LamellarWorldBuilder::new().build();
         let _mat = SparseMat::new(numrows, numcols, nnz, world);
 
-        let world           =       lamellar::LamellarWorldBuilder::new().build();
-        let _mat = SparseMat::new_with_values(numrows, numcols, nnz, world);        
+        // let world           =       lamellar::LamellarWorldBuilder::new().build();
+        // let _mat = SparseMat::new_with_values(numrows, numcols, nnz, world);        
     }    
 
 }
