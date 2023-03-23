@@ -1,5 +1,12 @@
-# guidance
+# before running
 
+`. lamellar-prep.rc` (to configure)
+
+# to run an example on lamellar-runtim
+
+cargo run --example <examplefiletorun>
+
+# guidance
 
 - always make sure LAMELLAR_THREADS is less than or equal to cpus-per-task
 

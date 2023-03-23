@@ -49,6 +49,21 @@ pub fn permute_vec_of_vec(
     return permuted
 }
 
+/// Transpose a vec-of-vec sparse matrix; the transpose will be sorted in ascending order if the input is sorted in ascending order.
+pub fn transpose_vec_of_vec(
+                vecvec:     & Vec<Vec<usize>>, 
+                numcols:    usize,
+            ) -> Vec<Vec<usize>>
+{
+    let mut transpose   =   vec![ vec![]; numcols];
+    for (rownum, rowvec) in vecvec.iter().enumerate() {
+        for colnum in rowvec.iter().cloned() {
+            transpose[colnum].push(rownum)
+        }
+    }
+    return transpose
+}
+
 /// Generate a vec-of-vec matrix (without explicit coefficients) of size
 /// `numrows x numcols` such that each entry is structurally nonzero with
 /// probability `probability`.

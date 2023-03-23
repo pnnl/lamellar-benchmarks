@@ -278,6 +278,14 @@ impl SparseMat {
             .map(|(a, b)| b - a)
     }
 
+    /// Returns a vector `v` such that `v[j]` is the number of nonzero entries
+    /// in column `j`
+    pub fn colcounts( &self ) -> Vec< usize > {
+        let mut counts = vec![ 0; self.numcols()  ];
+        for col in self.nonzero.iter() { counts[*col] += 1 }
+        return counts
+    }
+
     /// dumps a sparse matrix to a file in a ASCII format
     /// # Arguments
     /// * maxrows the number of rows that are written, 0 means everything,

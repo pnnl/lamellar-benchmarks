@@ -6,4 +6,5 @@ pub mod distributed;
 pub mod serial;
 pub mod load;
 pub mod bale;
+pub mod binary_search;
 
