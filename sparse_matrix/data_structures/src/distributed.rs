@@ -89,6 +89,22 @@ impl SparseMat {
         return dense
     }
 
+    /// UNTESTED
+    /// Return a vector `v` such that `v[i]` is the number of structural nonzero entries in row `i`.
+    // pub fn nnz_per_row(&self, world: &LamellarWorld) -> Vec<usize> {
+    //     let numrows = self.numrows();
+    //     let mut rowcount = vec![0; numrows ];
+    //     let rowptr  =   self.rowptr.clone();
+    //     self.rowptr.dist_iter().enumerate().for_each(
+    //             | (rownum,limit_left) |
+    //             if rownum < numrows {
+    //                 let limit_right = rowptr.block_on( rowptr.load( rownum+1 ) );
+    //                 rowcount[ rownum ] = limit_right - limit_left;
+    //             }
+    //         );
+    //     return rowcount
+    // }
+
     /// Print self as a dense matrix.
     pub fn print(&self, world: &LamellarWorld ) {
         let vecvec  =   self.to_vec_of_rowvec( world );
@@ -325,19 +341,7 @@ impl SparseMat {
         // wait for all other processes to finish so we can get a clean read on time
         // -----------------------------------------------------------------------------------------------------------------        
         let my_pe = world.my_pe();
-        let timer_total = std::time::Instant::now();            
-
-        
-        // we'll handle matrix coefficients in future versions of this code
-        // -----------------------------------------------------------------------------------------------------------------
-        if let Some(_) = &self.nzval {
-            todo!()
-        }
-
-        // a hashmap to track a few run times
-        // -----------------------------------------------------------------------------------------------------------------        
-        // let mut times                   =   HashMap::new(); 
-
+        let timer_total = std::time::Instant::now();                    
 
         // Preallocate a new sparse matrix 
         // -----------------------------------------------------------------------------------------------------------------        
@@ -354,31 +358,14 @@ impl SparseMat {
         
         // Precompute the sparsity pattern of the transpose
         // ------------------------------------------------
-        let rowptr_clone    =   rowptr.clone(); // create a clone that can be consumed, but will allow us to modify entries in the (uncomsumed) array
 
-        // let mut rowptr_vec  =   vec![0; numcols+1 ];
-        // self.nzind.dist_iter()
-        //     .for_each( 
-        //                 |colind|
-        //                 { rowptr_vec.add( colind+1, 1 ); }
-        //     );      
-        // we can almost do this with an index gather, but not quite, because we need to offset things by 1  
+        let rowptr_clone    =   rowptr.clone(); // create a clone that can be consumed, but will allow us to modify entries in the (uncomsumed) array 
         self.nzind.dist_iter()
             .for_each( 
                         move |col|
                         if *col < numcols-1 { rowptr_clone.add( col+2, 1 ); }
-            );
-        //wait for all updates to finish            
-        world.wait_all(); 
-        world.barrier();
-
-        if verbose {
-            println!("column counts (each entry shifted 2 steps to the right):");
-            rowptr.print();        
-        }
-
-        
-
+            );         
+        world.wait_all(); world.barrier();     
         if my_pe == 0 {
             for (index,entry) in rowptr.onesided_iter().into_iter().enumerate() {
                 if index < self.numrows {
@@ -386,23 +373,7 @@ impl SparseMat {
                 }                
             }
         }
-        // rowptr.onesided_iter() //iterate over entire array from a single PE
-        //     .enumerate()
-        //     .for_each(
-        //         |(index,entry)|
-        //         if index < self.numrows - 1 {
-        //             rowptr.add( index+1, entry );
-        //         }
-        //     );
-        world.wait_all(); 
-        world.barrier();  
-        
-        if verbose{
-            println!("preformatted rowptr:");
-            rowptr.print();
-                   
-            println!("add note to header of atomic array file");
-        }
+        world.wait_all(); world.barrier();  
 
         // Write to the matrix
         let rowptr_clone = rowptr.clone();
@@ -418,9 +389,7 @@ impl SparseMat {
                     nzind_clone.block_on( nzind_clone.store( linindex_new, row ) );
                 }
             );
-        world.wait_all(); 
-        world.barrier();                
-            
+        world.wait_all(); world.barrier();                            
 
         // Wrap results into a sparse matrix, and return
         // ---------------------------------------------
@@ -428,6 +397,198 @@ impl SparseMat {
         let rowptr          =   rowptr.into_read_only();        
         return SparseMat { numrows, numcols, nnz, rowptr, nzind, nzval }
     }
+
+
+
+
+
+
+
+
+
+
+fn toposort( &self, world: &LamellarWorld, verbose: bool ) 
+    -> ( Vec<usize>, Vec<usize>, ) 
+    {
+    
+
+    let numrows = self.numrows();
+
+    //  Make a local copy of rowptr
+    let self_rowptr_local    =   read_only_array_to_vec( &self.rowptr, world );
+
+    //  Compute the column counts
+    let mut nnz_per_col = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);    
+    nnz_per_col.batch_add( self.nzind.local_data(), 1 );     
+    world.wait_all(); 
+    world.barrier();   
+
+    //  Compute the row counts
+    let nnz_per_row = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
+    let nnz_per_row_cone = nnz_per_row.clone();
+    let rowptr_clone  =   self.rowptr.clone();
+    self.rowptr.dist_iter().enumerate().for_each(
+            move | (rownum,limit_left) |
+            if rownum < numrows {
+                let limit_right = rowptr_clone.block_on( rowptr_clone.load( rownum+1 ) );
+                nnz_per_row_cone.store( rownum, limit_right - limit_left );
+            }
+        );
+    world.wait_all();
+    world.barrier();
+
+    //  Compute the sum of the nonzero column indices, per row
+    let column_index_sum_per_row = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
+    let column_index_sum_per_row_clone = column_index_sum_per_row.clone();
+    self.nzind
+        .clone()
+        .dist_iter()
+        .enumerate()
+        .for_each(
+            move |(linindex_old, col)|  // the linear index of the entry, and the col to which it belongs
+            {
+                let row             =   find_window( & self_rowptr_local, linindex_old ).unwrap();       // the row to which the entry belongs
+                column_index_sum_per_row_clone.block_on( 
+                        column_index_sum_per_row_clone.add( row, *col ) 
+                    );
+            }
+        );
+    world.wait_all(); 
+    world.barrier();           
+
+ 
+    //  Generate a transposed matrix
+    let transposed  =   self.transpose( world, verbose );
+
+    //  Start the loop
+    let addflag             =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);        
+    let rperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
+    let cperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);    
+    let numpairs_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block);
+    let numclear_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block);    
+    let nnz_per_row_clone   =   nnz_per_row.clone() ;
+    let addflag_clone       =   addflag.clone();
+    let numpairs_arr_clone  =   numpairs_arr.clone();
+    world.wait_all(); 
+    world.barrier();       
+
+
+
+    loop {
+        let numpairs        =   numpairs_arr.block_on( numpairs_arr.load(0) );
+        let numclear        =   numclear_arr.block_on( numclear_arr.load(0) );
+        
+        if numpairs == numrows { break }
+        
+        let rperm_clone   = rperm.clone();
+        let cperm_clone   = cperm.clone();        
+        let column_index_sum_per_row_clone  =   column_index_sum_per_row.clone();
+        let numpairs_arr_clone              =   numpairs_arr_clone.clone();
+        let transposed_rowptr_clone         =   transposed.rowptr.clone();
+        let transposed_nzind_clone          =   transposed.nzind.clone();
+        let nnz_per_row_clone               =   nnz_per_row_clone.clone();
+        let addflag_clone                   =   addflag_clone.clone();
+        let column_index_sum_per_row_clone  =   column_index_sum_per_row_clone.clone();
+
+        world.wait_all(); 
+        world.barrier();   
+
+        println!("nnz_per_row = ");
+        nnz_per_row_clone.print();   
+        println!("numpairs_arr_clone:");
+        numpairs_arr_clone.print();             
+        
+        // clear the flags
+        let addflag_clone2  = addflag_clone.clone();
+        addflag_clone2
+            .dist_iter_mut()
+            .for_each(move |elem| elem.store(0));
+        world.wait_all(); 
+        world.barrier();                            
+        println!("done clearing flags");          
+
+        // set the flags
+        let addflag_clone2  = addflag_clone.clone();
+        let numpairs_arr_clone2 = numpairs_arr_clone.clone();
+        nnz_per_row_clone
+            .dist_iter()
+            .enumerate()
+            .for_each(
+                move |(index_row, nnz)|
+                {                    
+                    // println!("nnz = {:?}, index_row = {:?}", &nnz, index_row);
+                    if nnz.load() == 1 { 
+                        // println!("made it past the if gate");
+                        // println!("{:?}  ", index_row); 
+                        // println!("{:?} ", addflag_clone2.len());
+                        // println!("{:?} ", addflag_clone2.len());                        
+                        // addflag_clone2.block_on( addflag_clone2.store( 0, 1 ) ); 
+                        // println!("tested insertion at 0");
+                        addflag_clone2.block_on( addflag_clone2.store( index_row, 1 ) ); 
+                        // println!("made it past the first store");
+                        // numpairs_arr_clone2.block_on( numpairs_arr_clone2.add(0,1) );
+                    }
+                }
+            );
+        world.wait_all(); 
+        world.barrier();   
+        println!("done setting flags; numpairs_arr = ");                 
+        numpairs_arr_clone.print();
+        println!("addflag = ");
+        addflag_clone.print();
+
+        // process the flagged rows
+        addflag_clone
+            .dist_iter()
+            .enumerate()
+            .for_each(
+                move |(index_row, flag)|
+                {
+                    if flag.load() == 1 {
+                        let index_col   =   column_index_sum_per_row_clone.block_on( column_index_sum_per_row_clone.load(index_row) );
+                        let index_write =   numpairs_arr_clone.block_on( numpairs_arr_clone.fetch_add( 0, 1 ) );
+                        println!("index_write = {:?}, row = {:?}, col = {:?}", &index_write, &index_row, &index_col );
+
+                        rperm_clone.store( index_write,  index_row );
+                        cperm_clone.store( index_write,  index_col );   
+                        
+                        println!("done writing");
+
+
+                        // get a view of the transposed matrix
+                        let read_range_start    =   transposed_rowptr_clone.block_on(transposed_rowptr_clone.load( index_col    )); //.await;
+                        let read_range_end      =   transposed_rowptr_clone.block_on(transposed_rowptr_clone.load( index_col +1 )); //.await;
+                        let read_range          =   read_range_start .. read_range_end;
+                        let subarray            =   transposed_nzind_clone.sub_array(read_range);
+
+                        println!("done with subarray");                        
+
+                        // update nnz per row and column_index_sum_per_row                        
+                        let nnz_per_row_clone2              =   nnz_per_row_clone.clone();
+                        let column_index_sum_per_row_clone2 =   column_index_sum_per_row_clone.clone();                                
+                        subarray
+                            .dist_iter()
+                            .for_each(
+                                move | index_row_secondary |
+                                {
+                                    nnz_per_row_clone2.block_on(  nnz_per_row_clone2.sub( *index_row_secondary, 1) );
+                                    column_index_sum_per_row_clone2.block_on( column_index_sum_per_row_clone2.sub( *index_row_secondary, index_col ) ) ;
+                                }
+                            );
+                    }
+                }
+            );
+        world.wait_all();
+        world.barrier();
+    }
+
+    let rperm   =   rperm.into_read_only();
+    let cperm   =   cperm.into_read_only();
+    
+    let rperm   =   read_only_array_to_vec( &rperm, world );
+    let cperm   =   read_only_array_to_vec( &cperm, world );        
+    return (rperm, cperm)    
+}    
 
 
 
@@ -962,14 +1123,7 @@ pub fn test_permutation(
 
 
 
-/// Compare the results of matrix permutation via three methods (Bale serial, vec-of-vec serial, and Lamellar distributed)
-/// 
-/// - We ignore structural nonzero coefficients (only focus on sparcity pattern)
-/// - For each matrix, we compute its permutation 3 different ways
-///   - The original Bale implementation
-///   - A simple vec-of-vec implementation
-///   - The distributed Lamellar implementation
-/// - Matrices must have at least one nonzero coefficient, else Lamellar throws an error (we could correct for this with case handling; shoudl we?)
+
 pub fn test_transpose(
     // matrix_vecvec:      & Vec< Vec< usize > >,
     // rperminv:           & Vec< usize >,
@@ -1054,54 +1208,6 @@ pub fn test_transpose(
     world.barrier(); // wait for processes to finish  
     
 
-
-    // if my_pe == 0 {
-    //     println!("lamellar distributed time: {:?}", distributed_run_times["total"]);
-    // };
-
-    // ------------------------
-    // PRINT DIAGONSTICS (IF DESIRED)
-    // ------------------------
-
-
-    // if verbose && my_pe == 0 {
-    //     println!("");
-    //     println!("PERMUTATIONS");        
-    //     println!("rperm lamellar {:?}", & rperm_lamellar );        
-    //     println!("rperm vector   {:?}", & rperminv_bale.inverse().perm() );  
-
-    //     println!("");
-    //     println!("INVERSE PERMUTATIONS");
-    //     println!("row bale:  {:?}", perm_bale_to_perm_vec( rperminv_bale ) );
-    //     println!("row array: {:?}", read_only_array_to_vec(&rperminv, &world) );        
-    //     println!("col bale:  {:?}", perm_bale_to_perm_vec( cperminv_bale ) );        
-    //     println!("col array: {:?}", read_only_array_to_vec(&cperminv, &world) );  
-
-    //     println!("");
-    //     println!("ORIGINAL MATRICES");
-    //     println!("vecvec from matrix          {:?}", matrix.to_vec_of_rowvec( &world ) );
-    //     println!("vecvec from matrix_vecvec:  {:?}", &matrix_vecvec);
-    //     println!("vecvec from matrix_bale:    {:?}", matrix_bale_to_matrix_vecvec(matrix_bale));
-
-    //     println!("");
-    //     println!("PERMUTED MATRICES");        
-    //     println!("vecvec from permuted         {:?}", permuted.to_vec_of_rowvec( &world ) );
-    //     println!("vecvec from permuted_vecvec: {:?}", &permuted_vecvec);
-    //     println!("vecvec from permuted_serial_bale:   {:?}", matrix_bale_to_matrix_vecvec( &permuted_serial_bale));
-
-    //     println!("");
-    //     println!("COMPONENTS - PERMUTED");
-    //     println!("rowptr {:?}", read_only_array_to_vec( &permuted.rowptr, &world) );
-    //     println!("nzind {:?}", read_only_array_to_vec( &permuted.nzind, &world ) );        
-
-    //     println!("");
-    //     println!("COMPONENTS - ORIGINAL");
-    //     println!("rowptr {:?}", read_only_array_to_vec( &matrix.rowptr, &world ) );
-    //     println!("decorated_ranges {:?}", decorated_ranges );       
-    //     println!("rperm lamellar {:?}", &rperm_lamellar ); 
-    // }
-    
-
     // -------------------------------------------------------------
     // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
     // -------------------------------------------------------------
@@ -1117,8 +1223,6 @@ pub fn test_transpose(
         transposed_lamellar.print( &world );
     }
 
-
-
     let mut transposed_lamellar_vecvec  =   transposed_lamellar.to_vec_of_rowvec( &world );
     for vec in transposed_lamellar_vecvec.iter_mut() { vec.sort() }
 
@@ -1127,11 +1231,6 @@ pub fn test_transpose(
     }
 
     assert_eq!( &transposed_vecvec, & transposed_lamellar_vecvec );
-
-    // assert_eq!( &matrix_vecvec,   &matrix.to_vec_of_rowvec( &world ) );
-    // assert_eq!( &matrix_vecvec,   &matrix_bale_to_matrix_vecvec(matrix_bale) );   
-    // assert_eq!( &transposed_vecvec, &permuted.to_vec_of_rowvec( &world ) );
-    // assert_eq!( &transposed_vecvec, &matrix_bale_to_matrix_vecvec(&permuted_serial_bale) );  
     
     return RunTimeMatrixTranspose{
             numrows, 
@@ -1142,6 +1241,149 @@ pub fn test_transpose(
             numpes:                 world.num_pes(),
         }
 } 
+
+
+
+
+
+pub fn test_toposort(
+    world:          & LamellarWorld,
+    matrix_bale:    & bale::SparseMat,
+    verbose:        bool,
+    verbose_debug:  bool,
+    ) 
+    {
+
+        
+    // ------------------------
+    // PARSE INPUT
+    // ------------------------ 
+
+    let matrix_vecvec       =   matrix_bale_to_matrix_vecvec( matrix_bale );  // format a new matrix   
+    let numrows             =   matrix_bale.numrows();
+    let numcols             =   matrix_bale.numcols();   
+    let nnz                 =   matrix_bale.nnz();     
+
+    // let my_pe       =   world.my_pe();    
+    // if my_pe == 0 {
+    //     println!("number of rows: {:?}",    numrows);
+    //     println!("number of colinds: {:?}", nnz);  
+    // } 
+
+    // // ------------------------
+    // // SERIAL COMPUTATIONS 
+    // // ------------------------      
+
+    // // transpose the vecofvec
+    // // --------------------
+
+
+    // let timer = std::time::Instant::now();  // start timer    
+    // let transposed_vecvec = serial::transpose_vec_of_vec(
+    //                                             & matrix_vecvec, 
+    //                                             matrix_bale.numcols, 
+    //                                         );  
+    // let time_lamellar_serial            =  timer.elapsed().as_secs_f64(); 
+    // if my_pe == 0 {    
+    //     println!("lamellar serial time: {:?}", time_lamellar_serial );
+    // }
+                                         
+
+    // ------------------------
+    // DISTRIBUTED COMPUTATIONS
+    // ------------------------
+    
+    // initialize
+    // ----------
+    
+    let rowptr          =   vec_to_atomic_array( & matrix_bale.offset,      world ).into_read_only();
+    let nzind           =   vec_to_atomic_array( & matrix_bale.nonzero,     world ).into_read_only();    
+    if verbose { println!("initiating distributed computations"); }    
+    if verbose { println!("lamellar nzind ="); nzind.print(); }
+
+    rowptr.wait_all(); 
+    nzind.wait_all();
+    world.barrier();        
+
+
+    // permute
+    // -------
+
+
+    if verbose_debug{ println!("creating sparse matrix"); }   
+    let matrix = SparseMat{ numrows, numcols, nnz, rowptr, nzind, nzval: None, };
+    
+    if verbose{ println!("matrix:"); matrix.print(&world); println!("about to distributed_transpose"); }    
+    
+
+    let timer = std::time::Instant::now();  // start timer       
+    // let transposed_lamellar 
+    //         = matrix.transpose( &world, verbose );
+    let (rperm,cperm) = matrix.toposort( &world, verbose );
+    let time_lamellar_parallel            =  timer.elapsed().as_secs_f64();             
+
+    world.barrier(); // wait for processes to finish  
+    
+
+    // -------------------------------------------------------------
+    // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
+    // -------------------------------------------------------------
+
+ 
+
+    let rperm: Vec<usize> = rperm.iter().cloned().rev().collect();
+    let cperm: Vec<usize> = cperm.iter().cloned().rev().collect();    
+
+    let rperm = crate::serial::invert_perumtation(&rperm);
+    let cperm = crate::serial::invert_perumtation(&cperm);        
+
+    let permuted_vecvec = crate::serial::permute_vec_of_vec(
+        & matrix_vecvec, 
+        & rperm, 
+        & cperm,
+    );  
+
+    crate::serial::print_vecvec( & permuted_vecvec, matrix.numrows() );
+    
+    
+    for (rownum, rowvec) in permuted_vecvec.iter().enumerate() {
+        if rowvec[0] != rownum { panic!("diagonal entries must be nonzero"); }
+        for entry in rowvec.iter().cloned() {
+            if entry < rownum { panic!("all structural nonzero entries must lie right of the diagonal"); }
+        }
+    }
+
+    // if verbose_debug {
+    //     println!("checking whether .to_vec_of_rowvec is the root of our problem");
+    //     let _ = matrix.to_vec_of_rowvec( &world );
+    //     println!("if this prints, then .to_vec_of_rowvec probably isn't the root");    
+    //     println!("the transposed matrix row pattern:");
+    //     transposed_lamellar.rowptr.print();
+    //     println!("the transposed matrix nzind:");        
+    //     transposed_lamellar.nzind.print();        
+    //     transposed_lamellar.print( &world );
+    // }
+
+    // let mut transposed_lamellar_vecvec  =   transposed_lamellar.to_vec_of_rowvec( &world );
+    // for vec in transposed_lamellar_vecvec.iter_mut() { vec.sort() }
+
+    // if verbose_debug {
+    //     println!("writing the transposed matrix to vec-of-vec format isn't the problem");
+    // }
+
+    // assert_eq!( &transposed_vecvec, & transposed_lamellar_vecvec );
+    
+    // return RunTimeMatrixTranspose{
+    //         numrows, 
+    //         numcols,
+    //         nnz, 
+    //         lamellar_serial:        sci_notation( time_lamellar_serial      ),// , 3_i32   ),
+    //         lamellar_distributed:   sci_notation( time_lamellar_parallel    ),// , 3_i32   ),
+    //         numpes:                 world.num_pes(),
+    //     }
+} 
+
+
 
 
 

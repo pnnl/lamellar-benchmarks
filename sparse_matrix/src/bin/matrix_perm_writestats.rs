@@ -4,14 +4,23 @@
 use data_structures::*;
 use data_structures::distributed::*;
 use data_structures::bale::sparsemat as bale;
+use std::env;
+use std::fs::File;
 use tabled::{Table, Tabled};
+
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 
 use lamellar::{LamellarWorld, LamellarWorldBuilder};  
 use lamellar::ActiveMessaging;
 
 
 
+
 fn main() {
+
+    let args: Vec<String>   =   env::args().collect();
+    let file_path_to_save   =   & args[1];
     
 
     //  SMALL EXAMPLE
@@ -36,7 +45,7 @@ fn main() {
     use rand::Rng;
  
     // parameters to generate the matrix
-    let edge_probability        =   0.05;
+    let edge_probability        =   0.5;
     let simple                  =   false; // refers to the type of random matrix we generate
     let mut seed: u64;           //=   rand::thread_rng().gen();   <-- could try replacing with this to get randomly generated random seed ... but don't think we want that
     let mut times               =   Vec::new(); // each entry in this vec will store the run times for one execution of matrix perm
@@ -46,36 +55,49 @@ fn main() {
     let my_pe = world.my_pe();
 
     // run the tests
-    for numrows in (100 .. 1001).step_by(100) {
-
-        seed = numrows as u64;
-        // randomly generate a sparse matrix and permutation
-        let mut rperminv_bale                =   bale::Perm::random( numrows, seed );
-        let mut cperminv_bale                =   bale::Perm::random( numrows, seed );             
-        let mut matrix_bale = bale::SparseMat::erdos_renyi_graph(numrows, edge_probability, simple, seed); 
-        while   matrix_bale.nonzero.len() == 0 
-                || 
-                matrix_bale.rowcounts().min().unwrap()==0
-        { // re-generate the matrix until it has at least one structural nonzero
-            seed += 1;
-            matrix_bale = bale::SparseMat::erdos_renyi_graph(numrows, edge_probability, simple, seed); 
-        }       
-        // println!("BALE MATRIX = {:?}", matrix_bale );
-
-        // test the lamellar implementation of matrix perm
-        let verbose = false;
-        let verbose_debug = false;
-        let measurements = test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug, );
-        
-        times.push(measurements);
-        world.wait_all();
-        world.barrier();
+    for numrows in 200 .. 201 {
+        for _ in 0..4 {
+            seed = numrows as u64;
+            // randomly generate a sparse matrix and permutation
+            let mut rperminv_bale                =   bale::Perm::random( numrows, seed );
+            let mut cperminv_bale                =   bale::Perm::random( numrows, seed );             
+            let mut matrix_bale = bale::SparseMat::erdos_renyi_graph(numrows, edge_probability, simple, seed); 
+            while   matrix_bale.nonzero.len() == 0 
+                    || 
+                    matrix_bale.rowcounts().min().unwrap()==0
+            { // re-generate the matrix until it has at least one structural nonzero
+                seed += 1;
+                matrix_bale = bale::SparseMat::erdos_renyi_graph(numrows, edge_probability, simple, seed); 
+            }       
+            // println!("BALE MATRIX = {:?}", matrix_bale );
+    
+            // test the lamellar implementation of matrix perm
+            let verbose = false;
+            let verbose_debug = false;
+            let measurements = test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug, );
+            
+            times.push(measurements);
+            world.wait_all();
+            world.barrier();
+        }
     }    
 
     if my_pe == 0 {
         let table = Table::new(times.clone()).to_string();
         println!("{}",table.to_string());
         println!("Matrix permutation benchmarks complete.");
+
+        // let out = File::create(file_path_to_save);
+        // table.to_csv(out);       
+    // let mut file = OpenOptions::new()
+    //     .write(true)
+    //     .append(true)
+    //     .open(file_path_to_save)
+    //     .unwrap();
+
+    // if let Err(e) = writeln!(file, "{}", table) {
+    //     eprintln!("Couldn't write to file: {}", e);
+    // }         
     }
 
 }     

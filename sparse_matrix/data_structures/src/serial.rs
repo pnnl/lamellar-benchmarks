@@ -2,6 +2,14 @@
 
 
 
+pub fn print_vecvec( vecvec: & Vec<Vec<usize>>, numcols: usize ) {
+    let mut row =   vec![0; numcols ];
+    for (rownum, rowvec) in vecvec.iter().enumerate() { 
+        for k in 0..numcols { row[k] = 0 };
+        for colnum in rowvec.iter() { row[*colnum] = 1 } 
+        println!("row {:03}: {:?}", rownum, & row);
+    }   
+}
 
 
 /// Apply row and column permutations to a sparse matrix (without explicit structural nonzero values)
@@ -87,7 +95,7 @@ pub fn erdos_renyi( numrows: usize, numcols: usize, probability: f64 ) -> Vec<Ve
 }
 
 /// Generate the inverse of a permutation represented by a vector.
-pub fn invert_perumtation( perm: Vec<usize> ) -> Vec<usize> {
+pub fn invert_perumtation( perm: & Vec<usize> ) -> Vec<usize> {
     let mut inverse: Vec< usize > = (0 .. perm.len()).collect();
     for (indexold, indexnew) in perm.iter().cloned().enumerate() {
         inverse[indexnew] = indexold;

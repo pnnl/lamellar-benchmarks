@@ -13,7 +13,8 @@ This project contains two directories of note
 - run `. lamellar-prep.rc`
 - cd into `lamellar_benchmarks/sparse_matrix`
 - `cargo build --release`
-- `RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=1 -A lamellar --mpi=pmi2 --exclusive ./target/release/matrix_perm`
+- in the following command, ensure that cpus per task * tasks per node ≥ num threads
+- `RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=120 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=1 -A lamellar --mpi=pmi2 --exclusive ./target/release/matrix_perm`
 
 ### Relevant files are
 
