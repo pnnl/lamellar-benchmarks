@@ -8,8 +8,9 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.3.0"
 rand = "0.6"
-lamellar = { git = "https://github.com/pnnl/lamellar-runtime", branch = "dev",  features = ["enable-rofi"] }
+lamellar = { git = "https://github.com/pnnl/lamellar-runtime", tag = "april_2023",  features = ["enable-rofi"] }
 parking_lot = { version = "0.12" }
+futures = "0.3"
 
 [profile.release]
 opt-level=3
@@ -29,3 +30,11 @@ path="src/index_gather_read_only_array.rs"
 [[bin]]
 name="index_gather_buffered_am"
 path="src/index_gather_buffered_am.rs"
+
+[[bin]]
+name="index_gather_am"
+path="src/index_gather_am.rs"
+
+[[bin]]
+name="index_gather_am_group"
+path="src/index_gather_am_group.rs"

@@ -67,13 +67,20 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
 
-    let counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    );
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    );
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
     // initialize arrays
-    let counts_init = unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         let mut rng = rng.lock();
@@ -101,7 +108,7 @@ fn main() {
         1,
         0.0,
     );
-    world.block_on(unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)});
+    world.block_on(unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) });
     counts.barrier();
 
     let counts = counts.into_local_lock();

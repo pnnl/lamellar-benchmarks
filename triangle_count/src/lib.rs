@@ -193,7 +193,7 @@ struct RelabelAm {
 #[lamellar::local_am]
 impl LamellarAM for RelabelAm {
     async fn exec() {
-        let relabled = unsafe {self.relabeled.as_slice().unwrap()};
+        let relabled = unsafe { self.relabeled.as_slice().unwrap() };
         for nodes in &self.nodes {
             let old_nodes = &nodes.0;
             let new_nodes = unsafe { nodes.1.as_mut_slice().unwrap() };
@@ -440,12 +440,13 @@ impl Graph {
         println!("reorder  time: {:?}", start.elapsed().as_secs_f64());
 
         let task_group = LamellarTaskGroup::new(world.team());
-        let mut pe_neigh_lists: HashMap<usize, Vec<(u32, OneSidedMemoryRegion<u32>)>> = HashMap::new();
+        let mut pe_neigh_lists: HashMap<usize, Vec<(u32, OneSidedMemoryRegion<u32>)>> =
+            HashMap::new();
         for pe in 0..world.num_pes() {
             pe_neigh_lists.insert(pe, vec![]);
         }
         for old_node in 0..neigh_list.len() {
-            let new_node = unsafe{relabeled.as_slice().unwrap()[old_node] as usize};
+            let new_node = unsafe { relabeled.as_slice().unwrap()[old_node] as usize };
             let pe = new_node % world.num_pes();
             pe_neigh_lists
                 .get_mut(&pe)
@@ -453,9 +454,9 @@ impl Graph {
                 .push((new_node as u32, neigh_list[old_node].clone()));
         }
 
-        // let num_batches = 10;
+        let num_batches = std::cmp::min(10, neigh_list.len());
         for (pe, neigh_lists) in pe_neigh_lists.iter_mut() {
-            let batch_size = neigh_lists.len() / 10;
+            let batch_size = neigh_lists.len() / num_batches;
 
             while neigh_lists.len() > batch_size {
                 task_group.exec_am_pe(

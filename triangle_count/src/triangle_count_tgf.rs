@@ -13,36 +13,7 @@ struct CntAm {
 #[lamellar::am]
 impl LamellarAM for CntAm {
     async fn exec() {
-        println!("here 1");
         self.final_cnt.fetch_add(self.cnt, Ordering::Relaxed);
-    }
-}
-
-#[lamellar::AmLocalData]
-struct LaunchAm {
-    graph: Graph,
-    start: u32,
-    end: u32,
-    final_cnt: Darc<AtomicUsize>,
-}
-
-#[lamellar::local_am]
-impl LamellarAM for LaunchAm {
-    async fn exec() {
-        let task_group = LamellarTaskGroup::new(lamellar::world.clone());
-        let graph_data = self.graph.data();
-        for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
-            task_group.exec_am_all(TcAm {
-                graph: graph_data.clone(),
-                node: node_0,
-                neighbors: graph_data
-                    .neighbors_iter(&node_0)
-                    .take_while(|n| n < &&node_0)
-                    .map(|n| *n)
-                    .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
-                final_cnt: self.final_cnt.clone(),
-            });
-        }
     }
 }
 
@@ -101,6 +72,7 @@ impl LamellarAM for TcAm {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
+
     let iterations = if args.len() > 2 {
         match &args[2].parse::<usize>() {
             Ok(x) => *x,
@@ -109,20 +81,12 @@ fn main() {
     } else {
         1
     };
-    let launch_threads = if args.len() > 3 {
-        match &args[3].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
-    graph.dump_to_bin(&format!("{file}.bin"));
+    // graph.dump_to_bin(&format!("{file}.bin"));
     let final_cnt = Darc::new(&world, AtomicUsize::new(0)).unwrap(); // initialize our local counter (which is accessible to all PEs)
 
     if my_pe == 0 {
@@ -132,31 +96,30 @@ fn main() {
     for _i in 0..iterations {
         final_cnt.store(0, Ordering::SeqCst);
         world.barrier();
-
         let timer = std::time::Instant::now();
 
-        // this section of code creates and executes a number of "LaunchAMs" so that we
-        // can use multiple threads to initiate the triangle counting active message.
-        let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
-        let mut reqs = vec![];
-        for tid in 0..launch_threads {
-            let start = (tid as f32 * batch_size).round() as u32;
-            let end = ((tid + 1) as f32 * batch_size).round() as u32;
-            reqs.push(world.exec_am_local(LaunchAm {
-                graph: graph.clone(),
-                start: start,
-                end: end,
+        // let mut task_group = AmGroup::new(world.clone());
+        let mut task_group = typed_am_group!(TcAm, world.clone());
+        let graph_data = graph.data();
+        for node_0 in (0..graph.num_nodes())
+            .map(|n| n as u32)
+            .filter(|n| graph.node_is_local(n))
+        {
+            task_group.add_am_all(TcAm {
+                graph: graph_data.clone(),
+                node: node_0,
+                neighbors: graph_data
+                    .neighbors_iter(&node_0)
+                    .take_while(|n| n < &&node_0)
+                    .map(|n| *n)
+                    .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
                 final_cnt: final_cnt.clone(),
-            }));
+            });
         }
 
         //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
         // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
-        world.block_on(async move {
-            for req in reqs {
-                req.await;
-            }
-        });
+        world.block_on(task_group.exec());
         if my_pe == 0 {
             println!("issue time: {:?}", timer.elapsed().as_secs_f64())
         };

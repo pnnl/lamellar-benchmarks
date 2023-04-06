@@ -31,7 +31,7 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
             lamellar::world.exec_am_pe(
@@ -143,9 +143,7 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        unsafe{counts.as_slice().unwrap().iter().sum::<usize>()}
-    );
+    println!("pe {:?} sum {:?}", my_pe, unsafe {
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    });
 }

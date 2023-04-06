@@ -1,4 +1,5 @@
 use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
@@ -9,76 +10,47 @@ const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on 
                                          //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
-struct IndexGatherBufferedAM {
-    buff: std::vec::Vec<usize>,
-    counts: SharedMemoryRegion<usize>,
+struct IndexGatherAM {
+    offset: usize,
+    counts: Darc<Vec<usize>>,
 }
 
 #[lamellar::am]
-impl LamellarAM for IndexGatherBufferedAM {
-    async fn exec(self) -> Vec<usize> {
-        let counts_slice = unsafe { self.counts.as_slice().unwrap() };
-        self.buff
-            .iter()
-            .map(|i| counts_slice[*i])
-            .collect::<Vec<usize>>()
+impl LamellarAM for IndexGatherAM {
+    async fn exec(self) -> usize {
+        self.counts[self.offset]
     }
 }
 
 #[lamellar::AmLocalData(Clone, Debug)]
 struct LaunchAm {
     rand_index: OneSidedMemoryRegion<usize>,
-    counts: SharedMemoryRegion<usize>,
-    buffer_amt: usize,
+    counts: Darc<Vec<usize>>,
 }
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        let num_pes = lamellar::num_pes;
-        let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
-            vec![Vec::with_capacity(self.buffer_amt); num_pes];
-        let task_group = LamellarTaskGroup::new(lamellar::team.clone());
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
-            let rank = idx % num_pes;
-            let offset = idx / num_pes;
-
-            buffs[rank].push(offset);
-            if buffs[rank].len() >= self.buffer_amt {
-                let buff = buffs[rank].clone();
-                task_group.exec_am_pe(
-                    rank,
-                    IndexGatherBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
-                buffs[rank].clear();
-            }
-        }
-        //send any remaining buffered updates
-        for rank in 0..num_pes {
-            let buff = buffs[rank].clone();
-            if buff.len() > 0 {
-                task_group.exec_am_pe(
-                    rank,
-                    IndexGatherBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
-            }
+            let rank = idx % lamellar::num_pes;
+            let offset = idx / lamellar::num_pes;
+            lamellar::world.exec_am_pe(
+                rank,
+                IndexGatherAM {
+                    offset: offset,
+                    counts: self.counts.clone(),
+                },
+            );
         }
     }
 }
 
-fn histo(
+fn index_gather(
     l_num_updates: usize,
     num_threads: usize,
     world: &LamellarWorld,
     rand_index: &OneSidedMemoryRegion<usize>,
-    counts: &SharedMemoryRegion<usize>,
-    buffer_amt: usize,
+    counts: &Darc<Vec<usize>>,
 ) -> Vec<impl Future<Output = ()>> {
     let slice_size = l_num_updates as f32 / num_threads as f32;
     let mut launch_tasks = vec![];
@@ -88,7 +60,6 @@ fn histo(
         launch_tasks.push(world.exec_am_local(LaunchAm {
             rand_index: rand_index.sub_region(start..end),
             counts: counts.clone(),
-            buffer_amt: buffer_amt,
         }));
     }
     launch_tasks
@@ -102,19 +73,21 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
 
-    let buffer_amt = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
     let num_threads = args
         .get(3)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
+    let iterations = args
+        .get(4)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
             Ok(n) => n.parse::<usize>().unwrap(),
@@ -126,37 +99,22 @@ fn main() {
         println!("updates per pe {}", l_num_updates);
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+
+    let  counts_data = vec![0; COUNTS_LOCAL_LEN];
+    let counts = Darc::new(&world, counts_data).expect("unable to create darc");
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     unsafe {
-        for elem in counts.as_mut_slice().unwrap().iter_mut() {
-            *elem = 0;
-        }
         for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
             *elem = rng.gen_range(0, global_count);
         }
     }
-
     for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
-        let launch_tasks = histo(
-            l_num_updates,
-            num_threads,
-            &world,
-            &rand_index,
-            &counts,
-            buffer_amt,
-        );
+        let launch_tasks = index_gather(l_num_updates, num_threads, &world, &rand_index, &counts);
 
         if my_pe == 0 {
             println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);

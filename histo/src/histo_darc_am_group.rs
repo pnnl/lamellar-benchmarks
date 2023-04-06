@@ -32,10 +32,11 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
+        let mut tg = typed_am_group!(HistoAM, lamellar::world.clone());
         for idx in &self.rand_index {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            tg.add_am_pe(
                 rank,
                 HistoAM {
                     offset: offset,
@@ -43,6 +44,7 @@ impl LamellarAM for LaunchAm {
                 },
             );
         }
+        tg.exec().await;
     }
 }
 
@@ -86,7 +88,6 @@ fn main() {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 1,
         });
-
     let iterations = args
         .get(4)
         .and_then(|s| s.parse::<usize>().ok())
@@ -112,7 +113,7 @@ fn main() {
     //     Err(_) => 1,
     // };
     // let num_threads = std::cmp::max(num_threads / 2, 1);
-    for _i in 0..iterations {
+    for i in 0..iterations {
         world.barrier();
         let now = Instant::now();
         let launch_tasks = histo(
@@ -170,6 +171,7 @@ fn main() {
                 .map(|e| e.load(Ordering::Relaxed))
                 .sum::<usize>()
         );
+
         for elem in counts.iter() {
             elem.store(0, Ordering::SeqCst);
         }

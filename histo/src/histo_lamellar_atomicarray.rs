@@ -26,6 +26,13 @@ fn main() {
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
+    let iterations = args
+        .get(4)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     if my_pe == 0 {
         println!("updates total {}", l_num_updates * num_pes);
@@ -33,13 +40,20 @@ fn main() {
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
 
-    let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let unsafe_counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    );
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    );
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
     // initialize arrays
-    let counts_init = unsafe {unsafe_counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { unsafe_counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         let mut rng = rng.lock();
@@ -51,41 +65,44 @@ fn main() {
     let counts = unsafe_counts.into_atomic();
     //counts.wait_all(); equivalent in this case to the above statement
     let rand_index = rand_index.into_read_only();
-    world.barrier();
+    for _i in 0..iterations {
+        world.block_on(counts.dist_iter_mut().for_each(|x| x.store(0)));
+        world.barrier();
 
-    let now = Instant::now();
-    histo(&counts, &rand_index);
-    if my_pe == 0 {
-        println!("{:?} issue time {:?} ", my_pe, now.elapsed());
-    }
-    counts.wait_all();
-    if my_pe == 0 {
-        println!(
-            "local run time {:?} local mups: {:?}",
-            now.elapsed(),
-            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
-        );
-    }
-    counts.barrier();
-    let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        println!(
-            "global time {:?} MB {:?} MB/s: {:?} ",
-            global_time,
-            (world.MB_sent()),
-            (world.MB_sent()) / global_time,
-        );
-        println!(
-            "MUPS: {:?}",
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
-        );
-        println!("Secs: {:?}", global_time,);
+        let now = Instant::now();
+        histo(&counts, &rand_index);
+        if my_pe == 0 {
+            println!("{:?} issue time {:?} ", my_pe, now.elapsed());
+        }
+        counts.wait_all();
+        if my_pe == 0 {
+            println!(
+                "local run time {:?} local mups: {:?}",
+                now.elapsed(),
+                (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
+            );
+        }
+        counts.barrier();
+        let global_time = now.elapsed().as_secs_f64();
+        if my_pe == 0 {
+            println!(
+                "global time {:?} MB {:?} MB/s: {:?} ",
+                global_time,
+                (world.MB_sent()),
+                (world.MB_sent()) / global_time,
+            );
+            println!(
+                "MUPS: {:?}",
+                ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
+            );
+            println!("Secs: {:?}", global_time,);
 
-        println!(
-            "GB/s Injection rate: {:?}",
-            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
-        );
-        println!("(({l_num_updates}*{num_pes})/1_000_000) ");
+            println!(
+                "GB/s Injection rate: {:?}",
+                (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
+            );
+            println!("(({l_num_updates}*{num_pes})/1_000_000) ");
+        }
     }
     // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
 }

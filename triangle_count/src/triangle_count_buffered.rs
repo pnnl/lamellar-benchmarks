@@ -100,8 +100,17 @@ impl LamellarAM for BufferedTcAm {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
-    let launch_threads = if args.len() > 2 {
+
+    let iterations = if args.len() > 2 {
         match &args[2].parse::<usize>() {
+            Ok(x) => *x,
+            Err(_) => 1,
+        }
+    } else {
+        1
+    };
+    let launch_threads = if args.len() > 3 {
+        match &args[3].parse::<usize>() {
             Ok(x) => *x,
             Err(_) => 2,
         }
@@ -123,54 +132,57 @@ fn main() {
     // can use multiple threads to initiate the triangle counting active message.
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
 
-    for buf_size in [10, 100, 1000, 10000, 100000, 1000000].iter() {
-        // for buf_size in [100000].iter() {
-        if my_pe == 0 {
-            println!("using buf_size: {:?}", buf_size);
-        }
-        world.barrier();
-        let timer = std::time::Instant::now();
-        let mut reqs = vec![];
-        for tid in 0..launch_threads {
-            let start = (tid as f32 * batch_size).round() as u32;
-            let end = ((tid + 1) as f32 * batch_size).round() as u32;
-            reqs.push(world.exec_am_local(LaunchAm {
-                graph: graph.clone(),
-                start: start,
-                end: end,
-                final_cnt: final_cnt.clone(),
-                buf_size: *buf_size,
-            }));
-        }
-
-        //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
-        // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
-        world.block_on(async move {
-            for req in reqs {
-                req.await;
+    for _i in 0..iterations {
+        for buf_size in [10, 100, 1000, 10000, 100000, 1000000].iter() {
+            // for buf_size in [100000].iter() {
+            if my_pe == 0 {
+                println!("using buf_size: {:?}", buf_size);
             }
-        });
-        if my_pe == 0 {
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64())
-        };
-        // at this point all the triangle counting active messages have been initiated.
+            world.barrier();
+            let timer = std::time::Instant::now();
+            let mut reqs = vec![];
+            for tid in 0..launch_threads {
+                let start = (tid as f32 * batch_size).round() as u32;
+                let end = ((tid + 1) as f32 * batch_size).round() as u32;
+                reqs.push(world.exec_am_local(LaunchAm {
+                    graph: graph.clone(),
+                    start: start,
+                    end: end,
+                    final_cnt: final_cnt.clone(),
+                    buf_size: *buf_size,
+                }));
+            }
 
-        world.wait_all(); //wait for all the triangle counting active messages to finish locally
-        if my_pe == 0 {
-            println!("local time: {:?}", timer.elapsed().as_secs_f64())
-        };
+            //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
+            // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
+            world.block_on(async move {
+                for req in reqs {
+                    req.await;
+                }
+            });
+            if my_pe == 0 {
+                println!("issue time: {:?}", timer.elapsed().as_secs_f64())
+            };
+            // at this point all the triangle counting active messages have been initiated.
 
-        world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
+            world.wait_all(); //wait for all the triangle counting active messages to finish locally
+            if my_pe == 0 {
+                println!("local time: {:?}", timer.elapsed().as_secs_f64())
+            };
 
-        let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
-        if my_pe == 0 {
-            println!(
-                "triangles counted: {:?}\nglobal time: {:?}",
-                final_cnt_sum,
-                timer.elapsed().as_secs_f64()
-            );
-            println!();
+            world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
+
+            let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
+            if my_pe == 0 {
+                println!(
+                    "triangles counted: {:?}\nglobal time: {:?} buf_size: {:?}",
+                    final_cnt_sum,
+                    timer.elapsed().as_secs_f64(),
+                    buf_size
+                );
+                println!();
+            }
+            world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0))); //reset the final count array
         }
-        world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0))); //reset the final count array
     }
 }
