@@ -100,7 +100,7 @@ fn main() {
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
 
-    let  counts_data = vec![0; COUNTS_LOCAL_LEN];
+    let counts_data = vec![0; COUNTS_LOCAL_LEN];
     let counts = Darc::new(&world, counts_data).expect("unable to create darc");
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);

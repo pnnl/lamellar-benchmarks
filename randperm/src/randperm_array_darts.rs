@@ -120,8 +120,8 @@ fn main() {
                     }
                 })
                 .collect::<ReadOnlyArray<usize>>(lamellar::array::Distribution::Block),
-        ); 
-           // =============================================================//
+        );
+        // =============================================================//
         world.barrier();
         let global_time = now.elapsed().as_secs_f64();
         if my_pe == 0 {
