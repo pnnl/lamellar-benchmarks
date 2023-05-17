@@ -12,14 +12,28 @@ use lamellar::ActiveMessaging;
 
 
 fn main() {
-    
+
+    println!("Enter matrix size:");
+    let mut line                =   String::new();    
+    std::io::stdin().read_line(&mut line).unwrap();
+    let numrows                 =   line.trim().parse().unwrap();
+    println!("You entered {:?}", numrows );
+    println!("Enter probability of generating a nonzero for each entry above the diagonal:");
+    let mut line                =   String::new();    
+    std::io::stdin().read_line(&mut line).expect("Failed to read input");
+    let edge_probability        =   line.trim().parse().unwrap();
+    println!("You entered {:?}", edge_probability );
+
+    // let mut args: Vec<_>        =   std::env::args().collect();
+    // let numrows                 =   & args[1];
+    // let numrows                 =   numrows.parse::<usize>().unwrap();
 
     //  ERDOS-RENYI EXAMPLE
     //  =======================================================    
     use rand::Rng;
  
     // parameters to generate the matrix
-    let edge_probability        =   0.05;
+    // let edge_probability        =   0.06;
     let lower                   =   false;
     let diag                    =   true;
     let simple                  =   false; // refers to the type of random matrix we generate
@@ -31,7 +45,8 @@ fn main() {
     let my_pe = world.my_pe();
 
     // run the tests
-    for numrows in (5 .. 21).step_by(5) {
+    // for numrows in (40 .. 41).step_by(5) 
+    {
 
         println!("numrows = {:}", numrows);
         seed = numrows as u64;

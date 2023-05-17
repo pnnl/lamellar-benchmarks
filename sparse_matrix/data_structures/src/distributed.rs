@@ -335,16 +335,16 @@ impl SparseMat {
 
 
 
-
+    /// Returns the matrix transpose.
     pub fn transpose( &self, world: &LamellarWorld, verbose: bool ) -> SparseMat {
 
-        // wait for all other processes to finish so we can get a clean read on time
-        // -----------------------------------------------------------------------------------------------------------------        
+        // Wait for other processes to finish
+        // ----------------------------------
         let my_pe = world.my_pe();
         let timer_total = std::time::Instant::now();                    
 
         // Preallocate a new sparse matrix 
-        // -----------------------------------------------------------------------------------------------------------------        
+        // -------------------------------
         let numrows         =   self.numcols();
         let numcols         =   self.numrows();
         let nnz             =   self.nnz();
@@ -353,12 +353,11 @@ impl SparseMat {
         let nzind           =   AtomicArray::<usize>::new( world.team(), nnz ,       Distribution::Block);
 
         // Create a local copy of the row pointers
-        // ------------------------------------------------  
+        // ---------------------------------------
         let self_rowptr_local   =   read_only_array_to_vec( & self.rowptr, world );
         
-        // Precompute the sparsity pattern of the transpose
-        // ------------------------------------------------
-
+        // Precompute the row offsets of the transpose
+        // -------------------------------------------
         let rowptr_clone    =   rowptr.clone(); // create a clone that can be consumed, but will allow us to modify entries in the (uncomsumed) array 
         self.nzind.dist_iter()
             .for_each( 
@@ -376,6 +375,7 @@ impl SparseMat {
         world.wait_all(); world.barrier();  
 
         // Write to the matrix
+        // -------------------
         let rowptr_clone = rowptr.clone();
         let nzind_clone = nzind.clone();        
         self.nzind
@@ -384,15 +384,15 @@ impl SparseMat {
             .for_each(
                 move |(linindex_old, col)|  // the linear index of the entry, and the col to which it belongs
                 {
-                    let row             =   find_window( & self_rowptr_local, linindex_old ).unwrap();       // the row to which the entry belongs
+                    let row             =   find_window( & self_rowptr_local, linindex_old ).unwrap();       // the row to which the entry will go
                     let linindex_new    =   rowptr_clone.block_on( rowptr_clone.fetch_add( *col+1, 1) );     // the linear index in the target array
                     nzind_clone.block_on( nzind_clone.store( linindex_new, row ) );
                 }
             );
         world.wait_all(); world.barrier();                            
 
-        // Wrap results into a sparse matrix, and return
-        // ---------------------------------------------
+        // Wrap results in a sparse matrix, and return
+        // -------------------------------------------
         let nzind           =   nzind.into_read_only();
         let rowptr          =   rowptr.into_read_only();        
         return SparseMat { numrows, numcols, nnz, rowptr, nzind, nzval }
@@ -415,7 +415,7 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
     let numrows = self.numrows();
 
     //  Make a local copy of rowptr
-    let self_rowptr_local    =   read_only_array_to_vec( &self.rowptr, world );
+    let self_rowptr_local   =   read_only_array_to_vec( &self.rowptr, world );
 
     //  Compute the column counts
     let mut nnz_per_col = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);    
@@ -424,22 +424,22 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
     world.barrier();   
 
     //  Compute the row counts
-    let nnz_per_row = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
-    let nnz_per_row_cone = nnz_per_row.clone();
-    let rowptr_clone  =   self.rowptr.clone();
+    let nnz_per_row         =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
+    let nnz_per_row_clone   =   nnz_per_row.clone();
+    let rowptr_clone        =   self.rowptr.clone();
     self.rowptr.dist_iter().enumerate().for_each(
             move | (rownum,limit_left) |
-            if rownum < numrows {
+            if rownum < numrows { // remember that rowptr has length 1 + (# rows), so we have to skip the last entry
                 let limit_right = rowptr_clone.block_on( rowptr_clone.load( rownum+1 ) );
-                nnz_per_row_cone.store( rownum, limit_right - limit_left );
+                nnz_per_row_clone.store( rownum, limit_right - limit_left );
             }
         );
     world.wait_all();
     world.barrier();
 
     //  Compute the sum of the nonzero column indices, per row
-    let column_index_sum_per_row = AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
-    let column_index_sum_per_row_clone = column_index_sum_per_row.clone();
+    let column_index_sum_per_row        =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
+    let column_index_sum_per_row_clone  =   column_index_sum_per_row.clone();
     self.nzind
         .clone()
         .dist_iter()
@@ -458,34 +458,46 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
 
  
     //  Generate a transposed matrix
-    let transposed  =   self.transpose( world, verbose );
+    let transposed          =   self.transpose( world, verbose );
+    world.wait_all(); 
+    world.barrier();     
 
     //  Start the loop
-    let addflag             =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);        
+    //  --------------
+    // a 0-1 array; we proceed in waves, and at the start of each wave we'll place 1's here to indicate which rows we're adding to the triangular matrix
+    let addflag             =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block); 
     let rperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
     let cperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);    
-    let numpairs_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block);
-    let numclear_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block);    
+    let numpairs_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block); // number of diagonal elements identified
     let nnz_per_row_clone   =   nnz_per_row.clone() ;
     let addflag_clone       =   addflag.clone();
     let numpairs_arr_clone  =   numpairs_arr.clone();
+    let transposed_nzind_clone  =   transposed.nzind.clone();
     world.wait_all(); 
     world.barrier();       
 
 
+    let mut count           =   0;
 
     loop {
         let numpairs        =   numpairs_arr.block_on( numpairs_arr.load(0) );
-        let numclear        =   numclear_arr.block_on( numclear_arr.load(0) );
         
         if numpairs == numrows { break }
+
+        println!("PE: {:?}, count: {:?},  numpairs: {:?}", world.my_pe(), count, numpairs );
+        // column_index_sum_per_row.print();
+        nnz_per_row.print();
+        println!("Row permutation:");
+        rperm.print();
+
+        count                               +=  1;
         
-        let rperm_clone   = rperm.clone();
-        let cperm_clone   = cperm.clone();        
+        let rperm_clone                     =   rperm.clone();
+        let cperm_clone                     =   cperm.clone();        
         let column_index_sum_per_row_clone  =   column_index_sum_per_row.clone();
         let numpairs_arr_clone              =   numpairs_arr_clone.clone();
         let transposed_rowptr_clone         =   transposed.rowptr.clone();
-        let transposed_nzind_clone          =   transposed.nzind.clone();
+        let transposed_nzind_clone          =   transposed_nzind_clone.clone();
         let nnz_per_row_clone               =   nnz_per_row_clone.clone();
         let addflag_clone                   =   addflag_clone.clone();
         let column_index_sum_per_row_clone  =   column_index_sum_per_row_clone.clone();
@@ -493,23 +505,26 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
         world.wait_all(); 
         world.barrier();   
 
-        println!("nnz_per_row = ");
-        nnz_per_row_clone.print();   
-        println!("numpairs_arr_clone:");
-        numpairs_arr_clone.print();             
+        // println!("nnz_per_row = ");
+        // nnz_per_row_clone.print();   
+        // println!("numpairs_arr_clone:");
+        // numpairs_arr_clone.print();             
         
-        // clear the flags
+        // clear the add flags
         let addflag_clone2  = addflag_clone.clone();
         addflag_clone2
             .dist_iter_mut()
             .for_each(move |elem| elem.store(0));
         world.wait_all(); 
-        world.barrier();                            
-        println!("done clearing flags");          
+        world.barrier();              
+        
+        if verbose {
+            println!("done clearing flags");          
+        }
 
-        // set the flags
-        let addflag_clone2  = addflag_clone.clone();
-        let numpairs_arr_clone2 = numpairs_arr_clone.clone();
+        // set the add flags
+        let addflag_clone2          =   addflag_clone.clone();
+        let numpairs_arr_clone2     =   numpairs_arr_clone.clone();
         nnz_per_row_clone
             .dist_iter()
             .enumerate()
@@ -532,52 +547,88 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
             );
         world.wait_all(); 
         world.barrier();   
-        println!("done setting flags; numpairs_arr = ");                 
-        numpairs_arr_clone.print();
-        println!("addflag = ");
-        addflag_clone.print();
+        // println!("done setting flags; numpairs_arr = ");                 
+        // numpairs_arr_clone.print();
+        // println!("addflag = ");
+        // addflag_clone.print();
 
         // process the flagged rows
-        addflag_clone
+        let addflag_clone2                              =   addflag_clone.clone();
+        addflag_clone2
             .dist_iter()
             .enumerate()
-            .for_each(
-                move |(index_row, flag)|
-                {
-                    if flag.load() == 1 {
-                        let index_col   =   column_index_sum_per_row_clone.block_on( column_index_sum_per_row_clone.load(index_row) );
-                        let index_write =   numpairs_arr_clone.block_on( numpairs_arr_clone.fetch_add( 0, 1 ) );
-                        println!("index_write = {:?}, row = {:?}, col = {:?}", &index_write, &index_row, &index_col );
+            .map( move |(index_row, nnz)| {
 
-                        rperm_clone.store( index_write,  index_row );
-                        cperm_clone.store( index_write,  index_col );   
+                let column_index_sum_per_row_clone2     =   column_index_sum_per_row_clone.clone();
+                let numpairs_arr_clone2                 =   numpairs_arr_clone.clone();
+                let rperm_clone2                        =   rperm_clone.clone();
+                let cperm_clone2                        =   cperm_clone.clone();
+                let transposed_rowptr_clone2            =   transposed_rowptr_clone.clone();
+                let transposed_nzind_clone2             =   transposed_nzind_clone.clone();
+                let nnz_per_row_clone2                  =   nnz_per_row_clone.clone();
+
+                async move { 
+            
+                    // if the row has a unique nz index (ie if it is flagged) then we can add it to our wave
+                    if nnz.load() == 1 {
+
+                        // the new row number we will assign
+                        let index_write         =   numpairs_arr_clone2.fetch_add( 0, 1 ).await;
                         
-                        println!("done writing");
+                        // the column index of the paired column
+                        let index_col           =   column_index_sum_per_row_clone2.load(index_row).await;
+                        if verbose {
+                            println!("index_write = {:?}, row = {:?}, col = {:?}", &index_write, &index_row, &index_col );
+                        }
+
+                        rperm_clone2.store( index_write,  index_row ).await;
+                        cperm_clone2.store( index_write,  index_col ).await;   
+                        
+                        if verbose {
+                            println!("done writing");
+                        }
 
 
-                        // get a view of the transposed matrix
-                        let read_range_start    =   transposed_rowptr_clone.block_on(transposed_rowptr_clone.load( index_col    )); //.await;
-                        let read_range_end      =   transposed_rowptr_clone.block_on(transposed_rowptr_clone.load( index_col +1 )); //.await;
+                        // get a view of the transposed matrix; specifically, extract the rows where the paired column is nonzero
+                        let read_range_start    =   transposed_rowptr_clone2.load( index_col    ).await;
+                        let read_range_end      =   transposed_rowptr_clone2.load( index_col +1 ).await;
                         let read_range          =   read_range_start .. read_range_end;
-                        let subarray            =   transposed_nzind_clone.sub_array(read_range);
+                        let subarray            =   transposed_nzind_clone2.sub_array(read_range);
+                        // world.wait_all(); 
+                        // world.barrier();                           
 
-                        println!("done with subarray");                        
+                        if verbose {
+                            println!("done with subarray");                        
+                        }
 
                         // update nnz per row and column_index_sum_per_row                        
-                        let nnz_per_row_clone2              =   nnz_per_row_clone.clone();
-                        let column_index_sum_per_row_clone2 =   column_index_sum_per_row_clone.clone();                                
                         subarray
                             .dist_iter()
-                            .for_each(
-                                move | index_row_secondary |
-                                {
-                                    nnz_per_row_clone2.block_on(  nnz_per_row_clone2.sub( *index_row_secondary, 1) );
-                                    column_index_sum_per_row_clone2.block_on( column_index_sum_per_row_clone2.sub( *index_row_secondary, index_col ) ) ;
+                            .map( move | index_row_secondary |  { // index_row_secondary just means that its a row which is nonzero in the column of interest
+
+                                let nnz_per_row_clone3              =   nnz_per_row_clone2.clone();
+                                let column_index_sum_per_row_clone3 =   column_index_sum_per_row_clone2.clone();                                                                
+
+                                async move {
+                                    nnz_per_row_clone3.sub( *index_row_secondary, 1).await;
+                                    column_index_sum_per_row_clone3.sub( *index_row_secondary, index_col ).await;                                
                                 }
-                            );
+                            }
+                            )
+                            .for_each_async ( move |x|  async move { x.await } );
+                            
+                            if verbose {
+                                println!("done with matrix updates");
+                            }
+                        // world.wait_all(); 
+                        // world.barrier();                        
+                
                     }
+                    // transposed_rowptr_clone2.barrier();
                 }
-            );
+            }
+        )
+        .for_each_async( move |x| async move { x.await } );
         world.wait_all();
         world.barrier();
     }
@@ -1326,11 +1377,11 @@ pub fn test_toposort(
     
 
     // -------------------------------------------------------------
-    // CHECK THAT ALL THREE PERMUTATION METHODS GIVE THE SAME ANSWER
+    // CHECK THAT PERMUTED MATRIX IS TRIANGULAR
     // -------------------------------------------------------------
 
  
-
+    // we reverse order bc the toposort algorithm returns reversed permutations
     let rperm: Vec<usize> = rperm.iter().cloned().rev().collect();
     let cperm: Vec<usize> = cperm.iter().cloned().rev().collect();    
 
@@ -1345,6 +1396,8 @@ pub fn test_toposort(
 
     crate::serial::print_vecvec( & permuted_vecvec, matrix.numrows() );
     
+    println!("rperm: {:?}", & rperm );
+    println!("cperm: {:?}", & cperm );    
     
     for (rownum, rowvec) in permuted_vecvec.iter().enumerate() {
         if rowvec[0] != rownum { panic!("diagonal entries must be nonzero"); }
