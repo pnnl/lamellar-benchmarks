@@ -1,0 +1,143 @@
+cpu-bind=MASK - j018, task  0  0 [769640]: mask 0x3 set
+cpu-bind=MASK - j018, task  1  1 [769641]: mask 0xc set
+numrows = 50
+numrows = 50
+col 34: [15, 0, 1, 17, 2, 20, 22, 5, 24, 33, 10, 34]
+contents of col 31, which pairs to row 34
+[pe 0 data] [15, 0, 1, 17, 2, 20, 22, 5, 24, 33, 10, 34]
+col 34: [15, 0, 1, 17, 2, 20, 22, 5, 24, 33, 10, 34]
+contents of col 31, which pairs to row 34
+[pe 1 data] []
+col 31: [15, 16, 17, 1, 19, 3, 4, 21, 6, 24, 7, 8, 28, 9, 31, 10, 12, 13]
+col 31: [15, 16, 17, 1, 19, 3, 4, 21, 6, 24, 7, 8, 28, 9, 31, 10, 12, 13]
+contents of col 31, which pairs to row 31
+contents of col 31, which pairs to row 31
+[pe 0 data] [15, 16, 17, 1, 19, 3, 4, 21, 6, 24, 7, 8, 28, 9, 31, 10, 12, 13]
+[pe 1 data] []
+PE: 0, count: 0,  numpairs: 0
+PE: 1, count: 0,  numpairs: 0
+thread '<unnamed>' panicked at 'array index out of bounds', /people/roek189/.cargo/git/checkouts/lamellar-runtime-ae83b2dd1257ed83/8b187f8/src/array/operations.rs:284:41
+stack backtrace:
+   0:     0x55ada0888eca - std::backtrace_rs::backtrace::libunwind::trace::h34aec3ef6cd8ad7e
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/../../backtrace/src/backtrace/libunwind.rs:93:5
+   1:     0x55ada0888eca - std::backtrace_rs::backtrace::trace_unsynchronized::h8035d38698d0f7a8
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+   2:     0x55ada0888eca - std::sys_common::backtrace::_print_fmt::hff968f6695a1ba22
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys_common/backtrace.rs:65:5
+   3:     0x55ada0888eca - <std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display>::fmt::h7eea0efe77acf1ec
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys_common/backtrace.rs:44:22
+   4:     0x55ada08a9c5e - core::fmt::write::hc553f17407eb0b48
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/core/src/fmt/mod.rs:1208:17
+   5:     0x55ada0886c35 - std::io::Write::write_fmt::h62e5f01a089f48c0
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/io/mod.rs:1682:15
+   6:     0x55ada0888c95 - std::sys_common::backtrace::_print::h52d116aff3db4cd1
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys_common/backtrace.rs:47:5
+   7:     0x55ada0888c95 - std::sys_common::backtrace::print::h9e7d2f98fb7af075
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys_common/backtrace.rs:34:9
+   8:     0x55ada088a7cf - std::panicking::default_hook::{{closure}}::hf74999dab2d0a95c
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/panicking.rs:267:22
+   9:     0x55ada088a50b - std::panicking::default_hook::hc11ca7d10c44c42f
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/panicking.rs:286:9
+  10:     0x55ada065633e - lamellar::scheduler::work_stealing::WorkStealingInner::init::{{closure}}::h50ab8a6379160667
+  11:     0x55ada088aefd - <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call::ha7dbb2d260f78172
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2032:9
+  12:     0x55ada088aefd - std::panicking::rust_panic_with_hook::hdb4da1ae79c845a5
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/panicking.rs:692:13
+  13:     0x55ada088ac79 - std::panicking::begin_panic_handler::{{closure}}::h02b5b35b126d5cf2
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/panicking.rs:579:13
+  14:     0x55ada088937c - std::sys_common::backtrace::__rust_end_short_backtrace::h6c6853376cf416d1
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys_common/backtrace.rs:137:18
+  15:     0x55ada088a982 - rust_begin_unwind
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/panicking.rs:575:5
+  16:     0x55ada0372fe3 - core::panicking::panic_fmt::hfd9e949092070b66
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/core/src/panicking.rs:64:14
+  17:     0x55ada08a7411 - core::panicking::panic_display::h45b76cd63e812370
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/core/src/panicking.rs:135:5
+  18:     0x55ada08a73bb - core::panicking::panic_str::he2d190e15dd7e6c1
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/core/src/panicking.rs:119:5
+  19:     0x55ada0372fa6 - core::option::expect_failed::h240c1b84e7fce7a2
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/core/src/option.rs:1879:5
+  20:     0x55ada03e41b4 - lamellar::array::operations::InputToValue<T>::to_pe_offsets::hf722818ffbc7e914
+  21:     0x55ada03c98b5 - lamellar::array::unsafe::operations::<impl lamellar::array::unsafe::UnsafeArray<T>>::initiate_op_task::h5ee6ad16455979b7
+  22:     0x55ada03ca937 - lamellar::array::unsafe::operations::<impl lamellar::array::unsafe::UnsafeArray<T>>::inner_initiate_op::h52dae03aa62d4c3c
+  23:     0x55ada03c9fba - lamellar::array::unsafe::operations::<impl lamellar::array::unsafe::UnsafeArray<T>>::initiate_fetch_op::h843368dbd82157d8
+  24:     0x55ada03b6eaa - lamellar::array::operations::ReadOnlyOps::load::he2fb54cbf15dd603
+  25:     0x55ada039b3dc - <tracing::instrument::Instrumented<T> as core::future::future::Future>::poll::h811900c892f51a62
+  26:     0x55ada06539c6 - lamellar::active_messaging::registered_active_message::RegisteredActiveMessages::exec_local_am::{{closure}}::he40753d6a7b80851
+  27:     0x55ada064bbb0 - <lamellar::active_messaging::registered_active_message::RegisteredActiveMessages as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}::hc731ee56ca4514a5
+  28:     0x55ada08138ea - <lamellar::active_messaging::ActiveMessageEngineType as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}::h99e981f4e0f099e8
+  29:     0x55ada08209d6 - async_task::raw::RawTask<F,T,S>::run::h4adb399b361ff947
+  30:     0x55ada060b887 - std::sys_common::backtrace::__rust_begin_short_backtrace::hecfe91fca38a50c8
+  31:     0x55ada062cd61 - core::ops::function::FnOnce::call_once{{vtable.shim}}::hc820a4d29f3f00c3
+  32:     0x55ada088d4d3 - <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once::ha93239d92e7b610d
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  33:     0x55ada088d4d3 - <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once::hebda57b0236de612
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  34:     0x55ada088d4d3 - std::sys::unix::thread::Thread::new::thread_start::h1541b4390bbc26ca
+                               at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys/unix/thread.rs:108:17
+  35:     0x152f323e11cf - start_thread
+  36:     0x152f31ac7dd3 - __clone
+  37:                0x0 - <unknown>
+matrix_toposort: ../prov/util/src/util_mem_monitor.c:160: ofi_monitor_cleanup: Assertion `dlist_empty(&monitor->list)' failed.
+srun: error: j018: task 1: Aborted (core dumped)
+[WARNING] Potential deadlock detected.
+Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.
+Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information
+Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration
+A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective
+The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is 10 seconds
+To view backtrace set RUST_LIB_BACKTRACE=1
+   0: lamellar::barrier::Barrier::check_barrier_vals
+   1: lamellar::barrier::Barrier::barrier
+   2: lamellar::lamellar_team::LamellarTeamRT::barrier
+   3: <tracing::instrument::Instrumented<T> as core::future::future::Future>::poll
+   4: lamellar::active_messaging::registered_active_message::RegisteredActiveMessages::exec_local_am::{{closure}}
+   5: <lamellar::active_messaging::registered_active_message::RegisteredActiveMessages as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}
+   6: <lamellar::active_messaging::ActiveMessageEngineType as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}
+   7: async_task::raw::RawTask<F,T,S>::run
+   8: std::sys_common::backtrace::__rust_begin_short_backtrace
+   9: core::ops::function::FnOnce::call_once{{vtable.shim}}
+  10: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  11: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  12: std::sys::unix::thread::Thread::new::thread_start
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys/unix/thread.rs:108:17
+  13: start_thread
+  14: __clone
+
+[0] [LAMELLAR BARRIER] Ok([99, 98]) Ok([98, 98]) Ok([99, 98, 0])
+[WARNING] Potential deadlock detected.
+Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.
+Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information
+Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration
+A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective
+The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is 10 seconds
+To view backtrace set RUST_LIB_BACKTRACE=1
+   0: lamellar::barrier::Barrier::check_barrier_vals
+   1: lamellar::barrier::Barrier::barrier
+   2: lamellar::lamellar_team::LamellarTeamRT::barrier
+   3: <tracing::instrument::Instrumented<T> as core::future::future::Future>::poll
+   4: lamellar::active_messaging::registered_active_message::RegisteredActiveMessages::exec_local_am::{{closure}}
+   5: <lamellar::active_messaging::registered_active_message::RegisteredActiveMessages as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}
+   6: <lamellar::active_messaging::ActiveMessageEngineType as lamellar::active_messaging::ActiveMessageEngine>::process_msg::{{closure}}
+   7: async_task::raw::RawTask<F,T,S>::run
+   8: std::sys_common::backtrace::__rust_begin_short_backtrace
+   9: core::ops::function::FnOnce::call_once{{vtable.shim}}
+  10: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  11: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/alloc/src/boxed.rs:2000:9
+  12: std::sys::unix::thread::Thread::new::thread_start
+             at /rustc/fc594f15669680fa70d255faec3ca3fb507c3405/library/std/src/sys/unix/thread.rs:108:17
+  13: start_thread
+  14: __clone
+
+[0] [LAMELLAR BARRIER] Ok([99, 98]) Ok([98, 98]) Ok([99, 98, 0])
+srun: interrupt (one more within 1 sec to abort)
+srun: StepId=27690.0 task 0: running
+srun: StepId=27690.0 task 1: exited abnormally
+srun: sending Ctrl-C to StepId=27690.0
+srun: forcing job termination
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** STEP 27690.0 ON j018 CANCELLED AT 2023-06-15T14:05:06 ***

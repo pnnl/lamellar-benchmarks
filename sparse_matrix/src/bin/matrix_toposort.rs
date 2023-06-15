@@ -13,16 +13,24 @@ use lamellar::ActiveMessaging;
 
 fn main() {
 
-    println!("Enter matrix size:");
-    let mut line                =   String::new();    
-    std::io::stdin().read_line(&mut line).unwrap();
-    let numrows                 =   line.trim().parse().unwrap();
-    println!("You entered {:?}", numrows );
-    println!("Enter probability of generating a nonzero for each entry above the diagonal:");
-    let mut line                =   String::new();    
-    std::io::stdin().read_line(&mut line).expect("Failed to read input");
-    let edge_probability        =   line.trim().parse().unwrap();
-    println!("You entered {:?}", edge_probability );
+    // println!("Enter matrix size:");
+    // let mut line                =   String::new();    
+    // std::io::stdin().read_line(&mut line).unwrap();
+    // let numrows                 =   line.trim().parse().unwrap();
+    // println!("You entered {:?}", numrows );
+    // println!("Enter probability of generating a nonzero for each entry above the diagonal:");
+    // let mut line                =   String::new();    
+    // std::io::stdin().read_line(&mut line).expect("Failed to read input");
+    // let edge_probability        =   line.trim().parse().unwrap();
+    // println!("You entered {:?}", edge_probability );
+
+
+    let numrows                     =   50;
+    let edge_probability            =   0.5;
+
+
+
+
 
     // let mut args: Vec<_>        =   std::env::args().collect();
     // let numrows                 =   & args[1];
@@ -49,33 +57,40 @@ fn main() {
     {
 
         println!("numrows = {:}", numrows);
-        seed = numrows as u64;
-        // randomly generate a sparse matrix and permutation    
-        let mut matrix_bale = bale::SparseMat::erdos_renyi_tri(numrows,edge_probability,lower,diag,seed,); 
 
-        while   matrix_bale.nonzero.len() == 0 
-                || 
-                matrix_bale.rowcounts().min().unwrap()==0
-                ||
-                matrix_bale.colcounts().iter().cloned().min().unwrap()==0        
-        { // re-generate the matrix until it has at least one structural nonzero
-            seed += 1;
-            matrix_bale = bale::SparseMat::erdos_renyi_tri(numrows,edge_probability,lower,diag,seed,); 
-        }       
+        for _ in 0 .. 10 {
 
-        // test the lamellar implementation of matrix perm
-        let verbose = false;
-        let verbose_debug = false;
+            seed = numrows as u64;
+            // randomly generate a sparse matrix and permutation    
+            let mut matrix_bale = bale::SparseMat::erdos_renyi_tri(numrows,edge_probability,lower,diag,seed,); 
+    
+            while   matrix_bale.nonzero.len() == 0 
+                    || 
+                    matrix_bale.rowcounts().min().unwrap()==0
+                    ||
+                    matrix_bale.colcounts().iter().cloned().min().unwrap()==0        
+            { // re-generate the matrix until it has at least one structural nonzero
+                seed += 1;
+                matrix_bale = bale::SparseMat::erdos_renyi_tri(numrows,edge_probability,lower,diag,seed,); 
+            }       
+    
+            // test the lamellar implementation of matrix perm
+            let verbose = false;
+            let verbose_debug = false;
+    
+            // let measurements = test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug, );        
+            // matrix_bale.transpose();
+            test_toposort( &world, &matrix_bale, verbose, verbose_debug );
+            // times.push( measurements );
+            
+            world.wait_all();
+            world.barrier();
+            println!("====================================================");
+        }                
 
-        // let measurements = test_permutation( &world, & matrix_bale, &mut rperminv_bale, &mut cperminv_bale, verbose, verbose_debug, );        
-        // matrix_bale.transpose();
-        test_toposort( &world, &matrix_bale, verbose, verbose_debug );
-        // times.push( measurements );
-        
-        world.wait_all();
-        world.barrier();
-        println!("====================================================");
-    }    
+        }
+
+
 
     // if my_pe == 0 {
     //     let table = Table::new(times.clone()).to_string();

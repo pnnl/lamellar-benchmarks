@@ -459,18 +459,65 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
  
     //  Generate a transposed matrix
     let transposed          =   self.transpose( world, verbose );
+
+
+    // !!! CHECK THE TRANSPOSE 
+    let transposed_vecvec   =   transposed.to_vec_of_rowvec( world );
+    for mut vec in transposed_vecvec.iter().cloned() {
+        vec.sort();
+        // NO EMPTY COLUMNS
+        if vec.len() == 0 {
+            panic!("there is an empty column");
+        }
+        for (a,b) in vec.iter().zip(vec.iter().skip(1)) {
+            // NO MAJOR VIEW OF THE TRANSPOSED MATRIX CONTAINS REPEAT ENTRIES
+            if a == b {
+                panic!("the column-major matrix contains duplicate entries in at least one column");
+            }
+        }
+    }  
+
+    println!("col 34: {:?}", & transposed_vecvec[34] );
+
+    let transposed_rowptr_clone     =   transposed.rowptr.clone();
+    let transposed_nzind_clone      =   transposed.nzind.clone();
+    let read_range_start            =   transposed_rowptr_clone.block_on( transposed_rowptr_clone.load( 34 ) );
+    let read_range_end              =   transposed_rowptr_clone.block_on( transposed_rowptr_clone.load( 35 ) );
+    let read_range                  =   read_range_start .. read_range_end;
+    let subarray                    =   transposed_nzind_clone.sub_array(read_range);
+    // world.wait_all(); 
+    // world.barrier(); 
+    
+    println!("contents of col 31, which pairs to row 34");
+    subarray.print(); 
+    
+    
+    println!("col 31: {:?}", & transposed_vecvec[31] );
+
+    let transposed_rowptr_clone     =   transposed.rowptr.clone();
+    let transposed_nzind_clone      =   transposed.nzind.clone();
+    let read_range_start            =   transposed_rowptr_clone.block_on( transposed_rowptr_clone.load( 31 ) );
+    let read_range_end              =   transposed_rowptr_clone.block_on( transposed_rowptr_clone.load( 32 ) );
+    let read_range                  =   read_range_start .. read_range_end;
+    let subarray                    =   transposed_nzind_clone.sub_array(read_range);
+    // world.wait_all(); 
+    // world.barrier(); 
+    
+    println!("contents of col 31, which pairs to row 31");
+    subarray.print();     
+
     world.wait_all(); 
     world.barrier();     
 
     //  Start the loop
     //  --------------
     // a 0-1 array; we proceed in waves, and at the start of each wave we'll place 1's here to indicate which rows we're adding to the triangular matrix
-    let addflag             =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block); 
+    let is_new_paired_row   =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block); 
     let rperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);
     let cperm               =   AtomicArray::<usize>::new( world.team(), numrows , Distribution::Block);    
     let numpairs_arr        =   AtomicArray::<usize>::new( world.team(), 1 , Distribution::Block); // number of diagonal elements identified
     let nnz_per_row_clone   =   nnz_per_row.clone() ;
-    let addflag_clone       =   addflag.clone();
+    let is_new_paired_row_clone       =   is_new_paired_row.clone();
     let numpairs_arr_clone  =   numpairs_arr.clone();
     let transposed_nzind_clone  =   transposed.nzind.clone();
     world.wait_all(); 
@@ -480,15 +527,18 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
     let mut count           =   0;
 
     loop {
+        // println!("nnz_per_row:");
+        // nnz_per_row.print();
+
         let numpairs        =   numpairs_arr.block_on( numpairs_arr.load(0) );
         
         if numpairs == numrows { break }
 
         println!("PE: {:?}, count: {:?},  numpairs: {:?}", world.my_pe(), count, numpairs );
         // column_index_sum_per_row.print();
-        nnz_per_row.print();
-        println!("Row permutation:");
-        rperm.print();
+        // nnz_per_row.print();
+        // println!("Row permutation:");
+        // rperm.print();
 
         count                               +=  1;
         
@@ -499,7 +549,7 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
         let transposed_rowptr_clone         =   transposed.rowptr.clone();
         let transposed_nzind_clone          =   transposed_nzind_clone.clone();
         let nnz_per_row_clone               =   nnz_per_row_clone.clone();
-        let addflag_clone                   =   addflag_clone.clone();
+        let is_new_paired_row_clone                   =   is_new_paired_row_clone.clone();
         let column_index_sum_per_row_clone  =   column_index_sum_per_row_clone.clone();
 
         world.wait_all(); 
@@ -511,8 +561,8 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
         // numpairs_arr_clone.print();             
         
         // clear the add flags
-        let addflag_clone2  = addflag_clone.clone();
-        addflag_clone2
+        let is_new_paired_row_clone2  = is_new_paired_row_clone.clone();
+        is_new_paired_row_clone2
             .dist_iter_mut()
             .for_each(move |elem| elem.store(0));
         world.wait_all(); 
@@ -523,42 +573,34 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
         }
 
         // set the add flags
-        let addflag_clone2          =   addflag_clone.clone();
+        let is_new_paired_row_clone2          =   is_new_paired_row_clone.clone();
         let numpairs_arr_clone2     =   numpairs_arr_clone.clone();
         nnz_per_row_clone
             .dist_iter()
             .enumerate()
-            .for_each(
-                move |(index_row, nnz)|
-                {                    
-                    // println!("nnz = {:?}, index_row = {:?}", &nnz, index_row);
-                    if nnz.load() == 1 { 
-                        // println!("made it past the if gate");
-                        // println!("{:?}  ", index_row); 
-                        // println!("{:?} ", addflag_clone2.len());
-                        // println!("{:?} ", addflag_clone2.len());                        
-                        // addflag_clone2.block_on( addflag_clone2.store( 0, 1 ) ); 
-                        // println!("tested insertion at 0");
-                        addflag_clone2.block_on( addflag_clone2.store( index_row, 1 ) ); 
-                        // println!("made it past the first store");
-                        // numpairs_arr_clone2.block_on( numpairs_arr_clone2.add(0,1) );
+            .map( move |(index_row, nnz)| 
+                {
+                    let is_new_paired_row_clone3    =   is_new_paired_row_clone2.clone();
+                    async move {
+                        if nnz.load() == 1 { 
+                            is_new_paired_row_clone3.store( index_row, 1 ).await;
+                        }
                     }
                 }
-            );
+            )
+            .for_each_async( move |x| async move { x.await } );                   
         world.wait_all(); 
         world.barrier();   
-        // println!("done setting flags; numpairs_arr = ");                 
-        // numpairs_arr_clone.print();
-        // println!("addflag = ");
-        // addflag_clone.print();
 
         // process the flagged rows
-        let addflag_clone2                              =   addflag_clone.clone();
-        addflag_clone2
-            .dist_iter()
-            .enumerate()
-            .map( move |(index_row, nnz)| {
+        let world_clone1                                =   world.clone();
+        let is_new_paired_row_clone2                    =   is_new_paired_row_clone.clone();
+        is_new_paired_row_clone2
+            .local_iter()
+            .enumerate()            
+            .map( move |(index_row, is_paired_row)| {
 
+                let world_clone2                        =   world_clone1.clone();
                 let column_index_sum_per_row_clone2     =   column_index_sum_per_row_clone.clone();
                 let numpairs_arr_clone2                 =   numpairs_arr_clone.clone();
                 let rperm_clone2                        =   rperm_clone.clone();
@@ -566,11 +608,16 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
                 let transposed_rowptr_clone2            =   transposed_rowptr_clone.clone();
                 let transposed_nzind_clone2             =   transposed_nzind_clone.clone();
                 let nnz_per_row_clone2                  =   nnz_per_row_clone.clone();
-
+                
                 async move { 
+
+                    let world_clone3        =   world_clone2.clone();
+                    // println!("pe ===== {:?} ", & world_clone3.my_pe(), );                    
             
                     // if the row has a unique nz index (ie if it is flagged) then we can add it to our wave
-                    if nnz.load() == 1 {
+                    if is_paired_row.load() == 1 {
+
+                        // println!("nnz  = 1, row = {:?}", index_row);
 
                         // the new row number we will assign
                         let index_write         =   numpairs_arr_clone2.fetch_add( 0, 1 ).await;
@@ -593,15 +640,29 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
                         let read_range_start    =   transposed_rowptr_clone2.load( index_col    ).await;
                         let read_range_end      =   transposed_rowptr_clone2.load( index_col +1 ).await;
                         let read_range          =   read_range_start .. read_range_end;
-                        let subarray            =   transposed_nzind_clone2.sub_array(read_range);
-                        // world.wait_all(); 
-                        // world.barrier();                           
+                        let subarray            =   transposed_nzind_clone2.sub_array(read_range.clone());
+
+                        // print 
+                        
+                        // print contents of the column
+                        let world_clone3        =   world_clone2.clone();
+                        println!("pe == {:?} --------- col {:?}, row {:?}", & world_clone3.my_pe(), &index_col, &index_row );
+                        println!("contents of col {:?}, which pairs to row {:?}", &index_col, &index_row );
+                        let subarray_str = subarray
+                            .buffered_onesided_iter(read_range.len())
+                            .into_iter()
+                            .fold("[".to_owned(), |acc, e| format!("{},{}", acc, e));
+                        println!("{}", subarray_str);
+                        println!("done printing subarray contents");
 
                         if verbose {
                             println!("done with subarray");                        
                         }
 
-                        // update nnz per row and column_index_sum_per_row                        
+                        // print the range
+                        println!("subarray range = {:?}, subarray.local_data() = {:?}", read_range.clone(), subarray.local_data() );
+
+                        // update is_paired_row per row and column_index_sum_per_row                        
                         subarray
                             .dist_iter()
                             .map( move | index_row_secondary |  { // index_row_secondary just means that its a row which is nonzero in the column of interest
@@ -609,22 +670,37 @@ fn toposort( &self, world: &LamellarWorld, verbose: bool )
                                 let nnz_per_row_clone3              =   nnz_per_row_clone2.clone();
                                 let column_index_sum_per_row_clone3 =   column_index_sum_per_row_clone2.clone();                                                                
 
+                                // println!("index_row = {:?}", index_row_secondary );
+
                                 async move {
+                                    let before = nnz_per_row_clone3.load(*index_row_secondary).await;
                                     nnz_per_row_clone3.sub( *index_row_secondary, 1).await;
+                                    let after = nnz_per_row_clone3.load(*index_row_secondary).await;   
+                                    // println!("col: {:?}, before: {:?}, after: {:?}", &index_col, before, after );                                 
                                     column_index_sum_per_row_clone3.sub( *index_row_secondary, index_col ).await;                                
                                 }
                             }
                             )
-                            .for_each_async ( move |x|  async move { x.await } );
+                            .for_each_async ( move |x|  async move { 
+                                    x.await; 
+                                    // println!("inside async"); 
+                                } 
+                            )
+                            .await;
+                        
+                        
+                        subarray.wait_all();
                             
-                            if verbose {
-                                println!("done with matrix updates");
-                            }
+                        if verbose {
+                            println!("done with matrix updates");
+                        }
                         // world.wait_all(); 
                         // world.barrier();                        
                 
+                    } else {
+                        // println!("is_paired_row != 1");
                     }
-                    // transposed_rowptr_clone2.barrier();
+                    transposed_nzind_clone2.barrier();
                 }
             }
         )
@@ -939,9 +1015,32 @@ pub fn print_read_only_array<T: Dist + std::fmt::Debug>(
 
 
 
-//  ----------------------------------------------------------------
+//  =======================================================================================================
 //  HELPER FUNCTIONS FOR UNIT TESTING
-//  ---------------------------------------------------------------- 
+//  =======================================================================================================
+
+
+pub fn test_subarray_inside_dist_iter( world: &LamellarWorld ) 
+{
+    
+    let a = AtomicArray::<usize>::new( world.team(), 10, Distribution::Block); 
+    let b = AtomicArray::<usize>::new( world.team(), 10, Distribution::Block);     
+    a.dist_iter().for_each(
+        move |x| {
+            let mut range = 0..0;
+            if x.load() < 5 {
+                range = 0 .. 4;
+            } else {
+                range = 6 .. 10;
+            }
+    
+            let subarray    =   b.sub_array(range);
+            subarray.print();
+        }
+    );
+    a.wait_all();
+
+}
 
 /// Returns a string of form "EK X.YZ"
 ///
@@ -1383,7 +1482,41 @@ pub fn test_toposort(
  
     // we reverse order bc the toposort algorithm returns reversed permutations
     let rperm: Vec<usize> = rperm.iter().cloned().rev().collect();
-    let cperm: Vec<usize> = cperm.iter().cloned().rev().collect();    
+    let cperm: Vec<usize> = cperm.iter().cloned().rev().collect();   
+    
+    // check that the permutations are indeed permutations
+        
+    let mut row_is_perm         =   true;
+    let mut rperm_sorted     =   rperm.clone();
+    rperm_sorted.sort();
+    for (p,q) in rperm_sorted.iter().cloned().enumerate() {
+        if p != q { 
+            row_is_perm     =   false;
+        }        
+    }
+    if ! row_is_perm {
+        println!("Error: rperm is not a permutation: {:?}", rperm_sorted);    
+    }
+
+
+    let mut col_is_perm         =   true;    
+    let mut cperm_sorted     =   cperm.clone();
+    cperm_sorted.sort();
+    for (p,q) in cperm_sorted.iter().cloned().enumerate() {
+        if p != q { 
+            col_is_perm     =   false;            
+        }   
+    }    
+    if ! col_is_perm {
+        println!("Error: cperm is not a permutation: {:?}", cperm_sorted);    
+    }
+
+    
+    if ( ! row_is_perm ) || ( ! col_is_perm ) { 
+        panic!("of of the perms is not a perm");
+    }
+
+    // invert the permutations and transform the matrix
 
     let rperm = crate::serial::invert_perumtation(&rperm);
     let cperm = crate::serial::invert_perumtation(&cperm);        
@@ -1396,8 +1529,8 @@ pub fn test_toposort(
 
     crate::serial::print_vecvec( & permuted_vecvec, matrix.numrows() );
     
-    println!("rperm: {:?}", & rperm );
-    println!("cperm: {:?}", & cperm );    
+    // println!("rperm: {:?}", & rperm );
+    // println!("cperm: {:?}", & cperm );    
     
     for (rownum, rowvec) in permuted_vecvec.iter().enumerate() {
         if rowvec[0] != rownum { panic!("diagonal entries must be nonzero"); }
