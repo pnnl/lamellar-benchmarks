@@ -1,0 +1,13 @@
+[package]
+name = "sparse_matrix_am"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3.28"
+lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "dev", features = ["enable-rofi"]    }   # add features = ["enable-rofi"] to use rofi lamellae
+rand="0.7"
+sprs = "0.11.1"
+tabled = "0.10.0"

@@ -11,14 +11,14 @@ This project contains two directories of note
 
 - log into junction
 - run `. lamellar-prep.rc`
-- cd into `lamellar_benchmarks/sparse_matrix`
+- cd into `lamellar_benchmarks/sparse_matrix_distarr`
 - `cargo build --release`
 - in the following command, ensure that cpus per task * tasks per node ≥ num threads
 - `RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=120 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=1 -A lamellar --mpi=pmi2 --exclusive ./target/release/matrix_perm`
 
 ### Relevant files are
 
-`sparse_matrix/data_structures/distributed`
+`sparse_matrix_distarr/data_structures/distributed`
 
 - defines SparseMat data structure
 - defines `test_permutation` which

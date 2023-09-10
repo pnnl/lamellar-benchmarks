@@ -1,5 +1,5 @@
 [package]
-name = "sparse_matrix"
+name = "sparse_matrix_distarr"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 data_structures = { path = "data_structures" }
-lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "master", features = ["enable-rofi"]    }   # add features = ["enable-rofi"] to use rofi lamellae
+lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "dev", features = ["enable-rofi"]    }   # add features = ["enable-rofi"] to use rofi lamellae
 rand="0.7"
 sparsemat  = { git = "https://github.com/jdevinney/bale.git",     branch = "master" }
 tabled = "0.10.0"
