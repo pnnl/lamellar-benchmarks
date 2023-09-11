@@ -6,8 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = "0.3.28"
+clap = { version = "4.4.2", features = ["derive"] }
+# futures = "0.3.28"
 lamellar = { git = "https://github.com/pnnl/lamellar-runtime",  branch = "dev", features = ["enable-rofi"]    }   # add features = ["enable-rofi"] to use rofi lamellae
+ordered-float = "3.9.1"
 rand="0.7"
 sprs = "0.11.1"
 tabled = "0.10.0"

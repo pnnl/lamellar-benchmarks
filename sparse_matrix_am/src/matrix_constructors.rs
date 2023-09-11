@@ -40,6 +40,28 @@ pub fn bernoulli_upper_unit_triangular_row(
     ind_col
 }
 
+
+
+/// Generates a row of an Erdos-Renyi random `side_length x side_length`
+/// where each entry is from an indepedent Bernoulli distribution equal to 1 with probability
+/// epsilon and 0 otherwise.
+///
+/// Output is returned as a vector of column indices
+pub fn erdos_renyi_row(
+        seed: usize, 
+        side_length: usize, 
+        epsilon: f64, 
+        row: usize,
+    ) -> Vec<usize> {
+
+    let mut rng             =   rand::rngs::StdRng::seed_from_u64( seed as u64 ); // a different / offset random seed for each row
+
+    (0..side_length)
+        .filter(|_| rng.gen::<f64>() <= epsilon )
+        .collect()
+}
+
+
 //  ===========================================================================
 //  RANDOM UPPER UNIT TRIANGULAR (ERDOS-RENYI)
 //  ===========================================================================

@@ -3,7 +3,7 @@
 //! Prompts the user for 
 //!
 //! - matrix size (= number of rows)
-//! - probability of adding each nonzero entry above the diagonal
+//! - edge_probability of adding each nonzero entry above the diagonal
 //! - a random seed
 //!
 //! Then generates a random Erdos-Renyi upper unit triangular matrix with the specified number of rows,
@@ -28,6 +28,8 @@ use sparse_matrix_am::matrix_constructors::bernoulli_upper_unit_triangular_row;
 use sparse_matrix_am::toposort_am::{ToposortAm,PoolDiagonalElementsAm};
 use sparse_matrix_am::permutation::Permutation;
 
+use clap::{Parser, Subcommand};
+
 use sprs::{CsMat,TriMat};
 
 use rand::prelude::*;
@@ -43,7 +45,7 @@ use std::time::{Instant, Duration};
 
 /// Prompts the user for 
 /// - matrix size (= number of rows)
-/// - probability of adding each nonzero entry above the diagonal
+/// - edge_probability of adding each nonzero entry above the diagonal
 /// - a random seed
 /// Then generates a random Erdos-Renyi upper unit triangular matrix with the specified number of rows,
 /// permutes the matrix according to random row and column permutations, then calculates a permutation
@@ -55,76 +57,24 @@ use std::time::{Instant, Duration};
 ///   concatenate them into a pair of row and column permutations
 /// - Time to verify = time to verify that the new permutations are indeed permutations, and that they
 ///   place the matrix in upper triangular form
+///
+/// # Implementation details
+///
+/// Each node stores a row-submatrix of the permuted matrix P; specifically, PE n stores 
+/// rows n*k .. (n+1)*k; the last PE may store fewer rows.
 fn main() {
 
     let world               =   lamellar::LamellarWorldBuilder::new().build();    
 
-    // user inputs
+    // command line arguments
     // -----------------    
 
-    // MATRIX SIZE
-    if world.my_pe() == 0 {
-        println!("");
-        println!("Enter matrix size:");
-    }
+    let cli = Cli::parse();
 
-    let mut input = String::new();
+    let num_rows_global     =   cli.matrix_size;
+    let edge_probability    =   cli.edge_probability;
+    let seed_permute        =   cli.random_seed; 
 
-    // Read user input
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-
-    // Parse the input into an integer
-    let num_rows_global: usize = match input.trim().parse() {
-        Ok(n) => n,
-        Err(_) => {
-            println!("Invalid input. Please enter a valid number.");
-            return;
-        }
-    };  
-    
-    // ENTRY PROBABILITY
-    if world.my_pe() == 0 {
-        println!("Enter value between 0 and 1 for the probability of adding each nonzero entry:");
-    }    
-
-    let mut input = String::new();
-
-    // Read user input
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-
-    // Parse the input into an integer
-    let probability: f64 = match input.trim().parse() {
-        Ok(n) => n,
-        Err(_) => {
-            println!("Invalid input. Please enter a valid number.");
-            return;
-        }
-    };  
-    
-    // RANDOM SEED
-    if world.my_pe() == 0 {
-        println!("Enter an integer as a random seed:");
-    }    
-
-    let mut input = String::new();
-
-    // Read user input
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-
-    // Parse the input into an integer
-    let seed_permute: usize = match input.trim().parse() {
-        Ok(n) => n,
-        Err(_) => {
-            println!("Invalid input. Please enter a valid number.");
-            return;
-        }
-    };      
 
     // initialize timer variables
     // --------------------------
@@ -142,7 +92,7 @@ fn main() {
     let row_owned_first_in  =   num_rows_per_pe * world.my_pe();
     let row_owned_first_out =   ( row_owned_first_in + num_rows_per_pe ).min( num_rows_global );
     let num_rows_owned      =   row_owned_first_out - row_owned_first_out;
-    // let probability         =   0.5;
+    // let edge_probability         =   0.5;
 
     // let seed_permute        =   0;
     let seed_matrix         =   seed_permute+2;
@@ -168,7 +118,7 @@ fn main() {
         let mut indices_col =   bernoulli_upper_unit_triangular_row(
                                     seed_matrix + index_row,
                                     num_rows_global,
-                                    probability,
+                                    edge_probability,
                                     row_of_er,     
                                 );
         for p in 0 .. indices_col.len() {
@@ -351,6 +301,11 @@ fn main() {
         
         println!("");
         println!("Finished successfully");
+        println!("");
+        println!("Matrix size:                        {:?}", cli.matrix_size );        
+        println!("Edge probability:                   {:?}", cli.edge_probability );
+        println!("Random seed:                        {:?}", cli.random_seed );
+        println!("");        
         println!("Time to initialize matrix:          {:?}", time_to_initialize );
         println!("Time to identify diagonal elements: {:?}", time_to_loop );
         println!("Time to pool diagonal elements:     {:?}", time_to_pool );
@@ -358,4 +313,30 @@ fn main() {
         println!("");
 
     }
+}
+
+
+
+
+
+//  ===========================================================================
+//  COMMAND LINE INTERFACE
+//  ===========================================================================
+
+
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// The number of rows and columns of the matrix
+    #[arg(short, long, )]
+    matrix_size: usize,
+
+    /// Probability that each entry will be nonzero (between 0 and 1)
+    #[arg(short, long, )]
+    edge_probability: f64,
+
+    /// Turn debugging information on
+    #[arg(short, long, )]
+    random_seed: usize,
 }
