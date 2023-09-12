@@ -64,16 +64,17 @@ use std::time::{Instant, Duration};
 /// rows n*k .. (n+1)*k; the last PE may store fewer rows.
 fn main() {
 
-    let world               =   lamellar::LamellarWorldBuilder::new().build();    
+    let world                   =   lamellar::LamellarWorldBuilder::new().build();    
 
     // command line arguments
     // -----------------    
 
     let cli = Cli::parse();
 
-    let num_rows_global     =   cli.matrix_size;
-    let edge_probability    =   cli.edge_probability;
-    let seed_permute        =   cli.random_seed; 
+    let num_rows_global         =   cli.matrix_size;
+    let edge_probability        =   cli.edge_probability;
+    let seed_permute            =   cli.random_seed; 
+    let verify                  =   cli.verify.clone().unwrap_or(false);
 
 
     // initialize timer variables
@@ -160,7 +161,7 @@ fn main() {
     // bucket for diagonal elements
     let diagonal_elements       =   vec![ vec![]; num_rows_global ];
     let diagonal_elements_union: Vec< Vec< (usize,usize) > >
-                                =   vec![ vec![]; num_rows_global ];
+                                =   vec![ vec![]; num_rows_global ];                               
 
     // wrap in LocalRwDarc's
     let matrix                  =   LocalRwDarc::new( world.team(), matrix                  ).unwrap();
@@ -169,15 +170,14 @@ fn main() {
     let diagonal_elements       =   LocalRwDarc::new( world.team(), diagonal_elements       ).unwrap();
     let num_deleted_global      =   LocalRwDarc::new( world.team(), 0usize                  ).unwrap();
     let diagonal_elements_union =   LocalRwDarc::new( world.team(), diagonal_elements_union ).unwrap();
-
     
     time_to_initialize          =   Instant::now().duration_since(start_time_initializing_values);
-
+    world.barrier();
 
     // enter loop
     // -----------------
 
-    let start_time_main_loop    =   Instant::now();    
+    let start_time_main_loop    =   Instant::now();                                      
 
     for epoch in 0..num_rows_global {
 
@@ -260,56 +260,64 @@ fn main() {
     
     if world.my_pe() == 0 {
 
-        let start_time_verifying_permutation
-                                        =   Instant::now();  
+        if verify {
+            let start_time_verifying_permutation
+                                            =   Instant::now();  
 
-        // concatenate all elements on PE0
-        let zipped_permutation          =   diagonal_elements_union.read().concat();
-        // println!("zipped permutation: {:?}", &zipped_permutation);
-        // println!("diagonal elements union: {:?}", &diagonal_elements_union);        
+            // concatenate all elements on PE0
+            let zipped_permutation          =   diagonal_elements_union.read().concat();
+            // println!("zipped permutation: {:?}", &zipped_permutation);
+            // println!("diagonal elements union: {:?}", &diagonal_elements_union);        
 
-        // calculate the new row and column permutations
-        let mut new_permutation_row: Vec<usize>     =   vec![0;num_rows_global];
-        let mut new_permutation_col: Vec<usize>     =   vec![0;num_rows_global];
-        for (ordinal, (row,col)) in zipped_permutation.into_iter().rev().enumerate() {
-            new_permutation_row[row]    =   ordinal;
-            new_permutation_col[col]    =   ordinal;            
-        }
+            // calculate the new row and column permutations
+            let mut new_permutation_row: Vec<usize>     =   vec![0;num_rows_global];
+            let mut new_permutation_col: Vec<usize>     =   vec![0;num_rows_global];
+            for (ordinal, (row,col)) in zipped_permutation.into_iter().rev().enumerate() {
+                new_permutation_row[row]    =   ordinal;
+                new_permutation_col[col]    =   ordinal;            
+            }
 
-        //  verify the permutations are correct
-        //  -----------------------------------
+            //  verify the permutations are correct
+            //  -----------------------------------
 
-        //  check that the permuted matrix is upper triangular
-        //  for this, it suffices to check that for every nonzero entry (row,col,val), we have row ≤ col
-        for index_row_old in 0 .. num_rows_global {
-            let index_row_new       =   new_permutation_row[ index_row_old ];
-            for index_col_old in get_row( index_row_old ).1 {
-                let index_col_new   =   new_permutation_col[ index_col_old ];
-                if index_row_new > index_col_new {
-                    panic!("Permutation failed to produce an upper triangular matrix");
+            //  check that the permuted matrix is upper triangular
+            //  for this, it suffices to check that for every nonzero entry (row,col,val), we have row ≤ col
+            for index_row_old in 0 .. num_rows_global {
+                let index_row_new       =   new_permutation_row[ index_row_old ];
+                for index_col_old in get_row( index_row_old ).1 {
+                    let index_col_new   =   new_permutation_col[ index_col_old ];
+                    if index_row_new > index_col_new {
+                        panic!("Permutation failed to produce an upper triangular matrix");
+                    }
                 }
             }
+
+            //  check that the permutations are indeed permutations
+            let unique_elements: HashSet<&usize>     =   new_permutation_row.iter().collect();
+            assert_eq!( unique_elements.len(), num_rows_global );
+            let unique_elements: HashSet<&usize>     =   new_permutation_col.iter().collect();
+            assert_eq!( unique_elements.len(), num_rows_global ); 
+            
+            time_to_verify          =    Instant::now().duration_since(start_time_verifying_permutation); 
         }
 
-        //  check that the permutations are indeed permutations
-        let unique_elements: HashSet<&usize>     =   new_permutation_row.iter().collect();
-        assert_eq!( unique_elements.len(), num_rows_global );
-        let unique_elements: HashSet<&usize>     =   new_permutation_col.iter().collect();
-        assert_eq!( unique_elements.len(), num_rows_global ); 
-        
-        time_to_verify          =    Instant::now().duration_since(start_time_verifying_permutation); 
         
         println!("");
         println!("Finished successfully");
         println!("");
         println!("Matrix size:                        {:?}", cli.matrix_size );        
         println!("Edge probability:                   {:?}", cli.edge_probability );
+        println!("Average node degree:                {:?}", cli.edge_probability * (cli.matrix_size as f64) );        
         println!("Random seed:                        {:?}", cli.random_seed );
         println!("");        
         println!("Time to initialize matrix:          {:?}", time_to_initialize );
         println!("Time to identify diagonal elements: {:?}", time_to_loop );
         println!("Time to pool diagonal elements:     {:?}", time_to_pool );
-        println!("Time to verify permutations:        {:?}", time_to_verify );        
+        if verify{
+            println!("Time to verify permutations:        {:?}", time_to_verify );        
+        } else {
+            println!("Time to verify permutations:        Not applicable, did not verify" );                    
+        }
         println!("");
 
     }
@@ -336,7 +344,11 @@ struct Cli {
     #[arg(short, long, )]
     edge_probability: f64,
 
-    /// Turn debugging information on
+    /// Seed for the random generator that determines the matrix.
     #[arg(short, long, )]
     random_seed: usize,
+
+    /// Flag to determine whether or not to verify the permutation
+    #[arg(short, long, )]
+    verify: Option<bool>,    
 }
