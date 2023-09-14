@@ -21,7 +21,7 @@ pub struct ToposortAm {
     pub matrix:             LocalRwDarc<CsMat<u8>>, 
     pub row_sums:           LocalRwDarc<Vec<usize>>,       // sum of nonzero column indices for each row
     pub row_counts:         LocalRwDarc<Vec<usize>>,       // number of nonzero column indices for each row
-    pub diagonal_elements:  LocalRwDarc<Vec<Vec<(usize,usize)>>>, // diagonal_elements[p] is the set of (row,col) pairs added in epoch p    
+    // pub diagonal_elements:  LocalRwDarc<Vec<Vec<(usize,usize)>>>, // diagonal_elements[p] is the set of (row,col) pairs added in epoch p    
     pub num_deleted_global: LocalRwDarc<usize>,             // number of rows/columns we have deleted in total
     pub columns_to_delete:  Vec<usize>,             // columns to be removed when the am executes
 }
@@ -33,7 +33,7 @@ impl LamellarAM for ToposortAm {
         // there is nothing to do if no columns are deleted
         if ! self.columns_to_delete.is_empty() {
 
-            let     diagonal_elements   =   self.diagonal_elements.write();
+            // let     diagonal_elements   =   self.diagonal_elements.write();
             let     matrix              =   self.matrix.read();
             let mut row_counts          =   self.row_counts.write();
             let mut row_sums            =   self.row_sums.write();
