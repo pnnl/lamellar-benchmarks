@@ -32,7 +32,7 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
-use sparse_matrix_am::matrix_constructors::bernoulli_upper_unit_triangular_row;
+use sparse_matrix_am::matrix_constructors::bernoulli_upper_unit_triangular_rows;
 use sparse_matrix_am::permutation::Permutation;
 
 use clap::{Parser, Subcommand};
@@ -139,44 +139,67 @@ fn main() {
     let start_time_initializing_values  
                                 =   Instant::now();
 
-    // this function returns the `index_row`th row of the permuted matrix, 
-    // repersented by a pair of vectors (indices_row,indices_col)
-    let get_row                 =   | index_row: usize | -> (Vec<usize>, Vec<usize>) {
-        let row_of_er           =   permutation_row.get_backward( index_row ); // NB: we have to use the backward permutation here
-        let mut indices_col     =   bernoulli_upper_unit_triangular_row(
-                                        seed_matrix + index_row,
-                                        num_rows_global,
-                                        edge_probability,
-                                        row_of_er,     
-                                    );
-        for p in 0 .. indices_col.len() {
-            indices_col[p]  =   permutation_col.get_forward( indices_col[p] ); 
-        }        
-        let indices_row     =   vec![ index_row; indices_col.len() ]; 
-        (indices_row, indices_col)       
-    };
+    // // this function returns the `index_row`th row of the permuted matrix, 
+    // // repersented by a pair of vectors (indices_row,indices_col)
+    // let get_row                 =   | index_row: usize | -> (Vec<usize>, Vec<usize>) {
+    //     let row_of_er           =   permutation_row.get_backward( index_row ); // NB: we have to use the backward permutation here
+    //     let mut indices_col     =   bernoulli_upper_unit_triangular_row(
+    //                                     seed_matrix + index_row,
+    //                                     num_rows_global,
+    //                                     edge_probability,
+    //                                     row_of_er,     
+    //                                 );
+    //     for p in 0 .. indices_col.len() {
+    //         indices_col[p]  =   permutation_col.get_forward( indices_col[p] ); 
+    //     }        
+    //     let indices_row     =   vec![ index_row; indices_col.len() ]; 
+    //     (indices_row, indices_col)       
+    // };
 
-    // generate the portion of the matrix owned by this PE
+    // // generate the portion of the matrix owned by this PE
     let start_time_matrix_unpermuted_raw_entries 
                                 =   Instant::now(); 
-    let mut indices_row         =   Vec::new();
-    let mut indices_col         =   Vec::new();
-    for index_row in row_owned_first_in .. row_owned_first_out {
-        let (indices_row_new, indices_col_new)  =   get_row( index_row );
-        indices_row.extend_from_slice( & indices_row_new );
-        indices_col.extend_from_slice( & indices_col_new );                                                                            
-    }
-    let time_matrix_unpermuted_raw_entries   
-                                =   Instant::now().duration_since(start_time_matrix_unpermuted_raw_entries);
+    // let mut indices_row         =   Vec::new();
+    // let mut indices_col         =   Vec::new();
+    // for index_row in row_owned_first_in .. row_owned_first_out {
+    //     let (indices_row_new, indices_col_new)  =   get_row( index_row );
+    //     indices_row.extend_from_slice( & indices_row_new );
+    //     indices_col.extend_from_slice( & indices_col_new );                                                                            
+    // }
 
-    let num_entries             =   indices_row.len();
-    let matrix                  =   TriMat::from_triplets(
-                                        (num_rows_global,num_rows_global),
-                                        indices_row,
-                                        indices_col,
-                                        vec![1u8; num_entries], // fill with meaningless coefficients
+    let get_rows_for_pe         =   | pe: usize | -> (Vec<usize>,Vec<usize>) {
+
+        let this_pe_owns        =   (num_rows_per_pe * pe .. num_rows_per_pe * (pe + 1));
+
+        let (mut indices_row, mut indices_col)
+                                =   bernoulli_upper_unit_triangular_rows(
+                                        seed_matrix,
+                                        num_rows_global,
+                                        edge_probability,
+                                        this_pe_owns.map( |x| permutation_row.get_backward(x) ),
                                     );
-    let matrix                  =   matrix.to_csc();
+        
+        for p in 0 .. indices_row.len() {
+            indices_row[p]          =   permutation_row.get_forward( indices_row[p] );
+            indices_col[p]          =   permutation_row.get_forward( indices_col[p] );
+        }  
+        ( indices_row, indices_col )      
+    };
+
+    let (indices_row,indices_col)   =   get_rows_for_pe( world.my_pe() );
+
+    let time_matrix_unpermuted_raw_entries   
+                                    =   Instant::now().duration_since(start_time_matrix_unpermuted_raw_entries);    
+
+    
+    let num_entries                 =   indices_row.len();
+    let matrix                      =   TriMat::from_triplets(
+                                            (num_rows_global,num_rows_global),
+                                            indices_row,
+                                            indices_col,
+                                            vec![1u8; num_entries], // fill with meaningless coefficients
+                                        );
+    let matrix                      =   matrix.to_csc();
 
     // the number and sum-of-column-indices of the nonzero entries in each row
     let mut row_sums:   Vec<_>  =   (0..num_rows_global).map(|_| AtomicUsize::new(0) ).collect();
@@ -320,15 +343,32 @@ fn main() {
 
             //  check that the permuted matrix is upper triangular
             //  for this, it suffices to check that for every nonzero entry (row,col,val), we have row ≤ col
-            for index_row_old in 0 .. num_rows_global {
-                let index_row_new       =   new_permutation_row[ index_row_old ];
-                for index_col_old in get_row( index_row_old ).1 {
-                    let index_col_new   =   new_permutation_col[ index_col_old ];
-                    if index_row_new > index_col_new {
-                        panic!("Permutation failed to produce an upper triangular matrix");
+            for pe in 0 .. world.num_pes() {
+                let (indices_row,indices_col)   =   get_rows_for_pe( pe );
+                for (index_row_old,index_col_old) in indices_row.iter().zip( indices_col.iter() ) {
+                    if new_permutation_row[ *index_row_old ] > new_permutation_col[ *index_col_old ] {
+                        panic!("Permutation failed to produce an upper triangular matrix");                        
                     }
                 }
             }
+
+            // for index_row_old in 0 .. num_rows_global {
+
+            //     let indices_column_old  =   bernoulli_upper_unit_triangular_row(
+            //                                     seed_matrix + , 
+            //                                     side_length: usize, 
+            //                                     epsilon: f64, 
+            //                                     row: usize,
+            //                                 )
+
+            //     let index_row_new       =   new_permutation_row[ index_row_old ];
+            //     for index_col_old in get_row( index_row_old ).1 {
+            //         let index_col_new   =   new_permutation_col[ index_col_old ];
+            //         if index_row_new > index_col_new {
+            //             panic!("Permutation failed to produce an upper triangular matrix");
+            //         }
+            //     }
+            // }
 
             //  check that the permutations are indeed permutations
             let unique_elements: HashSet<&usize>     =   new_permutation_row.iter().collect();

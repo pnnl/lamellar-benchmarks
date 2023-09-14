@@ -8,10 +8,107 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
+use std::collections::HashSet;
+use std::sync::{Arc,Mutex};
+use std::thread;
+
 
 //  ===========================================================================
 //  RANDOM UPPER UNIT TRIANGULAR (ERDOS-RENYI)
 //  ===========================================================================
+
+
+/// Works by randomly generating (row,col) pairs, and keeping a pair when it falls above the diagonal
+pub fn dart_unit_triangular_rows(
+            seed: usize,
+            side_length: usize,
+            nnz: usize,
+            row_indices: &[usize],
+        )
+        -> (Vec<usize>,Vec<usize>) {
+
+    let mut rng             =   rand::rngs::StdRng::seed_from_u64( seed as u64 ); // a different / offset random seed for each row         
+
+    let mut generated_indices       =   HashSet::with_capacity(nnz);
+    for p in row_indices.iter().cloned() {
+        generated_indices.insert((p,p));
+    }    
+
+    let mut row;
+    let mut col;
+    let m                   =   row_indices.len() as f64;
+    let n                   =   side_length as f64;
+    while generated_indices.len() < nnz {
+        row                 =   row_indices[ ( rng.gen::<f64>() * m ) as usize ];
+        col                 =   ( rng.gen::<f64>() * n ) as usize;
+        if row < col {
+            generated_indices.insert((row,col));
+        }
+    }
+
+    generated_indices.drain().unzip()
+    
+
+    // return (generated_indices_row, generated_indices_col)
+}
+
+
+
+
+pub fn bernoulli_upper_unit_triangular_rows< RowIndexIter: Iterator<Item=usize> >(
+            seed_matrix: usize,
+            side_length: usize,
+            bernoulli: f64,
+            row_indices: RowIndexIter,
+        )
+        -> (Vec<usize>,Vec<usize>)
+{
+    let mut indices_matrix     =   Arc::new(Mutex::new((Vec::new(),Vec::new())));
+    let mut handles = vec![];
+
+    for index_row in row_indices {
+
+        let matrix_indices_clone        =   Arc::clone(&indices_matrix);
+
+        // Spawn a new thread for each row processing
+        let handle = thread::spawn(move || {
+
+            let indices_col             =   bernoulli_upper_unit_triangular_row(
+                                                seed_matrix + index_row,
+                                                side_length,
+                                                bernoulli, 
+                                                index_row,
+                                            );
+            let indices_row             =   vec![ index_row; indices_col.len()];
+
+            let mut indices_matrix_lock =   matrix_indices_clone.lock().unwrap();
+            indices_matrix_lock.0.extend_from_slice(&indices_row);
+            indices_matrix_lock.1.extend_from_slice(&indices_col);            
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait for all threads to finish
+    for handle in handles {
+        handle.join().unwrap();
+    }  
+
+
+    let unwrapped_mutex = Arc::try_unwrap(indices_matrix).expect("Failed to unwrap Arc");
+
+    // Unwrap the Mutex and extract the tuple
+    let (indices_row, indices_col) = unwrapped_mutex.into_inner().expect("Failed to unwrap Mutex");
+
+    // let mut indices_matrix_guard = indices_matrix.lock().unwrap(); // Lock the Mutex and get a guard
+    // let indices: (Vec<usize>,Vec<usize>)     
+    //                                     =   indices_matrix_guard.0.drain(..)
+    //                                             .zip( indices_matrix_guard.1.drain(..) )
+    //                                             .unzip();
+    //                                             // .collect::<(Vec<usize>,Vec<usize>)>(); // Drain the guard to extract the vector
+
+    (indices_row, indices_col)
+}
 
 
 
