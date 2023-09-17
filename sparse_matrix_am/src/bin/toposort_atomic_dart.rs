@@ -91,7 +91,12 @@ use std::time::{Instant, Duration};
 ///     p  = (a - 1) * 2 / (n-1)    <--- OUR FORMULA
 fn main() {
 
-    let world                   =   lamellar::LamellarWorldBuilder::new().build();    
+    let start_make_world        =   Instant::now();       
+
+    let world                   =   lamellar::LamellarWorldBuilder::new().build();   
+    
+
+    let make_world              =   Instant::now().duration_since(start_make_world);      
 
     // command line arguments
     // -----------------    
@@ -128,10 +133,12 @@ fn main() {
     let start_time_to_permute   =   Instant::now();    
     let permutation_row         =   Permutation::random(num_rows_global, seed_permute   );
     let permutation_col         =   Permutation::random(num_rows_global, seed_permute+1 );
-    let time_to_permute         =   Instant::now().duration_since(start_time_to_permute);    
+    let time_to_permute         =   Instant::now().duration_since(start_time_to_permute);        
 
+    let start_time_to_hash      =   Instant::now();    
     let mut rows_owned: HashSet<usize>     // the indices of the rows owned by this PE     
-                                =   (row_owned_first_in .. row_owned_first_out).collect();                                 
+                                =   (row_owned_first_in .. row_owned_first_out).collect();   
+    let time_to_hash            =   Instant::now().duration_since(start_time_to_hash);        
 
     // initialize values
     // -----------------
@@ -169,8 +176,6 @@ fn main() {
 
     let get_rows_for_pe         =   | pe: usize | -> (Vec<usize>,Vec<usize>) {
 
-        let this_pe_owns        =   (num_rows_per_pe * pe .. num_rows_per_pe * (pe + 1));
-
         let (mut indices_row, mut indices_col)
                                 =   dart_unit_triangular_rows(
                                         seed_matrix + pe,
@@ -181,7 +186,7 @@ fn main() {
         
         for p in 0 .. indices_row.len() {
             indices_row[p]          =   permutation_row.get_forward( indices_row[p] );
-            indices_col[p]          =   permutation_row.get_forward( indices_col[p] );
+            indices_col[p]          =   permutation_col.get_forward( indices_col[p] );
         }  
         ( indices_row, indices_col )      
     };
@@ -224,10 +229,11 @@ fn main() {
     }
 
     // bucket for diagonal elements
+    let mut height_bins         =   vec![0]; // histogram of elements according to height in the poset
     let mut diagonal_elements: Vec< Vec< (usize,usize) > >
-                                =   vec![ vec![]; num_rows_global ];
+                                =   vec![ vec![]; 64 ];
     let diagonal_elements_union: Vec< Vec< (usize,usize) > >
-                                =   vec![ vec![]; num_rows_global ];
+                                =   Vec::new();
 
     // wrap in LocalRwDarc's
     let matrix                  =   Darc::new( world.team(), matrix                  ).unwrap();
@@ -243,9 +249,14 @@ fn main() {
     // enter loop
     // -----------------
 
-    let start_time_main_loop    =   Instant::now();                                      
+    let start_time_main_loop    =   Instant::now();
+    let mut poset_height        =   0;                                    
 
     for epoch in 0..num_rows_global {
+
+        if diagonal_elements.len() < epoch + 1 {
+            diagonal_elements.push(vec![]);
+        }
 
         let columns_to_delete = {
             // Step 1: identify all rows with a single nonzero entry, and their corresponding columns
@@ -265,7 +276,7 @@ fn main() {
             world.barrier();
         
             // list the paired columns, and remove the paired rows from `rows_owned`
-            let mut columns_to_delete   =   Vec::new();
+            let mut columns_to_delete   =   Vec::with_capacity( diagonal_elements[ epoch ].len() );
             for (row, col) in  diagonal_elements[ epoch ].iter() {
                 columns_to_delete.push(col.clone());
                 rows_owned.remove(row);
@@ -289,6 +300,8 @@ fn main() {
         world.wait_all();          
         world.barrier();             
 
+        // if we have deted every row and column, then we are done with the loop
+        // all we have to do now is 
         if num_deleted_global.load(Ordering::SeqCst) == num_rows_global {
 
             time_to_loop            =   Instant::now().duration_since(start_time_main_loop);    
@@ -297,13 +310,19 @@ fn main() {
                                     =   Instant::now();                    
 
             // make a vector copy of all the diagonal elements found on this PE
-            let diagonal_elements_to_move: Vec<_> = diagonal_elements.iter().cloned().collect();
+            // let diagonal_elements_to_move: Vec<_> = diagonal_elements.iter().cloned().collect();
+            poset_height            =   epoch;
+            
+            diagonal_elements.truncate(epoch+1); // remove trailing empty vectors
+            diagonal_elements.shrink_to_fit();
 
-
+            {
+                diagonal_elements_union.write().extend( vec![vec![]; epoch+1 ] ); // ensure diagonal_elements_union is long enough (before now it had length 0)
+            }
 
             // send all elements to PE0 for integration
             let am  =   PoolDiagonalElementsAmX{
-                diagonal_elements_to_move,           
+                diagonal_elements_to_move:  diagonal_elements,           
                 diagonal_elements_to_stay:  diagonal_elements_union.clone(),
             };
             let _ = world.exec_am_pe( 0, am );  
@@ -312,6 +331,13 @@ fn main() {
             world.barrier();               
 
             time_to_pool            =    Instant::now().duration_since(start_time_pooling_permutations);                
+
+            // number of elements of each height
+            height_bins             =   diagonal_elements_union.read().iter().map(|x| x.len()).collect();
+            // let u                   =   diagonal_elements_union.read();
+            // height_bins             =   (0..epoch)
+            //                                 .map(|x| u[x].len())
+            //                                 .collect();             
 
             break
         }
@@ -324,7 +350,7 @@ fn main() {
         if verify {
             let start_time_verifying_permutation
                                             =   Instant::now();  
-
+            
             // concatenate all elements on PE0
             let zipped_permutation          =   diagonal_elements_union.read().concat();
             // println!("zipped permutation: {:?}", &zipped_permutation);
@@ -343,14 +369,14 @@ fn main() {
 
             //  check that the permuted matrix is upper triangular
             //  for this, it suffices to check that for every nonzero entry (row,col,val), we have row ≤ col
-            for pe in 0 .. world.num_pes() {
-                let (indices_row,indices_col)   =   get_rows_for_pe( pe );
-                for (index_row_old,index_col_old) in indices_row.iter().zip( indices_col.iter() ) {
-                    if new_permutation_row[ *index_row_old ] > new_permutation_col[ *index_col_old ] {
-                        panic!("Permutation failed to produce an upper triangular matrix");                        
-                    }
-                }
-            }
+            // for pe in 0 .. world.num_pes() {
+            //     let (indices_row,indices_col)   =   get_rows_for_pe( pe );
+            //     for (index_row_old,index_col_old) in indices_row.iter().zip( indices_col.iter() ) {
+            //         if new_permutation_row[ *index_row_old ] > new_permutation_col[ *index_col_old ] {
+            //             panic!("Permutation failed to produce an upper triangular matrix");                        
+            //         }
+            //     }
+            // }
 
             // for index_row_old in 0 .. num_rows_global {
 
@@ -386,7 +412,8 @@ fn main() {
         println!("Number of rows per PE:              {:?}", cli.num_rows_per_pe );        
         println!("Average number of nonzeros per row: {:?}", cli.avg_nz_per_row );        
         println!("Random seed:                        {:?}", cli.random_seed );
-        println!("Number of PE's:                     {:?}", world.num_pes() );     
+        println!("Number of PE's:                     {:?}", world.num_pes() );  
+        println!("Cores per PE:                       {:?}", world.num_threads());
         println!("Number of nonzeros on PE 0:         {:?}", matrix.nnz() );                   
         println!("");       
         println!("Time to generate rand perm's        {:?}", time_to_permute); 
@@ -400,7 +427,12 @@ fn main() {
             println!("Time to verify permutations:        Not applicable, did not verify" );                    
         }
         println!("");
+        println!("Time to make world:                 {:?}", make_world );
+        println!("Time to hash owned rows:            {:?}", time_to_hash );
 
+        println!("");
+        println!("Poset height:                       {:?}", poset_height );
+        println!("Height bins:                        {:?}", height_bins );
     }
 }
 
@@ -505,3 +537,18 @@ impl LamellarAM for PoolDiagonalElementsAmX {
         }
     }
 }
+
+
+// Number of rows per PE:              100000
+// Average number of nonzeros per row: 10
+// Random seed:                        0
+// Number of PE's:                     32
+// Cores per PE:                       2
+// Number of nonzeros on PE 0:         1000000
+
+// Time to generate rand perm's        162.513064ms
+// Time to generate raw matrix entr    122.961301ms
+// Time to initialize matrix:          299.117747ms
+// Time to identify diagonal elements: 584.558788ms
+// Time to pool diagonal elements:     65.256003ms
+// Time to verify permutations:        Not applicable, did not verify
