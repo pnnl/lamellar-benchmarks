@@ -18,7 +18,44 @@ use std::thread;
 //  ===========================================================================
 
 
+
+/// Works by randomly generating (row,col) pairs, keeping the first `nnz` unique pairs that have been generated
+///
+/// Returns two vectors of row and column indices, each of length `nnz`.  Duplicate row-column pairs are discarded,
+/// so all row-column pairs returned are unique.
+pub fn dart_uniform_rows(
+            seed: usize,
+            side_length: usize,
+            nnz: usize,
+            row_indices: &[usize],
+        )
+        -> (Vec<usize>,Vec<usize>) {
+
+    let mut rng             =   rand::rngs::StdRng::seed_from_u64( seed as u64 ); // a different / offset random seed for each row         
+
+    let mut generated_indices       =   HashSet::with_capacity(nnz); 
+
+    let mut row;
+    let mut col;
+    let m                   =   row_indices.len() as f64;
+    let n                   =   side_length as f64;
+    while generated_indices.len() < nnz {
+        row                 =   row_indices[ ( rng.gen::<f64>() * m ) as usize ];
+        col                 =   ( rng.gen::<f64>() * n ) as usize;
+        generated_indices.insert((row,col));
+    }
+
+    generated_indices.drain().unzip()
+    
+    // return (generated_indices_row, generated_indices_col)
+}
+
+
+
 /// Works by randomly generating (row,col) pairs, and keeping a pair when it falls above the diagonal
+///
+/// Returns two vectors of row and column indices, each of length `nnz`.  Duplicate row-column pairs are discarded,
+/// so all row-column pairs returned are unique.
 pub fn dart_unit_triangular_rows(
             seed: usize,
             side_length: usize,
