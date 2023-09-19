@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use lamellar::active_messaging::prelude::*;
@@ -89,81 +92,81 @@ impl LamellarAm for FillAm {
     }
 }
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
-    let target_factor = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1);
+    let cli = options::RandpermCli::parse();
+
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let iterations = cli.iterations;
+    let target_factor = cli.target_factor;
+    let launch_threads = cli.launch_threads;
 
     if my_pe == 0 {
-        println!("array size {}", global_count);
-        println!("target array size {}", global_count * target_factor);
+        cli.describe(num_pes);
     }
 
-    let local_count = (global_count * target_factor) / num_pes;
+    let target_local_count = local_count * target_factor;
 
-    let the_array = LocalLockArray::new(&world, global_count, lamellar::Distribution::Block);
-    let mut targets: Vec<AtomicUsize> = Vec::with_capacity(local_count);
+    let mut targets: Vec<AtomicUsize> = Vec::with_capacity(target_local_count);
     //initialize targets with 0
-    for _ in 0..local_count {
+    for _ in 0..target_local_count {
         targets.push(AtomicUsize::new(usize::MAX));
     }
 
     let targets = Darc::new(&world, (targets, AtomicUsize::new(0))).unwrap();
+    let the_array = LocalLockArray::new(&world, global_count, lamellar::Distribution::Block);
+    let local_lens = AtomicArray::new(&world, num_pes, lamellar::Distribution::Block);
 
     for _ in 0..iterations {
-        world.barrier();
         let world2 = world.clone();
         let targets2 = targets.clone();
-        let throw_darts = async move {
-            let mut thread_rng = thread_rng();
-            let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
-            let mut dart_cnt = 0;
-            let mut reqs = (my_pe..global_count)
-                .step_by(num_pes)
-                .map(|i| {
-                    dart_cnt += 1;
-                    let dart = DartAm {
-                        indices: targets2.clone(),
-                        val: i,
-                    };
-                    world2.exec_am_pe(rng.gen_range(0, num_pes), dart)
-                })
-                .collect::<FuturesUnordered<_>>();
-
-            while reqs.len() > 0 {
-                // println!("{}", reqs.len());
-                reqs = reqs
-                    .collect::<Vec<_>>()
-                    .await
-                    .iter()
-                    .filter_map(|req| match req {
-                        Ok(_) => None,
-                        Err(i) => {
-                            let dart = DartAm {
-                                indices: targets2.clone(),
-                                val: *i,
-                            };
-                            Some(world2.exec_am_pe(rng.gen_range(0, num_pes), dart))
-                        }
-                    })
-                    .collect::<FuturesUnordered<_>>();
-            }
-        };
-        //time throw darts
+        world.barrier();
         let start = Instant::now();
-        world.block_on(throw_darts);
+        world.block_on(
+            the_array
+                .local_iter()
+                .enumerate()
+                .chunks(local_count / launch_threads)
+                .map(move |chunk| {
+                    // let timer = Instant::now();
+                    let mut thread_rng = thread_rng();
+                    let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
+                    let mut darts = FuturesUnordered::new();
+                    for (i, _) in chunk.clone() {
+                        let dart = DartAm {
+                            indices: targets2.clone(),
+                            val: i + my_pe * local_count,
+                        };
+                        darts.push(world2.exec_am_pe(rng.gen_range(0, num_pes), dart));
+                    }
+                    // println!("launch time {:?}s ", timer.elapsed().as_secs_f64());
+                    let world2 = world2.clone();
+                    let targets2 = targets2.clone();
+                    async move {
+                        while darts.len() > 0 {
+                            darts = darts
+                                .collect::<Vec<_>>()
+                                .await
+                                .iter()
+                                .filter_map(|req| match req {
+                                    Ok(_) => None,
+                                    Err(i) => {
+                                        let dart = DartAm {
+                                            indices: targets2.clone(),
+                                            val: *i,
+                                        };
+                                        Some(world2.exec_am_pe(rng.gen_range(0, num_pes), dart))
+                                    }
+                                })
+                                .collect::<FuturesUnordered<_>>();
+                        }
+                    }
+                })
+                .for_each_async(move |future| async move { future.await }),
+        );
+        world.wait_all();
         if my_pe == 0 {
             println!("local run time {:?} ", start.elapsed(),);
         }
@@ -173,13 +176,26 @@ fn main() {
         }
 
         let collect_start = Instant::now();
-        if my_pe == 0 {
-            world.block_on(world.exec_am_local(FillAm {
-                target: targets.clone(),
-                the_array: the_array.clone(),
-                start_index: 0,
-            }));
-        }
+        let data = targets
+            .0
+            .iter()
+            .filter_map(|x| {
+                let x = x.load(Ordering::Relaxed);
+                if x == usize::MAX {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .collect::<Vec<_>>();
+        local_lens.local_data().at(0).store(data.len());
+        world.barrier();
+        let start_index = local_lens
+            .buffered_onesided_iter(num_pes)
+            .into_iter()
+            .take(my_pe)
+            .sum::<usize>();
+        world.block_on(unsafe { the_array.put(start_index, &data) });
         world.barrier();
         let global_time = start.elapsed().as_secs_f64();
         if my_pe == 0 {

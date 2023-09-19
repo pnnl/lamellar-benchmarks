@@ -1,25 +1,26 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
 use rand::prelude::*;
-use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-
-const COUNTS_LOCAL_LEN: usize = 10000000;
 
 //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoAM {
     offset: usize,
+    #[AmGroup(static)]
     counts: Darc<Vec<AtomicUsize>>,
 }
 
 #[lamellar::am]
 impl LamellarAM for HistoAM {
     async fn exec(self) {
-        self.counts[self.offset].fetch_add(1, Ordering::Relaxed);
+        self.counts[self.offset as usize].fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -39,7 +40,7 @@ impl LamellarAM for LaunchAm {
             tg.add_am_pe(
                 rank,
                 HistoAM {
-                    offset: offset,
+                    offset: offset as usize,
                     counts: self.counts.clone(),
                 },
             );
@@ -48,56 +49,26 @@ impl LamellarAM for LaunchAm {
     }
 }
 
-fn histo(
-    l_num_updates: usize,
-    num_threads: usize,
-    world: &LamellarWorld,
-    mut rand_index: Vec<usize>,
-    counts: &Darc<Vec<AtomicUsize>>,
-) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / num_threads as f32;
-    let mut launch_tasks = vec![];
-    for tid in 0..num_threads {
-        let start = (tid as f32 * slice_size).round() as usize;
-        let end = ((tid + 1) as f32 * slice_size).round() as usize;
-        let split_index = rand_index.len() - (end - start);
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_index: rand_index.split_off(split_index),
-            counts: counts.clone(),
-        }));
-    }
-    launch_tasks
-}
-
 //===== HISTO END ======
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
-    let num_threads = args
-        .get(3)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let cli = options::HistoCli::parse();
 
-    let mut counts_data = Vec::with_capacity(COUNTS_LOCAL_LEN);
-    for _ in 0..COUNTS_LOCAL_LEN {
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+    let iterations = cli.iterations;
+
+    if my_pe == 0 {
+        cli.describe(num_pes);
+    }
+
+    let mut counts_data = Vec::with_capacity(local_count);
+    for _ in 0..local_count {
         counts_data.push(AtomicUsize::new(0));
     }
     let counts = Darc::new(&world, counts_data).expect("unable to create darc");
@@ -107,34 +78,31 @@ fn main() {
         .map(|_| rng.gen_range(0, global_count))
         .collect::<Vec<usize>>();
 
-    //create multiple launch tasks, that iterated through portions of rand_index in parallel
-    // let num_threads = match std::env::var("LAMELLAR_THREADS") {
-    //     Ok(n) => n.parse::<usize>().unwrap(),
-    //     Err(_) => 1,
-    // };
-    // let num_threads = std::cmp::max(num_threads / 2, 1);
-    for i in 0..iterations {
+    for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
-        let launch_tasks = histo(
-            l_num_updates,
-            num_threads,
-            &world,
-            rand_index.clone(),
-            &counts,
-        );
+
+        let mut tg = typed_am_group!(HistoAM, world.clone());
+        for idx in &rand_index {
+            let rank = idx % num_pes;
+            let offset = idx / num_pes;
+            tg.add_am_pe(
+                rank,
+                HistoAM {
+                    offset: offset as usize,
+                    counts: counts.clone(),
+                },
+            );
+        }
 
         if my_pe == 0 {
             println!("{:?} issue time {:?} ", my_pe, now.elapsed());
         }
-        world.block_on(async move {
-            for task in launch_tasks {
-                task.await;
-            }
-        });
+        let res = tg.exec();
         if my_pe == 0 {
             println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
         }
+        world.block_on(res);
         world.wait_all();
 
         if my_pe == 0 {
@@ -163,14 +131,16 @@ fn main() {
             );
         }
 
-        println!(
-            "pe {:?} sum {:?}",
-            my_pe,
-            counts
-                .iter()
-                .map(|e| e.load(Ordering::Relaxed))
-                .sum::<usize>()
-        );
+        if my_pe == 0 {
+            println!(
+                "pe {:?} sum {:?}",
+                my_pe,
+                counts
+                    .iter()
+                    .map(|e| e.load(Ordering::Relaxed))
+                    .sum::<usize>()
+            );
+        }
 
         for elem in counts.iter() {
             elem.store(0, Ordering::SeqCst);

@@ -1,9 +1,7 @@
 mod options;
 use clap::Parser;
 
-use futures::stream::FuturesUnordered;
 use futures::Future;
-use futures::StreamExt;
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
@@ -13,70 +11,38 @@ use std::time::Instant;
 
 #[lamellar::AmData]
 struct DartAm {
+    #[AmGroup(static)]
     target: LocalRwDarc<Vec<usize>>,
-    vals: Vec<usize>,
+    val: usize,
 }
 
 #[lamellar::am]
 impl LamellarAm for DartAm {
     async fn exec(self) {
-        self.target.write().extend_from_slice(&self.vals);
+        self.target.write().push(self.val);
     }
-}
-
-fn send_buffer(
-    world: &lamellar::LamellarWorld,
-    target: &LocalRwDarc<Vec<usize>>,
-    buffer_size: usize,
-    buffer: &mut Vec<usize>,
-    pe: usize,
-) -> impl Future<Output = ()> {
-    let mut new_vec = Vec::with_capacity(buffer_size);
-    std::mem::swap(buffer, &mut new_vec);
-    let dart = DartAm {
-        target: target.clone(),
-        vals: new_vec,
-    };
-    world.exec_am_pe(pe, dart)
 }
 
 fn launch_darts<I: Iterator<Item = usize>>(
     world: &lamellar::LamellarWorld,
     target: &LocalRwDarc<Vec<usize>>,
-    buffer_size: usize,
-    buffers: &mut Vec<Vec<usize>>,
     rng: &mut SmallRng,
     num_pes: usize,
     indices: I,
     chunk_size: usize,
-) -> FuturesUnordered<impl Future<Output = ()>> {
-    let reqs = FuturesUnordered::new();
+) -> impl Future<Output = TypedAmGroupResult<()>> {
+    let mut darts = typed_am_group!(DartAm, world);
     for i in indices.choose_multiple(rng, chunk_size).iter().map(|&i| i) {
         let pe = rng.gen_range(0, num_pes);
-        buffers[pe].push(i);
-        if buffers[pe].len() == buffer_size {
-            reqs.push(send_buffer(
-                world,
-                target,
-                buffer_size,
-                &mut buffers[pe],
-                pe,
-            ));
-        }
+        darts.add_am_pe(
+            pe,
+            DartAm {
+                target: target.clone(),
+                val: i,
+            },
+        );
     }
-    //check if any data remaining in buffers and launch a dart am
-    for pe in 0..num_pes {
-        if buffers[pe].len() > 0 {
-            reqs.push(send_buffer(
-                world,
-                target,
-                buffer_size,
-                &mut buffers[pe],
-                pe,
-            ));
-        }
-    }
-    reqs
+    darts.exec()
 }
 
 fn main() {
@@ -89,7 +55,6 @@ fn main() {
     let local_count = global_count / num_pes;
     let iterations = cli.iterations;
     let launch_threads = cli.launch_threads;
-    let buffer_size = cli.buffer_size;
     let target_factor = cli.target_factor;
 
     if my_pe == 0 {
@@ -98,7 +63,6 @@ fn main() {
 
     if my_pe == 0 {
         println!("array size {}", global_count);
-        // println!("target array size {}", global_count * target_factor);
     }
 
     let target_local_count = local_count * target_factor;
@@ -124,24 +88,22 @@ fn main() {
         world.barrier();
         let start = Instant::now();
         world.block_on(
+            // the_array.local_iter()
             the_array
                 .local_iter()
                 .chunks(std::cmp::max(1, local_count / launch_threads))
                 .map(move |chunk| {
+                    // println!("{} {:?}",local_count/launch_threads, std::thread::current().id());
                     let mut thread_rng = thread_rng();
                     let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
-                    let mut buffers = vec![Vec::with_capacity(buffer_size); num_pes];
-                    let reqs = launch_darts(
+                    launch_darts(
                         &world2,
                         &target2,
-                        buffer_size,
-                        &mut buffers,
                         &mut rng,
                         num_pes,
                         chunk.map(|&i| i),
                         std::cmp::max(1, local_count / launch_threads),
-                    );
-                    reqs.collect::<Vec<_>>()
+                    )
                 })
                 .for_each_async(|req| async {
                     req.await;

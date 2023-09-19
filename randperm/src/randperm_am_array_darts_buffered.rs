@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use futures::stream::FuturesUnordered;
 use futures::Future;
 use futures::StreamExt;
@@ -10,6 +13,7 @@ use std::time::Instant;
 
 #[lamellar::AmData]
 struct DartAm {
+    #[AmGroup(static)]
     target: AtomicArray<usize>,
     vals: Vec<usize>,
 }
@@ -18,7 +22,7 @@ struct DartAm {
 impl LamellarAm for DartAm {
     async fn exec(self) -> Vec<usize> {
         //create a random index less than the length of indices
-        let mut thread_rng = thread_rng();
+        let thread_rng = thread_rng();
         let mut rng = thread_rng;
         // let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
         let local_target = self.target.local_data();
@@ -98,40 +102,26 @@ fn launch_darts(
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
-    let target_factor = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
-    let buffer_size = args
-        .get(3)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //multiplication factor for target array
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1);
-    let num_threads = args
-        .get(5)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let cli = options::RandpermCli::parse();
+
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let iterations = cli.iterations;
+    let launch_threads = cli.launch_threads;
+    let buffer_size = cli.buffer_size;
+    let target_factor = cli.target_factor;
+
+    if my_pe == 0 {
+        cli.describe(num_pes);
+    }
 
     if my_pe == 0 {
         println!("array size {}", global_count);
         println!("target array size {}", global_count * target_factor);
     }
-
-    let local_count = (global_count * target_factor) / num_pes;
 
     let target = AtomicArray::new(
         &world,
@@ -162,7 +152,7 @@ fn main() {
         world.block_on(
             init_array
                 .local_iter()
-                .chunks(local_count / num_threads)
+                .chunks(local_count / launch_threads)
                 .map(move |chunk| {
                     let target = target2.clone();
                     let world = world2.clone();

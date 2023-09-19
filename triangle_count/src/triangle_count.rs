@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
@@ -99,27 +102,18 @@ impl LamellarAM for TcAm {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let file = &args[1];
-    let iterations = if args.len() > 2 {
-        match &args[2].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 1,
-        }
-    } else {
-        1
-    };
-    let launch_threads = if args.len() > 3 {
-        match &args[3].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
-
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
+
+    let cli = options::TcCli::parse();
+
+    let file = &cli.graph_file;
+    let iterations = cli.iterations;
+    let launch_threads = cli.launch_threads;
+
+    if my_pe == 0 {
+        cli.describe();
+    }
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
     graph.dump_to_bin(&format!("{file}.bin"));

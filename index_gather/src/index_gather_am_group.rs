@@ -1,17 +1,19 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
-use std::future::Future;
 use std::time::Instant;
 
-const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
-                                         //===== HISTO BEGIN ======
+//===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct IndexGatherAM {
     offset: usize,
+    #[AmGroup(static)]
     counts: Darc<Vec<usize>>,
 }
 
@@ -47,62 +49,46 @@ impl LamellarAM for LaunchAm {
     }
 }
 
-fn index_gather(
-    l_num_updates: usize,
-    num_threads: usize,
+async fn run_ig(
     world: &LamellarWorld,
-    rand_index: &OneSidedMemoryRegion<usize>,
+    num_pes: usize,
+    rand_index: &[usize],
     counts: &Darc<Vec<usize>>,
-) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / num_threads as f32;
-    let mut launch_tasks = vec![];
-    for tid in 0..num_threads {
-        let start = (tid as f32 * slice_size).round() as usize;
-        let end = ((tid + 1) as f32 * slice_size).round() as usize;
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_index: rand_index.sub_region(start..end),
-            counts: counts.clone(),
-        }));
+) {
+    let mut tg = typed_am_group!(IndexGatherAM, world.clone());
+    for idx in rand_index {
+        let rank = idx % num_pes;
+        let offset = idx / num_pes;
+        tg.add_am_pe(
+            rank,
+            IndexGatherAM {
+                offset: offset,
+                counts: counts.clone(),
+            },
+        );
     }
-    launch_tasks
+    tg.exec().await;
 }
 
 //===== HISTO END ======
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+    let cli = options::IndexGatherCli::parse();
 
-    let num_threads = args
-        .get(3)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+    let iterations = cli.iterations;
 
     if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+        cli.describe(num_pes);
     }
 
-    let counts_data = vec![0; COUNTS_LOCAL_LEN];
+    let counts_data = vec![0; local_count];
     let counts = Darc::new(&world, counts_data).expect("unable to create darc");
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
@@ -116,15 +102,18 @@ fn main() {
     for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
-        let launch_tasks = index_gather(l_num_updates, num_threads, &world, &rand_index, &counts);
+        let launch_tasks = run_ig(
+            &world,
+            num_pes,
+            unsafe { rand_index.as_slice().unwrap() },
+            &counts,
+        );
 
         if my_pe == 0 {
             println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
         }
         world.block_on(async move {
-            for task in launch_tasks {
-                task.await;
-            }
+            launch_tasks.await;
         });
         if my_pe == 0 {
             println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
@@ -162,10 +151,4 @@ fn main() {
             );
         }
     }
-
-    // println!(
-    //     "pe {:?} sum {:?}",
-    //     my_pe,
-    //     counts.as_slice().unwrap().iter().sum::<usize>()
-    // );
 }

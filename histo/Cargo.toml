@@ -8,7 +8,9 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.3.0"
 rand = "0.6"
-lamellar = { git = "https://github.com/pnnl/lamellar-runtime", tag = "april_2023", features = ["enable-rofi"] }
+#lamellar = { git = "https://github.com/pnnl/lamellar-runtime", tag = "april_2023", features = ["enable-rofi"] }
+lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi"] }
+
 parking_lot = { version = "0.12" }
 tracing = "0.1"
 tracing-futures = "0.2"
@@ -16,11 +18,15 @@ tracing-flame = "0.2"
 tracing-subscriber = "0.3"
 futures = "0.3"
 
+clap = { version = "4.3.4", features = ["derive", "env"] }
+async-std = "1.12.0"
+
 [profile.release]
 opt-level=3
 lto=true
 codegen-units=1
-debug = true 
+debug = false 
+panic = "abort"
 
 
 [[bin]]
@@ -32,20 +38,24 @@ name="histo_safe_am"
 path="src/histo_safe_am.rs"
 
 #[[bin]]
-#name="histo_safe_am_tgf"
-#path="src/histo_safe_am_tgf.rs"
+#name="histo_safe_typed_am_group"
+#path="src/histo_safe_typed_am_group.rs"
 
 [[bin]]
 name="histo_darc"
 path="src/histo_darc.rs"
 
-#[[bin]]
-#name="histo_darc_am_group"
-#path="src/histo_darc_am_group.rs"
+[[bin]]
+name="histo_darc_am_group"
+path="src/histo_darc_am_group.rs"
 
 [[bin]]
 name="histo_buffered_safe_am"
 path="src/histo_buffered_safe_am.rs"
+
+[[bin]]
+name="histo_buffered_safe_am_u32"
+path="src/histo_buffered_safe_am_u32.rs"
 
 [[bin]]
 name="histo_buffered_unsafe_am"

@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 
@@ -5,8 +8,7 @@ use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
 
-const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
-                                         //===== HISTO BEGIN ======
+//===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoBufferedAM {
@@ -27,7 +29,7 @@ impl LamellarAM for HistoBufferedAM {
 struct LaunchAm {
     rand_index: OneSidedMemoryRegion<usize>,
     counts: SharedMemoryRegion<usize>,
-    buffer_amt: usize,
+    buffer_size: usize,
 }
 
 #[lamellar::local_am]
@@ -35,14 +37,14 @@ impl LamellarAM for LaunchAm {
     async fn exec(self) {
         let num_pes = lamellar::num_pes;
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
-            vec![Vec::with_capacity(self.buffer_amt); num_pes];
+            vec![Vec::with_capacity(self.buffer_size); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
 
             buffs[rank].push(offset);
-            if buffs[rank].len() >= self.buffer_amt {
+            if buffs[rank].len() >= self.buffer_size {
                 let buff = buffs[rank].clone();
                 task_group.exec_am_pe(
                     rank,
@@ -72,21 +74,21 @@ impl LamellarAM for LaunchAm {
 
 fn histo(
     l_num_updates: usize,
-    num_threads: usize,
+    launch_threads: usize,
     world: &LamellarWorld,
     rand_index: &OneSidedMemoryRegion<usize>,
     counts: &SharedMemoryRegion<usize>,
-    buffer_amt: usize,
+    buffer_size: usize,
 ) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / num_threads as f32;
+    let slice_size = l_num_updates as f32 / launch_threads as f32;
     let mut launch_tasks = vec![];
-    for tid in 0..num_threads {
+    for tid in 0..launch_threads {
         let start = (tid as f32 * slice_size).round() as usize;
         let end = ((tid + 1) as f32 * slice_size).round() as usize;
         launch_tasks.push(world.exec_am_local(LaunchAm {
             rand_index: rand_index.sub_region(start..end),
             counts: counts.clone(),
-            buffer_amt: buffer_amt,
+            buffer_size: buffer_size,
         }));
     }
     launch_tasks
@@ -95,35 +97,23 @@ fn histo(
 //===== HISTO END ======
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+    let cli = options::HistoCli::parse();
 
-    let buffer_amt = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
-    let num_threads = args
-        .get(3)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+    let launch_threads = cli.launch_threads;
+    let buffer_size = cli.buffer_size;
 
     if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+        cli.describe(num_pes);
     }
+
+    let counts = world.alloc_shared_mem_region(local_count);
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
@@ -141,11 +131,11 @@ fn main() {
     let now = Instant::now();
     let launch_tasks = histo(
         l_num_updates,
-        num_threads,
+        launch_threads,
         &world,
         &rand_index,
         &counts,
-        buffer_amt,
+        buffer_size,
     );
 
     if my_pe == 0 {

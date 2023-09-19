@@ -1,26 +1,22 @@
+mod options;
+use clap::Parser;
+
 use lamellar::array::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let global_count = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
-    let target_factor = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1);
+    let num_pes = world.num_pes();
+    let cli = options::RandpermCli::parse();
+
+    let global_count = cli.global_size;
+    let iterations = cli.iterations;
+    let target_factor = cli.target_factor;
+
     if my_pe == 0 {
-        println!("array size {}", global_count);
-        println!("target array size {}", global_count * target_factor);
+        cli.describe(num_pes);
     }
 
     // start with unsafe because they are faster to initialize than AtomicArrays
@@ -34,6 +30,7 @@ fn main() {
         global_count * target_factor,
         lamellar::array::Distribution::Block,
     );
+
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     // initialize arrays
@@ -48,8 +45,9 @@ fn main() {
     world.block_on(target_init);
     world.wait_all();
 
+    //will use this slice for first iteration
     let darts_array = darts_array.into_read_only();
-    let local_darts = darts_array.local_data(); //will use this slice for first iteration
+    let local_darts = darts_array.local_data();
 
     let target_array = target_array.into_atomic();
     world.barrier();
@@ -80,6 +78,7 @@ fn main() {
 
         // continue launching remaining darts until they all stick
         while remaining_darts.len() > 0 {
+            // println!("{}", remaining_darts.len());
             let rand_index = (0..remaining_darts.len())
                 .map(|_| rng.gen_range(0, global_count * target_factor))
                 .collect::<Vec<usize>>();
@@ -121,7 +120,6 @@ fn main() {
                 })
                 .collect::<ReadOnlyArray<usize>>(lamellar::array::Distribution::Block),
         );
-        // =============================================================//
         world.barrier();
         let global_time = now.elapsed().as_secs_f64();
         if my_pe == 0 {

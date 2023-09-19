@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
@@ -5,8 +8,6 @@ use rand::prelude::*;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-
-const COUNTS_LOCAL_LEN: usize = 10000000;
 
 //===== HISTO BEGIN ======
 
@@ -48,14 +49,14 @@ impl LamellarAM for LaunchAm {
 
 fn histo(
     l_num_updates: usize,
-    num_threads: usize,
+    launch_threads: usize,
     world: &LamellarWorld,
     mut rand_index: Vec<usize>,
     counts: &Darc<Vec<AtomicUsize>>,
 ) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / num_threads as f32;
+    let slice_size = l_num_updates as f32 / launch_threads as f32;
     let mut launch_tasks = vec![];
-    for tid in 0..num_threads {
+    for tid in 0..launch_threads {
         let start = (tid as f32 * slice_size).round() as usize;
         let end = ((tid + 1) as f32 * slice_size).round() as usize;
         let split_index = rand_index.len() - (end - start);
@@ -70,33 +71,24 @@ fn histo(
 //===== HISTO END ======
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
-    let num_threads = args
-        .get(3)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let cli = options::HistoCli::parse();
 
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
+    let global_count = cli.global_size;
+    let local_count = global_count / num_pes;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+    let iterations = cli.iterations;
+    let launch_threads = cli.launch_threads;
 
-    let mut counts_data = Vec::with_capacity(COUNTS_LOCAL_LEN);
-    for _ in 0..COUNTS_LOCAL_LEN {
+    if my_pe == 0 {
+        cli.describe(num_pes);
+    }
+
+    let mut counts_data = Vec::with_capacity(local_count);
+    for _ in 0..local_count {
         counts_data.push(AtomicUsize::new(0));
     }
     let counts = Darc::new(&world, counts_data).expect("unable to create darc");
@@ -107,17 +99,17 @@ fn main() {
         .collect::<Vec<usize>>();
 
     //create multiple launch tasks, that iterated through portions of rand_index in parallel
-    // let num_threads = match std::env::var("LAMELLAR_THREADS") {
+    // let launch_threads = match std::env::var("LAMELLAR_THREADS") {
     //     Ok(n) => n.parse::<usize>().unwrap(),
     //     Err(_) => 1,
     // };
-    // let num_threads = std::cmp::max(num_threads / 2, 1);
+    // let launch_threads = std::cmp::max(launch_threads / 2, 1);
     for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
         let launch_tasks = histo(
             l_num_updates,
-            num_threads,
+            launch_threads,
             &world,
             rand_index.clone(),
             &counts,

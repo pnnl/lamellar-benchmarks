@@ -6,21 +6,21 @@ use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
-use std::future::Future;
 use std::time::Instant;
 
 //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct IndexGatherAM {
-    offset: usize,
+    offset: u32,
+    #[AmGroup(static)]
     counts: Darc<Vec<usize>>,
 }
 
 #[lamellar::am]
 impl LamellarAM for IndexGatherAM {
     async fn exec(self) -> usize {
-        self.counts[self.offset]
+        self.counts[self.offset as usize]
     }
 }
 
@@ -33,38 +33,41 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
+        let mut tg = typed_am_group!(IndexGatherAM, lamellar::world.clone());
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            tg.add_am_pe(
                 rank,
                 IndexGatherAM {
-                    offset: offset,
+                    offset: offset as u32,
                     counts: self.counts.clone(),
                 },
             );
         }
+        tg.exec().await;
     }
 }
 
-fn index_gather(
-    l_num_updates: usize,
-    launch_threads: usize,
+async fn run_ig(
     world: &LamellarWorld,
-    rand_index: &OneSidedMemoryRegion<usize>,
+    num_pes: usize,
+    rand_index: &[usize],
     counts: &Darc<Vec<usize>>,
-) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / launch_threads as f32;
-    let mut launch_tasks = vec![];
-    for tid in 0..launch_threads {
-        let start = (tid as f32 * slice_size).round() as usize;
-        let end = ((tid + 1) as f32 * slice_size).round() as usize;
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_index: rand_index.sub_region(start..end),
-            counts: counts.clone(),
-        }));
+) {
+    let mut tg = typed_am_group!(IndexGatherAM, world.clone());
+    for idx in rand_index {
+        let rank = idx % num_pes;
+        let offset = idx / num_pes;
+        tg.add_am_pe(
+            rank,
+            IndexGatherAM {
+                offset: offset as u32,
+                counts: counts.clone(),
+            },
+        );
     }
-    launch_tasks
+    tg.exec().await;
 }
 
 //===== HISTO END ======
@@ -80,7 +83,6 @@ fn main() {
     let g_num_updates = cli.global_updates;
     let l_num_updates = g_num_updates / num_pes;
     let iterations = cli.iterations;
-    let launch_threads = cli.launch_threads;
 
     if my_pe == 0 {
         cli.describe(num_pes);
@@ -100,16 +102,22 @@ fn main() {
     for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
-        let launch_tasks =
-            index_gather(l_num_updates, launch_threads, &world, &rand_index, &counts);
+        // let launch_tasks = index_gather(l_num_updates, launch_threads, &world, &rand_index, &counts);
+        let launch_tasks = run_ig(
+            &world,
+            num_pes,
+            unsafe { rand_index.as_slice().unwrap() },
+            &counts,
+        );
 
         if my_pe == 0 {
             println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
         }
         world.block_on(async move {
-            for task in launch_tasks {
-                task.await;
-            }
+            // for task in launch_tasks {
+            //     task.await;
+            // }
+            launch_tasks.await;
         });
         if my_pe == 0 {
             println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);

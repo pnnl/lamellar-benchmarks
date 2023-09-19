@@ -1,46 +1,41 @@
+mod options;
+use clap::Parser;
+
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use rand::prelude::*;
+use std::future::Future;
 use std::time::Instant;
 
-fn index_gather(array: &AtomicArray<usize>, rand_index: OneSidedMemoryRegion<usize>) {
+fn index_gather(
+    array: &AtomicArray<usize>,
+    rand_index: OneSidedMemoryRegion<usize>,
+) -> impl Future<Output = Vec<usize>> {
     let rand_slice = unsafe { rand_index.as_slice().expect("PE on world team") }; // Safe as we are the only consumer of this mem region
-    array.batch_load(rand_slice);
+    array.batch_load(rand_slice)
 }
 
-const COUNTS_LOCAL_LEN: usize = 1000000; //this will be 800MBB on each pe
-                                         // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
+// srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+    let cli = options::IndexGatherCli::parse();
+
+    let global_count = cli.global_size;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+    let iterations = cli.iterations;
 
     if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+        cli.describe(num_pes);
     }
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 1,
-        });
 
     let unsafe_array = UnsafeArray::<usize>::new(
         world.team(),
         global_count,
         lamellar::array::Distribution::Cyclic,
     );
-    // let rand_index =
-    //     UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, Distribution::Block);
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
@@ -51,7 +46,6 @@ fn main() {
             .enumerate()
             .for_each(|(i, x)| *x = i)
     };
-    // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
             *elem = rng.gen_range(0, global_count);
@@ -59,7 +53,6 @@ fn main() {
     }
     world.block_on(array_init);
     let array = unsafe_array.into_atomic();
-    // let rand_index = rand_index.into_read_only();
     for _i in 0..iterations {
         world.barrier();
 
@@ -68,12 +61,12 @@ fn main() {
         }
 
         let now = Instant::now();
-        index_gather(&array, rand_index.clone());
+        let res = index_gather(&array, rand_index.clone());
 
         if my_pe == 0 {
             println!("{:?} issue time {:?} ", my_pe, now.elapsed());
         }
-        array.wait_all();
+        array.block_on(res);
         if my_pe == 0 {
             println!(
                 "local run time {:?} local mups: {:?}",

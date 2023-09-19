@@ -1,11 +1,12 @@
+mod options;
+use clap::Parser;
+
 use lamellar::array::prelude::*;
 
 use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-
-const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
 
 fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
     array_type: &str,
@@ -57,15 +58,18 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
 
 // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+    let cli = options::HistoCli::parse();
+
+    let global_count = cli.global_size;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+
+    if my_pe == 0 {
+        cli.describe(num_pes);
+    }
 
     let counts = UnsafeArray::<usize>::new(
         world.team(),

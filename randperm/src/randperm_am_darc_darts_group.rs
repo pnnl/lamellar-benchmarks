@@ -1,8 +1,6 @@
 mod options;
 use clap::Parser;
 
-use futures::stream::FuturesUnordered;
-use futures::{Future, StreamExt};
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
@@ -12,98 +10,43 @@ use std::time::Instant;
 
 #[lamellar::AmData]
 struct DartAm {
-    target: Darc<(Vec<AtomicUsize>, AtomicUsize)>,
-    vals: Vec<usize>,
+    #[AmGroup(static)]
+    indices: Darc<(Vec<AtomicUsize>, AtomicUsize)>,
+    val: usize,
 }
 
 #[lamellar::am]
 impl LamellarAm for DartAm {
-    async fn exec(self) -> Vec<usize> {
+    async fn exec(self) -> Result<usize, usize> {
         //create a random index less than the length of indices
         let mut thread_rng = thread_rng();
         let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
-        let mut index = rng.gen_range(0, self.target.0.len());
+        let mut index = rng.gen_range(0, self.indices.0.len());
 
-        let mut results = vec![];
-        for val in self.vals.iter() {
-            //while compare and exhange using the index where to origial val is 0 and the new val is 1 fails
-            let mut res = self.target.0[index].compare_exchange(
+        //while compare and exhange using the index where to origial val is 0 and the new val is 1 fails
+        let mut res = self.indices.0[index].compare_exchange(
+            usize::MAX,
+            self.val,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        );
+        // println!("{:?} {}",res,self.indices.1.load(Ordering::Relaxed));
+        while res.is_err() && self.indices.1.load(Ordering::Relaxed) < self.indices.0.len() {
+            index = rng.gen_range(0, self.indices.0.len());
+            res = self.indices.0[index].compare_exchange(
                 usize::MAX,
-                *val,
+                self.val,
                 Ordering::Relaxed,
                 Ordering::Relaxed,
             );
-            while res.is_err() && self.target.1.load(Ordering::Relaxed) < self.target.0.len() {
-                index = rng.gen_range(0, self.target.0.len());
-                res = self.target.0[index].compare_exchange(
-                    usize::MAX,
-                    *val,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                );
-            }
-            if res.is_ok() {
-                self.target.1.fetch_add(1, Ordering::Relaxed);
-            } else {
-                results.push(*val);
-            }
         }
-        results
-    }
-}
-
-fn send_buffer(
-    world: &lamellar::LamellarWorld,
-    target: &Darc<(Vec<AtomicUsize>, AtomicUsize)>,
-    buffer_size: usize,
-    buffer: &mut Vec<usize>,
-    pe: usize,
-) -> impl Future<Output = Vec<usize>> {
-    let mut new_vec = Vec::with_capacity(buffer_size);
-    std::mem::swap(buffer, &mut new_vec);
-    let dart = DartAm {
-        target: target.clone(),
-        vals: new_vec,
-    };
-    world.exec_am_pe(pe, dart)
-}
-
-fn launch_darts(
-    world: &lamellar::LamellarWorld,
-    target: &Darc<(Vec<AtomicUsize>, AtomicUsize)>,
-    buffer_size: usize,
-    buffers: &mut Vec<Vec<usize>>,
-    rng: &mut SmallRng,
-    num_pes: usize,
-    indices: Box<dyn Iterator<Item = usize>>,
-) -> FuturesUnordered<impl Future<Output = std::vec::Vec<usize>>> {
-    let reqs = FuturesUnordered::new();
-    for i in indices {
-        let pe = rng.gen_range(0, num_pes);
-        buffers[pe].push(i);
-        if buffers[pe].len() == buffer_size {
-            reqs.push(send_buffer(
-                world,
-                target,
-                buffer_size,
-                &mut buffers[pe],
-                pe,
-            ));
+        if res.is_ok() {
+            self.indices.1.fetch_add(1, Ordering::Relaxed);
+            res
+        } else {
+            Err(self.val)
         }
     }
-    //check if any data remaining in buffers and launch a dart am
-    for pe in 0..num_pes {
-        if buffers[pe].len() > 0 {
-            reqs.push(send_buffer(
-                world,
-                target,
-                buffer_size,
-                &mut buffers[pe],
-                pe,
-            ));
-        }
-    }
-    reqs
 }
 
 fn main() {
@@ -115,7 +58,6 @@ fn main() {
     let global_count = cli.global_size;
     let local_count = global_count / num_pes;
     let iterations = cli.iterations;
-    let buffer_size = cli.buffer_size;
     let target_factor = cli.target_factor;
     let launch_threads = cli.launch_threads;
 
@@ -124,9 +66,8 @@ fn main() {
     }
 
     let target_local_count = local_count * target_factor;
-
-    let mut targets: Vec<AtomicUsize> = Vec::with_capacity(target_local_count);
     //initialize targets with max
+    let mut targets: Vec<AtomicUsize> = Vec::with_capacity(target_local_count);
     for _ in 0..target_local_count {
         targets.push(AtomicUsize::new(usize::MAX));
     }
@@ -136,9 +77,9 @@ fn main() {
     let local_lens = AtomicArray::new(&world, num_pes, lamellar::Distribution::Block);
 
     for _ in 0..iterations {
-        let world2 = world.clone();
-        let target2 = targets.clone();
         world.barrier();
+        let world2 = world.clone();
+        let targets2 = targets.clone();
         let start = Instant::now();
         world.block_on(
             the_array
@@ -147,35 +88,38 @@ fn main() {
                 .chunks(local_count / launch_threads)
                 .map(move |chunk| {
                     // let timer = Instant::now();
-                    let target = target2.clone();
-                    let world = world2.clone();
                     let mut thread_rng = thread_rng();
                     let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
+                    let mut darts = typed_am_group!(DartAm, &world2);
+                    // let mut darts = FuturesUnordered::new();
+                    for (i, _) in chunk.clone() {
+                        let dart = DartAm {
+                            indices: targets2.clone(),
+                            val: i + my_pe * local_count,
+                        };
+                        darts.add_am_pe(rng.gen_range(0, num_pes), dart);
+                    }
+                    // println!("launch time {:?}s ", timer.elapsed().as_secs_f64());
 
+                    let world2 = world2.clone();
+                    let targets2 = targets2.clone();
                     async move {
-                        let mut buffers = vec![Vec::with_capacity(buffer_size); num_pes];
-                        let mut reqs = launch_darts(
-                            &world,
-                            &target,
-                            buffer_size,
-                            &mut buffers,
-                            &mut rng,
-                            num_pes,
-                            Box::new(chunk.map(move |(i, _)| i + my_pe * local_count)),
-                        );
-
+                        let mut reqs = darts.exec().await;
+                        // println!("initial permute time {:?}", timer.elapsed());
                         while reqs.len() > 0 {
-                            let reqs_iter =
-                                Box::new(reqs.collect::<Vec<_>>().await.into_iter().flatten());
-                            reqs = launch_darts(
-                                &world,
-                                &target,
-                                buffer_size,
-                                &mut buffers,
-                                &mut rng,
-                                num_pes,
-                                reqs_iter,
-                            );
+                            let mut darts = typed_am_group!(DartAm, &world2);
+                            for req in reqs.iter() {
+                                if let AmGroupResult::Pe(_, res) = req {
+                                    if let Err(i) = res {
+                                        let dart = DartAm {
+                                            indices: targets2.clone(),
+                                            val: *i,
+                                        };
+                                        darts.add_am_pe(rng.gen_range(0, num_pes), dart);
+                                    }
+                                }
+                            }
+                            reqs = darts.exec().await;
                         }
                     }
                 })
@@ -237,6 +181,5 @@ fn main() {
         }
         targets.1.store(0, Ordering::Relaxed);
         world.barrier();
-        // the_array.print();
     }
 }
