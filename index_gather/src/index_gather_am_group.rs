@@ -3,69 +3,71 @@ use clap::Parser;
 
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
+use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
-use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
-struct HistoAM {
+struct IndexGatherAM {
     offset: usize,
-    counts: Darc<Vec<AtomicUsize>>,
+    #[AmGroup(static)]
+    counts: Darc<Vec<usize>>,
 }
 
 #[lamellar::am]
-impl LamellarAM for HistoAM {
-    async fn exec(self) {
-        self.counts[self.offset].fetch_add(1, Ordering::Relaxed);
+impl LamellarAM for IndexGatherAM {
+    async fn exec(self) -> usize {
+        self.counts[self.offset]
     }
 }
 
 #[lamellar::AmLocalData(Clone, Debug)]
 struct LaunchAm {
-    rand_index: Vec<usize>,
-    counts: Darc<Vec<AtomicUsize>>,
+    rand_index: OneSidedMemoryRegion<usize>,
+    counts: Darc<Vec<usize>>,
 }
 
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        for idx in &self.rand_index {
+        let mut tg = typed_am_group!(IndexGatherAM, lamellar::world.clone());
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            tg.add_am_pe(
                 rank,
-                HistoAM {
+                IndexGatherAM {
                     offset: offset,
                     counts: self.counts.clone(),
                 },
             );
         }
+        tg.exec().await;
     }
 }
 
-fn histo(
-    l_num_updates: usize,
-    launch_threads: usize,
+async fn run_ig(
     world: &LamellarWorld,
-    mut rand_index: Vec<usize>,
-    counts: &Darc<Vec<AtomicUsize>>,
-) -> Vec<impl Future<Output = ()>> {
-    let slice_size = l_num_updates as f32 / launch_threads as f32;
-    let mut launch_tasks = vec![];
-    for tid in 0..launch_threads {
-        let start = (tid as f32 * slice_size).round() as usize;
-        let end = ((tid + 1) as f32 * slice_size).round() as usize;
-        let split_index = rand_index.len() - (end - start);
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_index: rand_index.split_off(split_index),
-            counts: counts.clone(),
-        }));
+    num_pes: usize,
+    rand_index: &[usize],
+    counts: &Darc<Vec<usize>>,
+) {
+    let mut tg = typed_am_group!(IndexGatherAM, world.clone());
+    for idx in rand_index {
+        let rank = idx % num_pes;
+        let offset = idx / num_pes;
+        tg.add_am_pe(
+            rank,
+            IndexGatherAM {
+                offset: offset,
+                counts: counts.clone(),
+            },
+        );
     }
-    launch_tasks
+    tg.exec().await;
 }
 
 //===== HISTO END ======
@@ -74,60 +76,49 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let cli = options::HistoCli::parse();
+    let cli = options::IndexGatherCli::parse();
 
     let global_count = cli.global_size;
     let local_count = global_count / num_pes;
     let g_num_updates = cli.global_updates;
     let l_num_updates = g_num_updates / num_pes;
     let iterations = cli.iterations;
-    let launch_threads = cli.launch_threads;
 
     if my_pe == 0 {
         cli.describe(num_pes);
     }
 
-    let mut counts_data = Vec::with_capacity(local_count);
-    for _ in 0..local_count {
-        counts_data.push(AtomicUsize::new(0));
-    }
+    let counts_data = vec![0; local_count];
     let counts = Darc::new(&world, counts_data).expect("unable to create darc");
-    let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
-    let rand_index = (0..l_num_updates)
-        .into_iter()
-        .map(|_| rng.gen_range(0, global_count))
-        .collect::<Vec<usize>>();
 
-    //create multiple launch tasks, that iterated through portions of rand_index in parallel
-    // let launch_threads = match std::env::var("LAMELLAR_THREADS") {
-    //     Ok(n) => n.parse::<usize>().unwrap(),
-    //     Err(_) => 1,
-    // };
-    // let launch_threads = std::cmp::max(launch_threads / 2, 1);
+    let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
+    let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+
+    unsafe {
+        for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
+            *elem = rng.gen_range(0, global_count);
+        }
+    }
     for _i in 0..iterations {
         world.barrier();
         let now = Instant::now();
-        let launch_tasks = histo(
-            l_num_updates,
-            launch_threads,
+        let launch_tasks = run_ig(
             &world,
-            rand_index.clone(),
+            num_pes,
+            unsafe { rand_index.as_slice().unwrap() },
             &counts,
         );
 
         if my_pe == 0 {
-            println!("{:?} issue time {:?} ", my_pe, now.elapsed());
+            println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
         }
         world.block_on(async move {
-            for task in launch_tasks {
-                task.await;
-            }
+            launch_tasks.await;
         });
         if my_pe == 0 {
             println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
         }
         world.wait_all();
-
         if my_pe == 0 {
             println!(
                 "local run time {:?} local mups: {:?}",
@@ -142,7 +133,13 @@ fn main() {
                 "MUPS: {:?}",
                 ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
             );
+            println!("Secs: {:?}", global_time,);
+            println!(
+                "GB/s Injection rate: {:?}",
+                (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
+            );
         }
+
         if my_pe == 0 {
             println!(
                 "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",
@@ -152,18 +149,6 @@ fn main() {
                 world.MB_sent() / global_time,
                 ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
             );
-        }
-
-        println!(
-            "pe {:?} sum {:?}",
-            my_pe,
-            counts
-                .iter()
-                .map(|e| e.load(Ordering::Relaxed))
-                .sum::<usize>()
-        );
-        for elem in counts.iter() {
-            elem.store(0, Ordering::SeqCst);
         }
     }
 }

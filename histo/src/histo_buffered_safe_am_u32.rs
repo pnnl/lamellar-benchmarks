@@ -15,22 +15,25 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoBufferedAM {
-    buff: std::vec::Vec<usize>,
+    buff: std::vec::Vec<u32>,
     counts: Darc<Vec<AtomicUsize>>,
 }
 
 #[lamellar::am]
 impl LamellarAM for HistoBufferedAM {
     async fn exec(self) {
+        // let timer = Instant::now();
         for o in &self.buff {
-            self.counts[*o].fetch_add(1, Ordering::Relaxed);
+            self.counts[*o as usize].fetch_add(1, Ordering::Relaxed);
         }
+        // println!("tid: {:?} exec time {:?}",std::thread::current().id(), timer.elapsed());
     }
 }
 
 #[lamellar::AmLocalData(Clone, Debug)]
 struct LaunchAm {
     rand_index: OneSidedMemoryRegion<usize>,
+    // counts: SharedMemoryRegion<usize>,
     counts: Darc<Vec<AtomicUsize>>,
     buffer_size: usize,
 }
@@ -39,13 +42,13 @@ struct LaunchAm {
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
         let num_pes = lamellar::num_pes;
-        let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
+        let mut buffs: std::vec::Vec<std::vec::Vec<u32>> =
             vec![Vec::with_capacity(self.buffer_size); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
-            buffs[rank].push(offset);
+            buffs[rank].push(offset as u32);
             if buffs[rank].len() >= self.buffer_size {
                 let buff = buffs[rank].clone();
                 task_group.exec_am_pe(
@@ -126,6 +129,9 @@ fn main() {
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
     unsafe {
+        // for elem in counts.as_mut_slice().unwrap().iter_mut() {
+        //     *elem = 0;
+        // }
         for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
             *elem = rng.gen_range(0, global_count);
         }
@@ -188,6 +194,7 @@ fn main() {
             println!(
                 "pe {:?} sum {:?}",
                 my_pe,
+                // unsafe {counts.as_slice().unwrap().iter().sum::<usize>()}
                 counts
                     .iter()
                     .map(|e| e.load(Ordering::Relaxed))

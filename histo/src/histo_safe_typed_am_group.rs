@@ -6,6 +6,7 @@ use lamellar::memregion::prelude::*;
 
 use rand::prelude::*;
 use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 //===== HISTO BEGIN ======
@@ -13,13 +14,21 @@ use std::time::Instant;
 #[lamellar::AmData(Clone, Debug)]
 struct HistoAM {
     offset: usize,
+    #[AmGroup(static)]
     counts: SharedMemoryRegion<usize>,
 }
 
 #[lamellar::am]
 impl LamellarAM for HistoAM {
     async fn exec(self) {
-        unsafe { self.counts.as_mut_slice().unwrap()[self.offset] += 1 }; //this is unsafe and has potential for races / dropped updates
+        // this casts the underlying entry to an atomicusize to perform atomic updates
+        let elem = unsafe {
+            ((&mut self.counts.as_mut_slice().unwrap()[self.offset] as *mut usize)
+                as *mut AtomicUsize)
+                .as_ref()
+                .unwrap()
+        };
+        elem.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -32,10 +41,11 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
+        let mut tg = typed_am_group!(HistoAM, lamellar::world.clone());
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            tg.add_am_pe(
                 rank,
                 HistoAM {
                     offset: offset,
@@ -43,6 +53,7 @@ impl LamellarAM for LaunchAm {
                 },
             );
         }
+        tg.exec().await;
     }
 }
 
@@ -79,7 +90,9 @@ fn main() {
     let local_count = global_count / num_pes;
     let g_num_updates = cli.global_updates;
     let l_num_updates = g_num_updates / num_pes;
+    let iterations = cli.iterations;
     let launch_threads = cli.launch_threads;
+    let buffer_size = cli.buffer_size;
 
     if my_pe == 0 {
         cli.describe(num_pes);
@@ -98,23 +111,21 @@ fn main() {
         }
     }
 
+    //create multiple launch tasks, that iterated through portions of rand_index in parallel
+
     world.barrier();
     let now = Instant::now();
-    let launch_tasks = histo(l_num_updates, launch_threads, &world, &rand_index, &counts);
+    let mut tasks = histo(l_num_updates, launch_threads, &world, &rand_index, &counts);
 
     if my_pe == 0 {
         println!("{:?} issue time {:?} ", my_pe, now.elapsed());
     }
-    world.block_on(async move {
-        for task in launch_tasks {
-            task.await;
-        }
-    });
+    world.block_on(futures::future::join_all(tasks));
     if my_pe == 0 {
         println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
     }
-    world.wait_all();
 
+    world.wait_all();
     if my_pe == 0 {
         println!(
             "local run time {:?} local mups: {:?}",

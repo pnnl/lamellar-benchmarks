@@ -1,11 +1,12 @@
+mod options;
+use clap::Parser;
+
 use lamellar::array::prelude::*;
 
 use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-
-const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
 
 fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
     array_type: &str,
@@ -57,23 +58,33 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
 
 // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let l_num_updates = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+    let cli = options::HistoCli::parse();
 
-    let counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let global_count = cli.global_size;
+    let g_num_updates = cli.global_updates;
+    let l_num_updates = g_num_updates / num_pes;
+
+    if my_pe == 0 {
+        cli.describe(num_pes);
+    }
+
+    let counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    );
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    );
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
     // initialize arrays
-    let counts_init = unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         let mut rng = rng.lock();
@@ -101,7 +112,7 @@ fn main() {
         1,
         0.0,
     );
-    world.block_on(unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)});
+    world.block_on(unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) });
     counts.barrier();
 
     let counts = counts.into_local_lock();

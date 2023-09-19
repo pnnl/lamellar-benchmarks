@@ -1,3 +1,6 @@
+mod options;
+use clap::Parser;
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
@@ -159,6 +162,7 @@ impl LamellarAM for TcAm {
 }
 
 fn main() {
+<<<<<<< HEAD
 
     // collect arguments from the command line
     let args: Vec<String> = std::env::args().collect();
@@ -181,6 +185,21 @@ fn main() {
     let my_pe = world.my_pe();
     
     // load, reorder, and distribute the graph to all PEs
+=======
+    let world = lamellar::LamellarWorldBuilder::new().build();
+    let my_pe = world.my_pe();
+
+    let cli = options::TcCli::parse();
+
+    let file = &cli.graph_file;
+    let iterations = cli.iterations;
+    let launch_threads = cli.launch_threads;
+
+    if my_pe == 0 {
+        cli.describe();
+    }
+    //this loads, reorders, and distributes the graph to all PEs
+>>>>>>> dev
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
     
     // save to binary format; this is useful in contexts where one wishes to run many experiments, and avoid the cost of loading/parsing from .tsf format
@@ -193,6 +212,7 @@ fn main() {
         println!("num nodes {:?}", graph.num_nodes())
     };
 
+<<<<<<< HEAD
     world.barrier();
     let timer = std::time::Instant::now();
 
@@ -216,40 +236,69 @@ fn main() {
     world.block_on(async move {
         for req in reqs {
             req.await;
-        }
-    });
-    if my_pe == 0 {
-        println!("issue time: {:?}", timer.elapsed().as_secs_f64())
-    };
-    // at this point all the triangle counting active messages have been initiated.
+=======
+    for _i in 0..iterations {
+        final_cnt.store(0, Ordering::SeqCst);
+        world.barrier();
 
-    world.wait_all(); //wait for all the triangle counting active messages to finish locally
-    if my_pe == 0 {
-        println!("local time: {:?}", timer.elapsed().as_secs_f64())
-    };
+        let timer = std::time::Instant::now();
 
-    world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
-    if my_pe == 0 {
-        println!("local cnt {:?}", final_cnt.load(Ordering::SeqCst))
-    };
-
-    if my_pe != 0 {
-        world.block_on(world.exec_am_pe(
-            //send the local triangle counting result to the PE 0
-            0,
-            CntAm {
+        // this section of code creates and executes a number of "LaunchAMs" so that we
+        // can use multiple threads to initiate the triangle counting active message.
+        let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
+        let mut reqs = vec![];
+        for tid in 0..launch_threads {
+            let start = (tid as f32 * batch_size).round() as u32;
+            let end = ((tid + 1) as f32 * batch_size).round() as u32;
+            reqs.push(world.exec_am_local(LaunchAm {
+                graph: graph.clone(),
+                start: start,
+                end: end,
                 final_cnt: final_cnt.clone(),
-                cnt: final_cnt.load(Ordering::SeqCst),
-            },
-        ));
-    }
-    world.barrier(); //at this point the final triangle counting result is available on PE 0
+            }));
+>>>>>>> dev
+        }
 
-    if my_pe == 0 {
-        println!(
-            "triangles counted: {:?} global time: {:?}",
-            final_cnt.load(Ordering::SeqCst),
-            timer.elapsed().as_secs_f64()
-        )
-    };
+        //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
+        // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
+        world.block_on(async move {
+            for req in reqs {
+                req.await;
+            }
+        });
+        if my_pe == 0 {
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64())
+        };
+        // at this point all the triangle counting active messages have been initiated.
+
+        world.wait_all(); //wait for all the triangle counting active messages to finish locally
+        if my_pe == 0 {
+            println!("local time: {:?}", timer.elapsed().as_secs_f64())
+        };
+
+        world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
+        if my_pe == 0 {
+            println!("local cnt {:?}", final_cnt.load(Ordering::SeqCst))
+        };
+
+        if my_pe != 0 {
+            world.block_on(world.exec_am_pe(
+                //send the local triangle counting result to the PE 0
+                0,
+                CntAm {
+                    final_cnt: final_cnt.clone(),
+                    cnt: final_cnt.load(Ordering::SeqCst),
+                },
+            ));
+        }
+        world.barrier(); //at this point the final triangle counting result is available on PE 0
+
+        if my_pe == 0 {
+            println!(
+                "triangles counted: {:?} global time: {:?}",
+                final_cnt.load(Ordering::SeqCst),
+                timer.elapsed().as_secs_f64()
+            )
+        };
+    }
 }

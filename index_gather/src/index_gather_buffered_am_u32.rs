@@ -13,7 +13,7 @@ use std::time::Instant;
 
 #[lamellar::AmData(Clone, Debug)]
 struct IndexGatherBufferedAM {
-    buff: std::vec::Vec<usize>,
+    buff: std::vec::Vec<u32>,
     counts: ReadOnlyArray<usize>,
 }
 
@@ -23,7 +23,7 @@ impl LamellarAM for IndexGatherBufferedAM {
         let counts_slice = self.counts.local_data();
         self.buff
             .iter()
-            .map(|i| counts_slice[*i])
+            .map(|i| counts_slice[*i as usize])
             .collect::<Vec<usize>>()
     }
 }
@@ -35,14 +35,14 @@ fn buffered_ig<'a, I: Iterator<Item = &'a usize>>(
     rand_index: I,
     counts: &ReadOnlyArray<usize>,
 ) {
-    let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
+    let mut buffs: std::vec::Vec<std::vec::Vec<u32>> =
         vec![Vec::with_capacity(buffer_size); num_pes];
     let task_group = LamellarTaskGroup::new(world.clone());
     for idx in rand_index {
         let rank = idx % num_pes;
         let offset = idx / num_pes;
 
-        buffs[rank].push(offset);
+        buffs[rank].push(offset as u32);
         if buffs[rank].len() >= buffer_size {
             let buff = buffs[rank].clone();
             task_group.exec_am_pe(
