@@ -5,6 +5,7 @@ members = [
     "index_gather",
     "randperm",
     "triangle_count",
+    "sparse_matrix_am",
     #"fail_example"
 ]
 
