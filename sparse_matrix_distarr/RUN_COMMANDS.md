@@ -8,7 +8,7 @@ cargo run --example <examplefiletorun>
 
 # guidance
 
-- always make sure LAMELLAR_THREADS is less than or equal to cpus-per-task
+- always make sure LAMELLAR_THREADS is less than or equal to cpus-per-task (ideally equal)
 
 # commands
 

@@ -1,23 +1,77 @@
+//! Tools for permutations
+
+
+// ============================================================================
+
+use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+
+use lamellar::LamellarWorld;
 use lamellar::array::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let world = lamellar::LamellarWorldBuilder::new().build();
+// ============================================================================
+
+pub mod randperm_am_darc_darts;
+
+// ============================================================================
+
+
+pub struct Permutation{
+    pub forward:    Vec<usize>,
+    pub backward:   Vec<usize>,
+}
+
+impl Permutation {
+    /// Returns the label assigned to an element
+    pub fn get_forward( &self, original: usize ) -> usize { self.forward[original].clone() }
+
+    /// Given a label, find the element it was attached to
+    pub fn get_backward( &self, label: usize ) -> usize { self.backward[label].clone() }    
+
+    /// Returns the label assigned to an element
+    pub fn forward( &self ) -> &Vec<usize> { &self.forward }
+
+    /// Given a label, find the element it was attached to
+    pub fn backward( &self ) -> &Vec<usize> { &self.backward }   
+    
+    /// Generates a random permutation from a random seed
+    pub fn random( length: usize, seed: usize ) -> Self {
+        let mut rng = StdRng::seed_from_u64(seed as u64);
+        let mut forward: Vec<_> = (0..length).collect(); 
+        let mut backward    =   vec![0; forward.len()];       
+        forward.shuffle(&mut rng); // Shuffle the elements to generate a random permutation
+        for (original,label) in forward.iter().cloned().enumerate() {
+            backward[label] = original;
+        }
+        return Permutation{ forward, backward }
+    }
+}
+
+
+pub fn rand_perm( length: usize, seed: usize ) -> Vec<usize> {
+    let mut rng = StdRng::seed_from_u64(seed as u64);
+    let mut forward: Vec<_> = (0..length).collect();    
+    forward.shuffle(&mut rng); // Shuffle the elements to generate a random permutation
+    forward
+}
+
+
+pub fn rand_perm_distributed( 
+        world: LamellarWorld, 
+        global_count: usize, // size of permuted array
+        target_factor: usize, // multiplication factor for target array -- defualt to 10
+        iterations: usize, // -- default to 1
+        seed: usize, 
+    )  
+    -> ReadOnlyArray<usize>    
+{
+
     let my_pe = world.my_pe();
-    let global_count = args
-        .get(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
-    let target_factor = args
-        .get(2)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
-    let iterations = args
-        .get(4)
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1);
+
     if my_pe == 0 {
         println!("array size {}", global_count);
         println!("target array size {}", global_count * target_factor);
@@ -34,7 +88,7 @@ fn main() {
         global_count * target_factor,
         lamellar::array::Distribution::Block,
     );
-    let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+    let mut rng: StdRng = SeedableRng::seed_from_u64( (seed + my_pe) as u64);
 
     // initialize arrays
     let darts_init = unsafe {
@@ -56,6 +110,12 @@ fn main() {
     if my_pe == 0 {
         println!("start");
     }
+
+    let mut the_array   =   ReadOnlyArray::<usize>::new(
+                                & world,
+                                world.num_pes() * 2,
+                                lamellar::array::Distribution::Block,
+                            );
 
     for _ in 0..iterations {
         world.barrier();
@@ -108,7 +168,7 @@ fn main() {
             println!("permute time {:?}s ", now.elapsed().as_secs_f64(),);
         }
         let collect_start = Instant::now();
-        let the_array = world.block_on(
+        the_array = world.block_on(
             target_array
                 .dist_iter()
                 .filter_map(|elem| {
@@ -149,4 +209,12 @@ fn main() {
         );
         world.barrier();
     }
+    return the_array
 }
+
+
+
+//  ==========================================
+//  DISTRIBUTED PERMUTATION
+//  ==========================================
+

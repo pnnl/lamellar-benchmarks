@@ -103,8 +103,9 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let num_rows_per_pe         =   cli.num_rows_per_pe;
-    let avg_nz_per_row          =   cli.avg_nz_per_row;
+    let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
+    let rows_per_pe             =   world.num_threads() * rows_per_thread_per_pe;
+    let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_permute            =   cli.random_seed; 
     let verify                  =   cli.verify.clone().unwrap_or(false);
 
@@ -120,11 +121,11 @@ fn main() {
     // define parameters
     // -----------------
 
-    let num_rows_global         =   num_rows_per_pe * world.num_pes();    
-    let row_owned_first_in      =   num_rows_per_pe * world.my_pe();
-    let row_owned_first_out     =   ( row_owned_first_in + num_rows_per_pe ).min( num_rows_global );
+    let num_rows_global         =   rows_per_pe * world.num_pes();    
+    let row_owned_first_in      =   rows_per_pe * world.my_pe();
+    let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
     let num_rows_owned          =   row_owned_first_out - row_owned_first_out;
-    // let edge_probability        =   ( avg_nz_per_row - 1.0 ) * 2.0 / ( num_rows_global - 1 ) as f64;
+    // let edge_probability        =   ( avg_nnz_per_row - 1.0 ) * 2.0 / ( num_rows_global - 1 ) as f64;
 
     let seed_matrix             =   seed_permute+2;
 
@@ -180,7 +181,7 @@ fn main() {
                                 =   dart_unit_triangular_rows(
                                         seed_matrix + pe,
                                         num_rows_global,
-                                        avg_nz_per_row * num_rows_per_pe,
+                                        avg_nnz_per_row * rows_per_pe,
                                         & permutation_row.backward[row_owned_first_in .. row_owned_first_out],
                                     );
         
@@ -409,8 +410,8 @@ fn main() {
         println!("");
         println!("Finished successfully");
         println!("");
-        println!("Number of rows per PE:              {:?}", cli.num_rows_per_pe );        
-        println!("Average number of nonzeros per row: {:?}", cli.avg_nz_per_row );        
+        println!("Number of rows per thead per PE:    {:?}", cli.rows_per_thread_per_pe );        
+        println!("Average number of nonzeros per row: {:?}", cli.avg_nnz_per_row );        
         println!("Random seed:                        {:?}", cli.random_seed );
         println!("Number of PE's:                     {:?}", world.num_pes() );  
         println!("Cores per PE:                       {:?}", world.num_threads());
@@ -451,11 +452,11 @@ fn main() {
 struct Cli {
     /// Number of rows stored on each PE
     #[arg(short, long, )]
-    num_rows_per_pe: usize,
+    rows_per_thread_per_pe: usize,
 
     /// Average number of nonzeros per row
     #[arg(short, long, )]
-    avg_nz_per_row: usize,
+    avg_nnz_per_row: usize,
 
     /// Seed for the random generator that determines the matrix.
     #[arg(short, long, )]

@@ -6,7 +6,7 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
-use sparse_matrix_am::matrix_constructors::erdos_renyi_row;
+use sparse_matrix_am::matrix_constructors::dart_uniform_rows;
 
 use clap::{Parser, Subcommand};
 use ordered_float::OrderedFloat;
@@ -38,9 +38,12 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let num_rows_global         =   cli.matrix_size;
-    let edge_probability        =   cli.edge_probability;
-    let seed_permute            =   cli.random_seed;  
+    let rows_per_thread_per_pe      =   cli.rows_per_thread_per_pe;
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
+    let num_rows_global         =   rows_per_pe * world.num_pes();    
+    // let edge_probability        =   ( cli.avg_nnz_per_row as f64 ) / ( num_rows_global as f64 );
+    let avg_nnz_per_row         =   cli.avg_nnz_per_row;
+    let seed_matrix             =   cli.random_seed;  
 
     // initialize timer variables
     // --------------------------
@@ -51,12 +54,9 @@ fn main() {
     // define parameters
     // -----------------
 
-    let num_rows_per_pe         =   1 + (num_rows_global / world.num_pes());    
-    let row_owned_first_in      =   num_rows_per_pe * world.my_pe();
-    let row_owned_first_out     =   ( row_owned_first_in + num_rows_per_pe ).min( num_rows_global );
+    let row_owned_first_in      =   rows_per_pe * world.my_pe();
+    let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
     let num_rows_owned          =   row_owned_first_out - row_owned_first_out;
-
-    let seed_matrix             =   seed_permute+2;   
 
     // initialize values
     // -----------------
@@ -64,37 +64,50 @@ fn main() {
     let start_time_initializing_values  
                                 =   Instant::now();
 
-    // this function returns the `index_row`th row of the permuted matrix, 
-    // repersented by a pair of vectors (indices_row,indices_col)
-    let get_row                 =   | index_row: usize | -> (Vec<usize>, Vec<usize>, Vec<OrderedFloat<f64>>) {
-        let mut indices_col     =   erdos_renyi_row(
-                                        seed_matrix + index_row,
-                                        num_rows_global,
-                                        edge_probability,
-                                        index_row,     
-                                    );    
-        // define a row vector (filled with value `index_row`)
-        let indices_row         =   vec![ index_row; indices_col.len() ]; 
+
+    // define the unpermuted matrix
+    // ----------------------------    
+    let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();
+    let (indices_row,indices_col)         
+                                =   dart_uniform_rows(
+                                        seed_matrix + world.my_pe(), // random seed
+                                        num_rows_global, // number of matrix columns
+                                        avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                        & owned_row_indices, // list of row indices; a row will be generated for each index
+                                    );
+
+
+    // // this function returns the `index_row`th row of the permuted matrix, 
+    // // repersented by a pair of vectors (indices_row,indices_col)
+    // let get_row                 =   | index_row: usize | -> (Vec<usize>, Vec<usize>, Vec<OrderedFloat<f64>>) {
+    //     let mut indices_col     =   erdos_renyi_row(
+    //                                     seed_matrix + index_row,
+    //                                     num_rows_global,
+    //                                     edge_probability,
+    //                                     index_row,     
+    //                                 );    
+    //     // define a row vector (filled with value `index_row`)
+    //     let indices_row         =   vec![ index_row; indices_col.len() ]; 
         // define a random number generator
-        let mut rng             =   rand::rngs::StdRng::seed_from_u64( (seed_matrix + num_rows_global + index_row) as u64 );
+        let mut rng             =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
         // define a vector of randomly generated weights
         let weights: Vec<_>     =   (0..indices_col.len())
                                         .map(|x| OrderedFloat(rng.gen::<f64>()) )
                                         .collect();
 
-        (indices_row, indices_col, weights)       
-    };
+    //     (indices_row, indices_col, weights)       
+    // };
 
-    // generate the portion of the matrix owned by this PE
-    let mut indices_row         =   Vec::new();
-    let mut indices_col         =   Vec::new();
-    let mut weights             =   Vec::new();
-    for index_row in row_owned_first_in .. row_owned_first_out {
-        let (indices_row_new, indices_col_new, weights_new)  =   get_row( index_row );
-        indices_row.extend_from_slice( & indices_row_new );
-        indices_col.extend_from_slice( & indices_col_new ); 
-        weights.extend_from_slice( & weights_new );                                                                           
-    }
+    // // generate the portion of the matrix owned by this PE
+    // let mut indices_row         =   Vec::new();
+    // let mut indices_col         =   Vec::new();
+    // let mut weights             =   Vec::new();
+    // for index_row in row_owned_first_in .. row_owned_first_out {
+    //     let (indices_row_new, indices_col_new, weights_new)  =   get_row( index_row );
+    //     indices_row.extend_from_slice( & indices_row_new );
+    //     indices_col.extend_from_slice( & indices_col_new ); 
+    //     weights.extend_from_slice( & weights_new );                                                                           
+    // }
     let num_entries             =   indices_row.len();
     let matrix                  =   TriMat::from_triplets(
                                         (num_rows_global,num_rows_global),
@@ -180,8 +193,12 @@ fn main() {
         println!("");
         println!("Finished successfully");
         println!("");
-        println!("Matrix size:                        {:?}", cli.matrix_size );        
-        println!("Edge probability:                   {:?}", cli.edge_probability );
+
+        println!("Number of PE's:                     {:?}", world.num_pes() );  
+        println!("Cores per PE:                       {:?}", world.num_threads());        
+        println!("Matrix size:                        {:?}", num_rows_global );
+        println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );        
+        println!("Avg nnz per row:                    {:?}", matrix.nnz() as f64 / rows_per_pe as f64 );
         println!("Random seed:                        {:?}", cli.random_seed );
         println!("");          
         println!("Time to initialize matrix:          {:?}", time_to_initialize );
@@ -205,13 +222,13 @@ fn main() {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// The number of rows and columns of the matrix
+    /// The number of rows owned by each PE
     #[arg(short, long, )]
-    matrix_size: usize,
+    rows_per_thread_per_pe: usize,
 
-    /// Probability that each entry will be nonzero (between 0 and 1)
+    /// Desired average number of nonzero entries per row
     #[arg(short, long, )]
-    edge_probability: f64,
+    avg_nnz_per_row: usize,
 
     /// Turn debugging information on
     #[arg(short, long, )]
@@ -242,3 +259,22 @@ impl LamellarAM for UpdateScoresAm {
         }
     }
 }
+
+
+
+
+
+//  ===========================================================================
+//  PERFORMANCE
+//  ===========================================================================
+
+
+// Number of PE's:                     4
+// Cores per PE:                       2
+// Matrix size:                        400000
+// Rows per PE:                        100000
+// Avg nnz per row:                    10.0
+// Random seed:                        0
+
+// Time to initialize matrix:          164.042262ms
+// Time to get shortest paths:         118.044479ms
