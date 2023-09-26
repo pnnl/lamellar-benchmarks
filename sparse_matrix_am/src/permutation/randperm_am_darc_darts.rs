@@ -101,6 +101,7 @@ pub fn random_permutation(
         iterations: usize, // -- default to 1
         launch_threads: usize, // -- default to 1?
         seed: usize, 
+        verbose: bool, 
     )  
     -> ReadOnlyArray<usize>       
 {
@@ -169,11 +170,11 @@ pub fn random_permutation(
                 .for_each_async(move |future| async move { future.await }),
         );
         world.wait_all();
-        if my_pe == 0 {
+        if verbose && (my_pe == 0) {
             println!("local run time {:?} ", start.elapsed(),);
         }
         world.barrier(); //all work is done
-        if my_pe == 0 {
+        if verbose && (my_pe == 0) {
             println!("permute time {:?}s ", start.elapsed().as_secs_f64());
         }
 
@@ -200,7 +201,7 @@ pub fn random_permutation(
         world.block_on(unsafe { the_array.put(start_index, &data) });
         world.barrier();
         let global_time = start.elapsed().as_secs_f64();
-        if my_pe == 0 {
+        if verbose && (my_pe == 0) {
             println!("collect time: {:?}s", collect_start.elapsed().as_secs_f64());
             println!(
                 "global time {:?} MB {:?} MB/s: {:?} ",

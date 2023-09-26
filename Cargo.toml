@@ -6,6 +6,7 @@ members = [
     "randperm",
     "triangle_count",
     "sparse_matrix_am",
+    "sparse_matrix_distarr",    
     #"fail_example"
 ]
 

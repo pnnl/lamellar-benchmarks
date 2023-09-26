@@ -30,18 +30,14 @@ fn main() {
 
     let world                   =   lamellar::LamellarWorldBuilder::new().build();    
 
-    // user inputs
-    // -----------------    
-
     // command line arguments
     // -----------------    
 
     let cli = Cli::parse();
 
-    let rows_per_thread_per_pe      =   cli.rows_per_thread_per_pe;
+    let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
     let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
     let num_rows_global         =   rows_per_pe * world.num_pes();    
-    // let edge_probability        =   ( cli.avg_nnz_per_row as f64 ) / ( num_rows_global as f64 );
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_matrix             =   cli.random_seed;  
 
@@ -211,6 +207,32 @@ fn main() {
 
 
 
+//  ===========================================================================
+//  ACTIVE MESSAGE
+//  ===========================================================================
+
+
+
+/// Allows each node to send updated scores to the other PE's
+#[lamellar::AmData(Debug, Clone)]
+pub struct UpdateScoresAm {
+    pub new_scores:             Vec< (usize, f64) >,            // a collection of new vertex scores
+    pub receives_new_scores:    LocalRwDarc< Vec< OrderedFloat<f64> > >,   // the score ledger we want to update with the new scores
+    pub scores_have_changed:    LocalRwDarc< bool >,                  // flag to track whether any scores have changed
+}
+
+#[lamellar::am]
+impl LamellarAM for UpdateScoresAm {
+    async fn exec(self) {        
+        let mut receives_new_scores         =   self.receives_new_scores.write(); // get a writable handle on the local collection of diagonal elements
+        let mut scores_have_changed         =   self.scores_have_changed.write();
+        **scores_have_changed               =   true; // mark that at least one score has changed
+        for ( vertex, score ) in self.new_scores.iter() {
+            receives_new_scores[ *vertex ]  =   OrderedFloat( * score );
+        }
+    }
+}
+
 
 
 //  ===========================================================================
@@ -233,31 +255,6 @@ struct Cli {
     /// Turn debugging information on
     #[arg(short, long, )]
     random_seed: usize,
-}
-
-
-
-
-
-
-/// Allows each node to send updated scores to the other PE's
-#[lamellar::AmData(Debug, Clone)]
-pub struct UpdateScoresAm {
-    pub new_scores:             Vec< (usize, f64) >,            // a collection of new vertex scores
-    pub receives_new_scores:    LocalRwDarc< Vec< OrderedFloat<f64> > >,   // the score ledger we want to update with the new scores
-    pub scores_have_changed:    LocalRwDarc< bool >,                  // flag to track whether any scores have changed
-}
-
-#[lamellar::am]
-impl LamellarAM for UpdateScoresAm {
-    async fn exec(self) {        
-        let mut receives_new_scores         =   self.receives_new_scores.write(); // get a writable handle on the local collection of diagonal elements
-        let mut scores_have_changed         =   self.scores_have_changed.write();
-        **scores_have_changed               =   true; // mark that at least one score has changed
-        for ( vertex, score ) in self.new_scores.iter() {
-            receives_new_scores[ *vertex ]  =   OrderedFloat( * score );
-        }
-    }
 }
 
 
