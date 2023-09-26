@@ -162,18 +162,37 @@ fn main() {
     let destination_offset      =   LocalRwDarc::new( world.team(), vec![0; rows_per_pe + 1] ).unwrap();
 
     for pe in 0 .. world.num_pes() {
-        let source_offset       =   column_offset_binned[ pe ].clone(); // pull out the set of column offset for this pe
-        if source_offset[ rows_per_pe ] != 0 {
-            let am              =   SendOffsets {
-                                        source_offset,
-                                        destination_offset: destination_offset.clone(),
-                                    };
-            let _               =   world.exec_am_pe( pe, am );  // add these offset to the global count                
+        let source_offset       =   & column_offset_binned[ pe ]; // pull out the set of column offset for this pe
+        let num_nz_columns      =   (0 .. rows_per_pe ).filter( |x| source_offset[*x]<source_offset[x+1] ).count();
+        let mut source_histo    =   Vec::with_capacity( num_nz_columns);
+        for x in 0 .. rows_per_pe {
+            if source_offset[x]<source_offset[x+1] {
+                source_histo.push( ( x + 1, source_offset[x+1] - source_offset[x] ) ); // note we shift by 1
+            }
         }
+        // let source_histo        =   (0 .. rows_per_pe )
+        //                                 .filter( |x| source_offset[*x]<source_offset[x+1] )
+        //                                 .map( |x| ( x + 1, source_offset[x+1] - source_offset[x] ) ) // note we shift by 1
+        //                                 .collect::<Vec<(usize,usize)>>();
+        let am                  =   SendHisto {
+                                        source_histo,
+                                        destination_histo: destination_offset.clone(),
+                                    };
+        let _                   =   world.exec_am_pe( pe, am );  // add these offset to the global count                
     }
 
     world.wait_all();
     world.barrier();
+
+    // at this point `destination_offset` is a (shifted) histogram; now replace it
+    // with an in-place cumulative sum, to generate the correct column offset array
+    {
+        let mut destination_offset_write
+                                =   destination_offset.write();
+        for j in 1 .. rows_per_pe + 1 {
+            destination_offset_write[ j ] += destination_offset_write[ j-1 ]
+        }        
+    }
 
 
     // ------------------------------------------------------------- 
@@ -274,17 +293,17 @@ fn main() {
 
 /// Allows each node to transmit data about the number of nonzero entries it holds in each column.
 #[lamellar::AmData(Debug, Clone)]
-pub struct SendOffsets {
-    pub source_offset:         Vec< usize >,            // source_offset[j] = number of nonzero entries stored in columns ( destination_pe * num_rows_per_pe ) .. ( destination_pe * num_rows_per_pe + j ) *excluding* `i * num_rows_per_pe + j`
-    pub destination_offset:    LocalRwDarc< Vec< usize > >,    // the array to which we will add these offset
+pub struct SendHisto {
+    pub source_histo:          Vec< (usize,usize) >,            // source_offset[j] = number of nonzero entries stored in columns ( destination_pe * num_rows_per_pe ) .. ( destination_pe * num_rows_per_pe + j ) *excluding* `i * num_rows_per_pe + j`
+    pub destination_histo:     LocalRwDarc< Vec< usize > >,    // the array to which we will add these offset
 }
 
 #[lamellar::am]
-impl LamellarAM for SendOffsets {
+impl LamellarAM for SendHisto {
     async fn exec(self) {
-        let mut destination_offset    =   self.destination_offset.write();
-        for ( local_column_number, offset ) in self.source_offset.iter().cloned().enumerate() {
-            destination_offset[ local_column_number ] +=     offset;
+        let mut destination_histo    =   self.destination_histo.write();
+        for ( local_column_number, nnz ) in self.source_histo.iter().cloned() {
+            destination_histo[ local_column_number ] +=     nnz;
         }
     }
 }
