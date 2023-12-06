@@ -1,4 +1,10 @@
 //! Sparse matrix constructors
+//!
+//! Provides efficient constructors for random matrices used in Bale benchmarks.
+//!
+//! NB: not all matrices we generate are Erdos-Renyi.  For very large arrays the
+//! ER model turns out to be very expensive (so much so that it dwarfs the execution
+//  time of the algorithms we would like to benchmark).
 
 use sprs;
 use rand;

@@ -1,4 +1,24 @@
 
+
+//  ---------------------------------------------------------------------------
+
+//  Under construction
+//
+//  The idea of this variant of toposort is to use a hash-of-vec data structure
+//  to store sparse matrices locally, which can make sense given the statsitcs/
+//  sparsity patterns of the matrices we are working with, and the way we divide
+//  data among PE's.
+
+//  ---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
 fn main() {}
 
 // //! Toposort
@@ -120,28 +140,28 @@ fn main() {}
 //     let mut time_to_verify      =   Instant::now().duration_since(Instant::now());
 
 
-//     // define parameters
-//     // -----------------
-
-//     let num_rows_global         =   num_rows_per_pe * world.num_pes();    
-//     let row_owned_first_in      =   num_rows_per_pe * world.my_pe();
-//     let row_owned_first_out     =   ( row_owned_first_in + num_rows_per_pe ).min( num_rows_global );
-//     let num_rows_owned          =   row_owned_first_out - row_owned_first_out;
-//     // let edge_probability        =   ( avg_nz_per_row - 1.0 ) * 2.0 / ( num_rows_global - 1 ) as f64;
-
-//     let seed_matrix             =   seed_permute+2;
-
-//     // we will permute an Erdos Renyi random matrix by replacing each nonzero entry (row,col,val)
-//     // with (permutation_row.forward(row), permutation_col.forward(col), val)
-//     let start_time_to_permute   =   Instant::now();    
-//     let permutation_row         =   rand_perm(num_rows_global, seed_permute   );
-//     let permutation_col         =   rand_perm(num_rows_global, seed_permute+1 );
-//     let time_to_permute         =   Instant::now().duration_since(start_time_to_permute);        
-
-//     let start_time_to_hash      =   Instant::now();    
-//     let mut rows_owned: HashSet<usize>     // the indices of the rows owned by this PE     
-//                                 =   (row_owned_first_in .. row_owned_first_out).collect();   
-//     let time_to_hash            =   Instant::now().duration_since(start_time_to_hash);        
+//     // define parameters 
+//     // ----------------- 
+ 
+//     let num_rows_global         =   num_rows_per_pe * world.num_pes();     
+//     let row_owned_first_in      =   num_rows_per_pe * world.my_pe(); 
+//     let row_owned_first_out     =   ( row_owned_first_in + num_rows_per_pe ).min( num_rows_global ); 
+//     let num_rows_owned          =   row_owned_first_out - row_owned_first_out; 
+//     // let edge_probability        =   ( avg_nz_per_row - 1.0 ) * 2.0 / ( num_rows_global - 1 ) as f64; 
+ 
+//     let seed_matrix             =   seed_permute+2; 
+ 
+//     // we will permute an Erdos Renyi random matrix by replacing each nonzero entry (row,col,val) 
+//     // with (permutation_row.forward(row), permutation_col.forward(col), val) 
+//     let start_time_to_permute   =   Instant::now();     
+//     let permutation_row         =   rand_perm(num_rows_global, seed_permute   ); 
+//     let permutation_col         =   rand_perm(num_rows_global, seed_permute+1 ); 
+//     let time_to_permute         =   Instant::now().duration_since(start_time_to_permute);         
+ 
+//     let start_time_to_hash      =   Instant::now();     
+//     let mut rows_owned: HashSet<usize>     // the indices of the rows owned by this PE      
+//                                 =   (row_owned_first_in .. row_owned_first_out).collect();    
+//     let time_to_hash            =   Instant::now().duration_since(start_time_to_hash);         
 
 //     // initialize values
 //     // -----------------
@@ -272,98 +292,98 @@ fn main() {}
 //             diagonal_elements.push(vec![]);
 //         }
 
-//         let columns_to_delete = {
-//             // Step 1: identify all rows with a single nonzero entry, and their corresponding columns
-//             //         then push the identified elements to 
-
-            
-//             for row in rows_owned.iter() {
-//                 if row_counts[ *row ].load(Ordering::SeqCst)  == 1 {
-//                     let diagonal_element    =   (
-//                                                     row.clone(),
-//                                                     row_sums[*row].load(Ordering::SeqCst) // there's only one entry in this row, so its sum is the column where the nz entry appears
-//                                                 );                                          
-//                     diagonal_elements[ epoch ].push( diagonal_element );
-//                 }
-//             }
-        
-//             world.barrier();
-        
-//             // list the paired columns, and remove the paired rows from `rows_owned`
-//             let mut columns_to_delete   =   Vec::with_capacity( diagonal_elements[ epoch ].len() );
-//             for (row, col) in  diagonal_elements[ epoch ].iter() {
-//                 columns_to_delete.push(col.clone());
-//                 rows_owned.remove(row);
-//             }
-
-//             columns_to_delete
-//         };
-
-//         //  Step 2: delete the rows and columns we've just identified
-//         if ! columns_to_delete.is_empty() {
-//             let am  =   ToposortAmX{
-//                             matrix:             matrix.clone(),           
-//                             row_sums:           row_sums.clone(),         
-//                             row_counts:         row_counts.clone(),       
-//                             columns_to_delete:  columns_to_delete,
-//                             num_deleted_global: num_deleted_global.clone(),
-//                         };
-//             let _ = world.exec_am_all( am );
-//         }
-
-//         world.wait_all();          
-//         world.barrier();             
-
-//         // if we have deted every row and column, then we are done with the loop
-//         // all we have to do now is 
-//         if num_deleted_global.load(Ordering::SeqCst) == num_rows_global {
-
-//             time_to_loop            =   Instant::now().duration_since(start_time_main_loop);    
-
-//             let start_time_pooling_permutations  
-//                                     =   Instant::now();                    
-
-//             // make a vector copy of all the diagonal elements found on this PE
-//             // let diagonal_elements_to_move: Vec<_> = diagonal_elements.iter().cloned().collect();
-//             poset_height            =   epoch;
-            
-//             diagonal_elements.truncate(epoch+1); // remove trailing empty vectors
-//             diagonal_elements.shrink_to_fit();
-
-//             {
-//                 diagonal_elements_union.write().extend( vec![vec![]; epoch+1 ] ); // ensure diagonal_elements_union is long enough (before now it had length 0)
-//             }
-
-//             // send all elements to PE0 for integration
-//             let am  =   PoolDiagonalElementsAmX{
-//                 diagonal_elements_to_move:  diagonal_elements,           
-//                 diagonal_elements_to_stay:  diagonal_elements_union.clone(),
-//             };
-//             let _ = world.exec_am_pe( 0, am );  
-
-//             world.wait_all();          
-//             world.barrier();               
-
-//             time_to_pool            =    Instant::now().duration_since(start_time_pooling_permutations);                
-
-//             // number of elements of each height
-//             height_bins             =   diagonal_elements_union.read().iter().map(|x| x.len()).collect();
-//             // let u                   =   diagonal_elements_union.read();
-//             // height_bins             =   (0..epoch)
-//             //                                 .map(|x| u[x].len())
-//             //                                 .collect();             
-
-//             break
-//         }
-//     }
-
-
-    
-//     if world.my_pe() == 0 {
-
-//         // if verify {
-//         //     let start_time_verifying_permutation
-//         //                                     =   Instant::now();  
+//         let columns_to_delete = { 
+//             // Step 1: identify all rows with a single nonzero entry, and their corresponding columns 
+//             //         then push the identified elements to  
+ 
+             
+//             for row in rows_owned.iter() { 
+//                 if row_counts[ *row ].load(Ordering::SeqCst)  == 1 { 
+//                     let diagonal_element    =   ( 
+//                                                     row.clone(), 
+//                                                     row_sums[*row].load(Ordering::SeqCst) // there's only one entry in this row, so its sum is the column where the nz entry appears 
+//                                                 );                                           
+//                     diagonal_elements[ epoch ].push( diagonal_element ); 
+//                 } 
+//             } 
+         
+//             world.barrier(); 
+         
+//             // list the paired columns, and remove the paired rows from `rows_owned` 
+//             let mut columns_to_delete   =   Vec::with_capacity( diagonal_elements[ epoch ].len() ); 
+//             for (row, col) in  diagonal_elements[ epoch ].iter() { 
+//                 columns_to_delete.push(col.clone()); 
+//                 rows_owned.remove(row); 
+//             } 
+ 
+//             columns_to_delete 
+//         }; 
+ 
+//         //  Step 2: delete the rows and columns we've just identified 
+//         if ! columns_to_delete.is_empty() { 
+//             let am  =   ToposortAmX{ 
+//                             matrix:             matrix.clone(),            
+//                             row_sums:           row_sums.clone(),          
+//                             row_counts:         row_counts.clone(),        
+//                             columns_to_delete:  columns_to_delete, 
+//                             num_deleted_global: num_deleted_global.clone(), 
+//                         }; 
+//             let _ = world.exec_am_all( am ); 
+//         } 
+ 
+//         world.wait_all();           
+//         world.barrier();              
+ 
+//         // if we have deted every row and column, then we are done with the loop 
+//         // all we have to do now is  
+//         if num_deleted_global.load(Ordering::SeqCst) == num_rows_global { 
+ 
+//             time_to_loop            =   Instant::now().duration_since(start_time_main_loop);     
+ 
+//             let start_time_pooling_permutations   
+//                                     =   Instant::now();                     
+ 
+//             // make a vector copy of all the diagonal elements found on this PE 
+//             // let diagonal_elements_to_move: Vec<_> = diagonal_elements.iter().cloned().collect(); 
+//             poset_height            =   epoch; 
+             
+//             diagonal_elements.truncate(epoch+1); // remove trailing empty vectors 
+//             diagonal_elements.shrink_to_fit(); 
+ 
+//             { 
+//                 diagonal_elements_union.write().extend( vec![vec![]; epoch+1 ] ); // ensure diagonal_elements_union is long enough (before now it had length 0) 
+//             } 
+ 
+//             // send all elements to PE0 for integration 
+//             let am  =   PoolDiagonalElementsAmX{ 
+//                 diagonal_elements_to_move:  diagonal_elements,            
+//                 diagonal_elements_to_stay:  diagonal_elements_union.clone(), 
+//             }; 
+//             let _ = world.exec_am_pe( 0, am );   
+ 
+//             world.wait_all();           
+//             world.barrier();                
+ 
+//             time_to_pool            =    Instant::now().duration_since(start_time_pooling_permutations);                 
+ 
+//             // number of elements of each height 
+//             height_bins             =   diagonal_elements_union.read().iter().map(|x| x.len()).collect(); 
+//             // let u                   =   diagonal_elements_union.read(); 
+//             // height_bins             =   (0..epoch) 
+//             //                                 .map(|x| u[x].len()) 
+//             //                                 .collect();              
+ 
+//             break 
+//         } 
+//     } 
+ 
+ 
+     
+//     if world.my_pe() == 0 { 
+ 
+//         // if verify { 
+//         //     let start_time_verifying_permutation 
+//         //                                     =   Instant::now();   
             
 //         //     // concatenate all elements on PE0
 //         //     let zipped_permutation          =   diagonal_elements_union.read().concat();

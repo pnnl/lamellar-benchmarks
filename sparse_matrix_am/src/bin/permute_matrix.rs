@@ -1,11 +1,23 @@
 //! Matrix permutation
 //!
+//! This file generates a random matrix and two permutations. It then applies the 
+//! permutations to the matrix. 
+//!
+//! Some details on implementation:
+//! - this implementation uses active messages
+//! - we use random seeds to generate the relevant part of the matrix on each PE
+//! - permutations are stored as vectors; each PE stores a complete copy of both
+//!   permutations, which it generates for itself using a random seed
+//! - the matrix is inintialized in vec-of-vec format, where each inner vector
+//!   represents a row. we use active messages to send sets of row vectors between
+//!   pe's.  each PE sends only one active message to any other PE. once all 
+//!   messages have been received, the receiver assmbles them into a new matrix
+//!   in vec-of-vec format, then converts to CSR format.  it then applies the
+//!   column permutation to the column indices.
 
 
 //  ---------------------------------------------------------------------------
 
-// use lamellar::array::{ReadOnlyArray, ReadOnlyOps };
-// use lamellar::LamellarArray;
 use lamellar::array::prelude::*;
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
@@ -81,12 +93,7 @@ fn main() {
                                         rows_per_pe * world.num_pes(),
                                         nnz_per_row * rows_per_pe,
                                         &dummy_indices,
-                                    );
-
-
-    // println!("matrix data row length = {:?}", matrix_data.0.len() );
-    // println!("matrix data col length = {:?}", matrix_data.1.len() );    
-
+                                    );  
 
     let mut matrix              =   vec![ vec![]; rows_per_pe ];
 
@@ -96,8 +103,7 @@ fn main() {
         matrix[ row ].push( col );
     }
 
-    let matrix_nnz: usize   =   matrix.iter().map(|x| x.len() ).sum();  
-    // println!("matrix data nnz = {:?}", matrix_nnz );            
+    let matrix_nnz: usize   =   matrix.iter().map(|x| x.len() ).sum();       
 
     // start the clock
     // ---------------
@@ -159,22 +165,6 @@ fn main() {
                                                 csr_col_indices.clone() 
                                             ) 
                                         );
-    
-
-
-    // let mut number_of_zero_rows = 0;
-
-    // for row in matrix_permuted.write().iter_mut() {
-    //     if ! row.is_empty() {
-    //         * row     =   permutation_col.block_on( permutation_col.batch_load( row.clone() ) );
-    //     } else {
-    //         number_of_zero_rows += 1;
-    //     }
-    // }
-
-    // if world.my_pe() == 0 {
-    //     println!("number of zero rows on PE {:?} = {number_of_zero_rows}", world.my_pe() );
-    // }
 
 
     world.wait_all();

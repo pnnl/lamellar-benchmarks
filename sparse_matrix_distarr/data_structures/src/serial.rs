@@ -1,4 +1,5 @@
-//! Permutation of vec-of-vec sparse matrices, via serial methods in the standard Rust library (no Lamellar dependencies).
+//! This file provides a function permute_vec_of_vec, which permutes vec-of-vec sparse matrices
+//! via serial methods in the standard Rust library (no Lamellar dependencies).
 
 
 

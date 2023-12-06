@@ -1,5 +1,7 @@
-//! Matrix permutation
+//! Matrix transpose
 //!
+//! Similar to transpose_particles.rs but we keep track of a bit more information with
+//! `num_nonzero_cols_per_pe`, which helps reduce some unnecessary operations.
 
 
 //  ---------------------------------------------------------------------------

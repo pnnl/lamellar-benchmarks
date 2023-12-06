@@ -1,4 +1,7 @@
 //! Active messages for the Toposort problem
+//!
+//! The AM's defined in this file are used in several versions of the Toposort
+//! algorithm implemented in bin/
 
 
 //  ---------------------------------------------------------------------------

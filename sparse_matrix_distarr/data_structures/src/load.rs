@@ -1,3 +1,6 @@
+//! Helper function to load matrices from tsv
+
+
 use std::path::Path;
 
 

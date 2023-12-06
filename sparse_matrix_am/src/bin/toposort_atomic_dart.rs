@@ -29,6 +29,16 @@
 
 //  ---------------------------------------------------------------------------
 
+//  How this differs from other implimentations
+//
+//  Mainly in the way that the random matrix is generated.  For every large 
+//  matrices, the Erdos-Renyi method of flipping a bit for every entry becomes
+//  impractical, because we must perform an enormout number of bit flipls. Instead,
+//  we generate a random matrix with a random number generator.  For details see
+//  `sparse_matrix_am::matrix_constructors::dart_unit_triangular_rows`.
+
+//  ---------------------------------------------------------------------------
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 

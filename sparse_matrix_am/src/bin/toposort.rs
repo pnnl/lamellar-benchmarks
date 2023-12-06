@@ -266,8 +266,6 @@ fn main() {
 
             // concatenate all elements on PE0
             let zipped_permutation          =   diagonal_elements_union.read().concat();
-            // println!("zipped permutation: {:?}", &zipped_permutation);
-            // println!("diagonal elements union: {:?}", &diagonal_elements_union);        
 
             // calculate the new row and column permutations
             let mut new_permutation_row: Vec<usize>     =   vec![0;num_rows_global];

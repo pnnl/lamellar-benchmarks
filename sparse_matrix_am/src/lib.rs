@@ -1,4 +1,5 @@
-
+//! This crate contains active message implementations of sparse matrix
+//! algorithms for the Bale project.
 
 
 

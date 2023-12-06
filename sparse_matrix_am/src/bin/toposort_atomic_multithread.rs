@@ -1,31 +1,8 @@
 //! Toposort
 //!
-//! Prompts the user for 
-//!
-//! - matrix size (= number of rows)
-//! - edge_probability of adding each nonzero entry above the diagonal
-//! - a random seed
-//!
-//! Then generates a random Erdos-Renyi upper unit triangular matrix with the specified number of rows,
-//! permutes the matrix according to random row and column permutations, then calculates a permutation
-//! the place the permuted matrix back in upper triangular form.  The program then prints the following
-//! information:
-//!
-//! - Time to initialize = time to build the matrix
-//! - Time to identify diagonal elements = time to identify the diagonal elements of the original matrix
-//! - Time to pool = time to aggregate the diagonal elements identified on each node into node 0, then 
-//!   concatenate them into a pair of row and column permutations
-//! - Time to verify = time to verify that the new permutations are indeed permutations, and that they
-//!   place the matrix in upper triangular form
-//!
-//! # Implementation details
-//!
-//! Each node stores a row-submatrix of the permuted matrix P; specifically, PE n stores 
-//! rows n*k .. (n+1)*k; the last PE may store fewer rows.
-//!
-//! Each node stores a list of lists called 'diagonal_elements'.  We update this list
-//! recursively in a way that gaurantees that every element of `diagonal_elements[ p ]`
-//! has height `p` in the partial order represented by the matrix.
+//! Similar to `toposort_atomic.rs` but attempts to improve performance through
+//! multithreading.  In experiments this has not realized significant gains,
+//! but there remain some stones left unturned.
 
 //  ---------------------------------------------------------------------------
 
@@ -379,6 +356,7 @@ fn main() {
             time_to_verify          =    Instant::now().duration_since(start_time_verifying_permutation); 
         }
 
+        
         
         println!("");
         println!("Finished successfully");

@@ -1,6 +1,19 @@
 //! Distributed permutation of sparse matrices, with Lamellar.
 //! 
-//! See the unit tests at the bottom of `lamellar_spmat_distributed.rs` for some examples.  These can be used as a starting point for benchmarks.
+//! See the unit tests at the bottom of `lamellar_spmat_distributed.rs` for some examples.
+//! These can be used as a starting point for benchmarks.
+//!
+//!
+//! Organization
+//!
+//! This file defines a sparse matrix data structure called `SparseMat`, which holds a
+//! matrix in distributed CSR format. The row offset and colund index arrays are stored
+//! as Lamellar `ReadOnlyArray<usize>`s. This means that data for a single row may be
+//! split between two or more PE's.
+//!
+//! Most of the sparse matrix applications for Bale (transpose, permute, etc.) are implemented 
+//! as methods on this struct.  The files that actually run/benchark these methods can be
+//! found in the parent crate sparse_matrix_distarr/bin.
 
 use lamellar::{LamellarWorld, IndexedDistributedIterator, LamellarArray, LamellarArrayIterators, SubArray, Dist, IndexedLocalIterator, LocalIterator, AccessOps, ActiveMessaging};
 use lamellar::array::{AtomicArray, UnsafeArray, Distribution, DistributedIterator, ReadOnlyArray, ReadOnlyOps };
@@ -20,7 +33,6 @@ use crate::bale::sparsemat as bale;
 use crate::binary_search::find_window;
 
 use tabled::{Table, Tabled};
-
 
 
 
@@ -211,7 +223,7 @@ impl SparseMat {
 
         // Populate othr_rowptr and othr_nzind
         // -----------------------------------------------------------------------------------------------------------------            
-        //  NB  WE DO NOT UPDATE COLUMN INDICES AT THIS POINT; WILL DO THAT IN A SINGLE BATCH, LATER
+        //  NB  WE DO NOT UPDATE COLUMN INDICES AT THIS POINT; rather, we will update them in a single batch, later
 
         // Define some dummy variables
         let mut nnzwritten = 0usize; // we update this number once for each iteration of the for-loop; 
@@ -397,8 +409,6 @@ impl SparseMat {
         let rowptr          =   rowptr.into_read_only();        
         return SparseMat { numrows, numcols, nnz, rowptr, nzind, nzval }
     }
-
-
 
 
 

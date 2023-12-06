@@ -45,7 +45,8 @@ fn main() {
     // --------------------------
     let mut time_to_initialize  =   Instant::now().duration_since(Instant::now());
     let mut time_to_loop        =   Instant::now().duration_since(Instant::now());
-
+    let start_time_initializing_values  
+                                =   Instant::now();
 
     // define parameters
     // -----------------
@@ -53,15 +54,9 @@ fn main() {
     let row_owned_first_in      =   rows_per_pe * world.my_pe();
     let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
     let num_rows_owned          =   row_owned_first_out - row_owned_first_out;
+    
 
-    // initialize values
-    // -----------------
-
-    let start_time_initializing_values  
-                                =   Instant::now();
-
-
-    // define the unpermuted matrix
+    // define the adjacency matrix
     // ----------------------------    
     let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();
     let (indices_row,indices_col)         
@@ -122,7 +117,7 @@ fn main() {
     let tentative_scores        =   LocalRwDarc::new( world.team(), tentative_scores        ).unwrap();
     let scores_have_changed     =   LocalRwDarc::new( world.team(), false                   ).unwrap();
     
-    time_to_initialize          =   Instant::now().duration_since(start_time_initializing_values);
+    time_to_initialize          =   Instant::now().duration_since(start_time_initializing_values); 
 
 
     // enter loop
@@ -179,6 +174,7 @@ fn main() {
             break
         }
     }
+
 
 
     

@@ -1,5 +1,8 @@
-//! Matrix permutation
+//! Matrix transpose
 //!
+//!
+//! Similar to `transpose.rs`, but in this implementation we send unaggregated counts
+//! instead of precomputed offsets in the first (preprocessing) stage.
 
 
 //  ---------------------------------------------------------------------------

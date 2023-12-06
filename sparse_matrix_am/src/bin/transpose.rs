@@ -1,5 +1,38 @@
-//! Matrix permutation
+//! Matrix transpose
 //!
+//! This file generates a random matrix then transposes it. In practical terms
+//! this means converting from CSR to CSC format.
+//!
+//! IMPLEMENTATION:
+//! 
+//! - this implementation uses active messages and LocalRwDarc's
+//! - we use random seeds to generate the relevant part of the matrix on each PE
+//!   via the dart_uniform_rows method.  this method returns a pair of unsorted
+//!   lists (row_indices, column_indices)
+//! - consistent with other Bale implementations, we return a CSR matrix, however
+//!   we do not bother converting the initial matrix to CSR format, as it would
+//!   have no real bearing on the implementation
+//! - each PE owns a block of rows m .. n.
+//! - each PE first computes the number of nonzero entries in each column; it then
+//!   sends the relevant part of this information to each of the destination PE's
+//! - once each destination PE's has received all its column count information from
+//!   other PE's, it preallocates a vector of row indices. it also precomputes a
+//!   vector of column offsets; together these make up the CSC format
+//! - having pre-computed offsets, each PE transposes the part of the matrix it
+//!   owns, locally.
+//! - having computed the columns locally, the PE then sends these local
+//!   computations to the destination PE
+//! - the destination PE knows exactly where to copy the data for each column
+//!   into its row indices vector, because it already knows the number of entries
+//!   in every column (even if it has not received all those entries yet)
+//!
+//! OPTIMIZATION / OPPORTUNITIES TO IMPROVE:
+//!
+//! - during local transposition each PE keeps columns separated according to 
+//!   destination PE.  this might be a performance killer, and we should investigate.
+//! - PE A sends a message to PE B only if this message contains a nonzero amount
+//!   of data.  this is an old optimization and we can't recall if it actually
+//!   screens out a significant number of rows
 
 
 //  ---------------------------------------------------------------------------
@@ -42,7 +75,7 @@ fn main() {
     // define the owned portion of the matrix
     // ----------------------------    
     let dummy_indices           =   (0..rows_per_pe).collect::<Vec<usize>>();
-    // returns a the locations of nonzero indices in the form of (list_of_row_indices, list_of_column_indices)
+    // returns the locations of nonzero indices in the form of (list_of_row_indices, list_of_column_indices)
     let mut matrix_data         =   dart_uniform_rows(
                                         seed_matrix,
                                         num_rows_global,
@@ -61,7 +94,7 @@ fn main() {
     // --------------------
 
     let time_to_initialize      =   Instant::now().duration_since(start_time_to_initialize);    
-    let start_time_to_permute   =   Instant::now();      
+    let start_time_to_transpose =   Instant::now();      
 
     // for each column submatrix of size `rows_per_pe`, define a vector V such that
     // V[i] = number of nonzero entries in the first i columns of the current block
@@ -93,11 +126,9 @@ fn main() {
         }
     }
 
-    // println!("pe {:?}: column_offset_binned = {:?}", world.my_pe(), & column_offset_binned );
-
     
 
-    // pre-allocate space for row indices (for locally owned rows); space allocated separately for each destination PE
+    // Pre-allocate space for row indices (for locally owned rows); space allocated separately for each destination PE
     // -----------------------------------------------------------
 
     let time_to_histo           =   Instant::now().duration_since(start_time_to_histo);      
@@ -237,7 +268,7 @@ fn main() {
     // stop timer and report results
     // -----------------------------
 
-    let time_to_transpose       =   Instant::now().duration_since(start_time_to_permute);    
+    let time_to_transpose       =   Instant::now().duration_since(start_time_to_transpose);    
     
     let matrix_nnz_transposed   =   destination_row_indices.read().len();
 
