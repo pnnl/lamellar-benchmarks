@@ -1,5 +1,7 @@
 use clap::Parser;
 
+use crate::Variant;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct TcCli {
@@ -12,8 +14,11 @@ pub struct TcCli {
     #[arg(short, long, default_value_t = 1)]
     pub launch_threads: usize,
 
-    #[arg(short, long, env = "LAMELLAR_OP_BATCH")]
-    pub buffer_size: usize,
+    #[arg(short, long, num_args(1..), default_values_t = vec![10000])]
+    pub buffer_size: Vec<usize>,
+
+    #[arg(value_enum, short, long, num_args(0..))]
+    pub variants: Option<Vec<Variant>>,
 }
 
 impl TcCli {
@@ -21,6 +26,7 @@ impl TcCli {
         println!("graph file: {}", self.graph_file);
         println!("iterations: {}", self.iterations);
         println!("launch threads: {}", self.launch_threads);
-        println!("buffer size: {}", self.buffer_size);
+        println!("buffer size: {:?}", self.buffer_size);
+        println!("variants: {:?}", self.variants);
     }
 }
