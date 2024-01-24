@@ -7,7 +7,6 @@ members = [
     "index_gather",
     "randperm",
     "triangle_count",
-    "fail_example"
 ]
 
 [profile.release]
