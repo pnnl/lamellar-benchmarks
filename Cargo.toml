@@ -4,9 +4,9 @@ resolver = "2"
 
 members = [
     "histo",
-    "index_gather",
-    "randperm",
-    "triangle_count",
+    #"index_gather",
+    #"randperm",
+    #"triangle_count",
 ]
 
 [profile.release]

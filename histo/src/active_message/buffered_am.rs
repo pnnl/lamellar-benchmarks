@@ -194,14 +194,14 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             if pe_ams[rank].len() >= self.buffer_size {
                 let mut am = self.am_builder.new();
                 std::mem::swap(&mut am, &mut pe_ams[rank]);
-                task_group.exec_am_pe(rank, am);
+                let _ = task_group.exec_am_pe(rank, am); //we could await here but we will just do a wait_all later instead
             }
         }
         //send any remaining buffered updates
         let _timer = Instant::now();
         for (rank, am) in pe_ams.into_iter().enumerate() {
             if am.len() > 0 {
-                task_group.exec_am_pe(rank, am);
+                let _ = task_group.exec_am_pe(rank, am); //we could await here but we will just do a wait_all later instead
             }
         }
     }

@@ -36,7 +36,7 @@ impl LamellarAM for CasDartU32Am {
 
             let pe_index = dart_index / lamellar::num_pes;
             let pe = dart_index % lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 pe,
                 CasDartU32Am {
                     target: self.target.clone(),
@@ -72,7 +72,7 @@ impl LamellarAM for CasDartUsizeAm {
 
             let pe_index = dart_index / lamellar::num_pes;
             let pe = dart_index % lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 pe,
                 CasDartUsizeAm {
                     target: self.target.clone(),
@@ -120,7 +120,7 @@ impl LamellarAM for LaunchAm {
             let pe_index = dart_index / lamellar::num_pes;
             let pe = dart_index % lamellar::num_pes;
 
-            match &self.target {
+            let _ = match &self.target {
                 AmType::CasDartU32Am(target) => lamellar::world.exec_am_pe(
                     pe,
                     CasDartU32Am {
@@ -222,7 +222,7 @@ pub fn rand_perm<'a>(
     let sum = Darc::new(world, AtomicUsize::new(0)).expect("darc should be created");
     let local_sum = world.block_on(the_array.read()).iter().sum::<usize>();
 
-    world.exec_am_pe(
+    let _ = world.exec_am_pe(
         0,
         super::SumAm {
             sum: sum.clone(),

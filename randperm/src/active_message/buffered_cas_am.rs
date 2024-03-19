@@ -39,20 +39,20 @@ impl LamellarAM for BufferedCasDartU32Am {
                 if failed_darts[pe].len() >= self.buffer_size {
                     let mut darts = Vec::with_capacity(self.buffer_size);
                     std::mem::swap(&mut failed_darts[pe], &mut darts);
-                    lamellar::world.exec_am_pe(
+                    let _ = lamellar::world.exec_am_pe(
                         pe,
                         BufferedCasDartU32Am {
                             target: self.target.clone(),
                             darts,
                             buffer_size: self.buffer_size,
                         },
-                    );
+                    ); //we could await here but we will just do a wait_all later instead
                 }
             }
         }
         for (pe, darts) in failed_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartU32Am {
                         target: self.target.clone(),
@@ -91,7 +91,7 @@ impl LamellarAM for BufferedCasDartUsizeAm {
                 if failed_darts[pe].len() >= self.buffer_size {
                     let mut darts = Vec::with_capacity(self.buffer_size);
                     std::mem::swap(&mut failed_darts[pe], &mut darts);
-                    lamellar::world.exec_am_pe(
+                    let _ = lamellar::world.exec_am_pe(
                         pe,
                         BufferedCasDartUsizeAm {
                             target: self.target.clone(),
@@ -104,7 +104,7 @@ impl LamellarAM for BufferedCasDartUsizeAm {
         }
         for (pe, darts) in failed_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartUsizeAm {
                         target: self.target.clone(),
@@ -148,7 +148,7 @@ impl LamellarAM for LaunchU32Am {
             if buffered_darts[pe].len() >= self.buffer_size {
                 let mut darts = Vec::with_capacity(self.buffer_size);
                 std::mem::swap(&mut buffered_darts[pe], &mut darts);
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartU32Am {
                         target: self.target.clone(),
@@ -161,7 +161,7 @@ impl LamellarAM for LaunchU32Am {
 
         for (pe, darts) in buffered_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartU32Am {
                         target: self.target.clone(),
@@ -197,7 +197,7 @@ impl LamellarAM for LaunchUsizeAm {
             if buffered_darts[pe].len() >= self.buffer_size {
                 let mut darts = Vec::with_capacity(self.buffer_size);
                 std::mem::swap(&mut buffered_darts[pe], &mut darts);
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartUsizeAm {
                         target: self.target.clone(),
@@ -209,7 +209,7 @@ impl LamellarAM for LaunchUsizeAm {
         }
         for (pe, darts) in buffered_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartUsizeAm {
                         target: self.target.clone(),
@@ -318,7 +318,7 @@ pub fn rand_perm<'a>(
     let sum = Darc::new(world, AtomicUsize::new(0)).expect("darc should be created");
     let local_sum = world.block_on(the_array.read()).iter().sum::<usize>();
 
-    world.exec_am_pe(
+    let _ = world.exec_am_pe(
         0,
         super::SumAm {
             sum: sum.clone(),

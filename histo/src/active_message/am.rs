@@ -99,13 +99,13 @@ impl LamellarAM for LaunchAmSafeU32 {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 rank,
                 SafeU32 {
                     index: index as u32,
                     counts: self.counts.clone(),
                 },
-            );
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -124,13 +124,13 @@ impl LamellarAM for LaunchAmSafeUsize {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 rank,
                 SafeUsize {
                     index,
                     counts: self.counts.clone(),
                 },
-            );
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -149,13 +149,13 @@ impl LamellarAM for LaunchAmUnsafeU32 {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 rank,
                 UnsafeU32 {
                     index: index as u32,
                     counts: self.counts.clone(),
                 },
-            );
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -174,13 +174,13 @@ impl LamellarAM for LaunchAmUnsafeUsize {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 rank,
                 UnsafeUsize {
                     index,
                     counts: self.counts.clone(),
                 },
-            );
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }

@@ -75,7 +75,7 @@ impl LamellarAm for LaunchAm {
         //nodes are striped across pes
         let task_group = LamellarTaskGroup::new(lamellar::world.clone());
         for node in (self.start_node..self.end_node).filter(|n| self.graph.node_is_local(n)) {
-            task_group.exec_am_all(TcAm {
+            let _ = task_group.exec_am_all(TcAm {
                 graph: self.graph.clone(),
                 node: node,
                 neighbors: self

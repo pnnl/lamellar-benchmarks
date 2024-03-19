@@ -83,7 +83,7 @@ impl LamellarAM for LaunchAm {
             cur_len += neighs.len();
             buffer.push((node, neighs)); // pack the node and neighbors into the buffer
             if cur_len > self.buf_size {
-                task_group.exec_am_all(BufferedTcAm {
+                let _ = task_group.exec_am_all(BufferedTcAm {
                     graph: self.graph.clone(),
                     data: buffer,
                     final_cnt: self.final_cnt.clone(),
@@ -94,7 +94,7 @@ impl LamellarAM for LaunchAm {
         }
         if cur_len > 0 {
             //send the remaining data
-            task_group.exec_am_all(BufferedTcAm {
+            let _ = task_group.exec_am_all(BufferedTcAm {
                 graph: self.graph.clone(),
                 data: buffer,
                 final_cnt: self.final_cnt.clone(),

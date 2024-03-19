@@ -62,7 +62,9 @@ fn print_array_times(
 }
 
 fn main() {
-    let world = lamellar::LamellarWorldBuilder::new().build();
+    let world = lamellar::LamellarWorldBuilder::new()
+        // .with_executor(lamellar::ExecutorType::LamellarWorkStealing)
+        .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let cli = options::RandPermCli::parse();

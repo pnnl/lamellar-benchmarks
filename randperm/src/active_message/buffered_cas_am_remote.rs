@@ -44,14 +44,14 @@ impl LamellarAM for BufferedCasDartAm {
                 if failed_darts[pe].len() >= self.buffer_size {
                     let mut darts = Vec::with_capacity(self.buffer_size);
                     std::mem::swap(&mut failed_darts[pe], &mut darts);
-                    lamellar::world.exec_am_pe(
+                    let _ = lamellar::world.exec_am_pe(
                         pe,
                         BufferedCasDartAm {
                             target: self.target.clone(),
                             darts,
                             buffer_size: self.buffer_size,
                         },
-                    );
+                    ); //we could await here but we will just do a wait_all later instead
                 }
             } else {
                 self.target.1.fetch_add(1, Ordering::Relaxed);
@@ -59,14 +59,14 @@ impl LamellarAM for BufferedCasDartAm {
         }
         for (pe, darts) in failed_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartAm {
                         target: self.target.clone(),
                         darts,
                         buffer_size: self.buffer_size,
                     },
-                );
+                ); //we could await here but we will just do a wait_all later instead
             }
         }
     }
@@ -92,27 +92,27 @@ impl LamellarAM for LaunchAm {
             if buffered_darts[pe].len() >= self.buffer_size {
                 let mut darts = Vec::with_capacity(self.buffer_size);
                 std::mem::swap(&mut buffered_darts[pe], &mut darts);
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartAm {
                         target: self.target.clone(),
                         darts,
                         buffer_size: self.buffer_size,
                     },
-                );
+                ); //we could await here but we will just do a wait_all later instead
             }
         }
 
         for (pe, darts) in buffered_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                lamellar::world.exec_am_pe(
+                let _ = lamellar::world.exec_am_pe(
                     pe,
                     BufferedCasDartAm {
                         target: self.target.clone(),
                         darts,
                         buffer_size: self.buffer_size,
                     },
-                );
+                ); //we could await here but we will just do a wait_all later instead
             }
         }
     }
@@ -188,13 +188,13 @@ pub fn rand_perm<'a>(
     let sum = Darc::new(world, AtomicUsize::new(0)).expect("darc should be created");
     let local_sum = world.block_on(the_array.read()).iter().sum::<usize>();
 
-    world.exec_am_pe(
+    let _ = world.exec_am_pe(
         0,
         super::SumAm {
             sum: sum.clone(),
             amt: local_sum,
         },
-    );
+    ); //we could await here but we will just do a wait_all later instead
     world.wait_all();
     world.barrier();
     if my_pe == 0 {

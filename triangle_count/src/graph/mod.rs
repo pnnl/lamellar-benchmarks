@@ -227,7 +227,7 @@ impl LamellarAM for LocalNeighborsAM {
         for (node, neighbors) in &self.node_and_neighbors {
             remotes.push((*node, graph.add_local_neighbors(*node, neighbors.clone())));
         }
-        lamellar::world.exec_am_all(RemoteNeighborsAM {
+        let _ = lamellar::world.exec_am_all(RemoteNeighborsAM {
             graph: self.graph.clone(),
             node_and_neighbors: remotes,
         });
@@ -419,7 +419,7 @@ impl Graph {
         let mut i = 0;
         for nodes in temp_neighbor_list.drain(..) {
             if size > num_edges / 10 {
-                world.exec_am_local(RelabelAm {
+                let _ = world.exec_am_local(RelabelAm {
                     nodes: temp_nodes,
                     relabeled: relabeled.clone(),
                 });
@@ -434,7 +434,7 @@ impl Graph {
             i += 1;
         }
         if size > 0 {
-            world.exec_am_local(RelabelAm {
+            let _ = world.exec_am_local(RelabelAm {
                 nodes: temp_nodes,
                 relabeled: relabeled.clone(),
             });
@@ -463,7 +463,7 @@ impl Graph {
             let batch_size = neigh_lists.len() / num_batches;
 
             while neigh_lists.len() > batch_size {
-                task_group.exec_am_pe(
+                let _ = task_group.exec_am_pe(
                     *pe,
                     LocalNeighborsAM {
                         graph: graph.clone(),
@@ -472,7 +472,7 @@ impl Graph {
                 );
             }
             if neigh_lists.len() > 0 {
-                task_group.exec_am_pe(
+                let _ = task_group.exec_am_pe(
                     *pe,
                     LocalNeighborsAM {
                         graph: graph.clone(),

@@ -40,9 +40,10 @@ pub fn histo<'a>(
     world.barrier();
     let mut timer = Instant::now();
 
+    //TODO specify that we want usize arrays
     let histo_request = match array_type {
         ArrayType::Unsafe => {
-            let array = UnsafeArray::new(
+            let array: UnsafeArray<usize> = UnsafeArray::new(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),
@@ -53,7 +54,7 @@ pub fn histo<'a>(
             array.batch_add(rand_indices.as_slice(), 1)
         }
         ArrayType::Atomic => {
-            let array = AtomicArray::new(
+            let array: AtomicArray<usize> = AtomicArray::new(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),
@@ -65,7 +66,7 @@ pub fn histo<'a>(
             array.batch_add(rand_indices.as_slice(), 1)
         }
         ArrayType::LocalLock => {
-            let array = LocalLockArray::new(
+            let array: LocalLockArray<usize> = LocalLockArray::new(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),

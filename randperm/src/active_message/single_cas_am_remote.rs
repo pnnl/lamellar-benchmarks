@@ -42,7 +42,7 @@ impl LamellarAM for CasDartAm {
         if res.is_err() {
             //this PE is full but we still have a dart
             let pe = rng.gen_range(0, lamellar::num_pes);
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 pe,
                 CasDartAm {
                     target: self.target.clone(),
@@ -74,7 +74,7 @@ impl LamellarAM for LaunchAm {
         let mut rng = SmallRng::from_rng(&mut thread_rng).unwrap();
         for val in self.val_start..self.val_end {
             let pe = rng.gen_range(0, lamellar::num_pes);
-            lamellar::world.exec_am_pe(
+            let _ = lamellar::world.exec_am_pe(
                 pe,
                 CasDartAm {
                     target: self.target.clone(),
@@ -153,7 +153,7 @@ pub fn rand_perm<'a>(
     let sum = Darc::new(world, AtomicUsize::new(0)).expect("darc should be created");
     let local_sum = world.block_on(the_array.read()).iter().sum::<usize>();
 
-    world.exec_am_pe(
+    let _ = world.exec_am_pe(
         0,
         super::SumAm {
             sum: sum.clone(),

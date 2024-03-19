@@ -69,7 +69,7 @@ fn collect_perm(
     let end_offset = end_index % pe_size;
 
     if start_pe == end_pe {
-        world.exec_am_pe(
+        let _ = world.exec_am_pe(
             start_pe as usize,
             CollectAm {
                 array: the_array.clone(),
@@ -82,7 +82,7 @@ fn collect_perm(
         while cur_pe >= start_pe {
             if cur_pe == end_pe {
                 let pe_data = data.split_off(data.len() - end_offset - 1);
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     cur_pe as usize,
                     CollectAm {
                         array: the_array.clone(),
@@ -91,7 +91,7 @@ fn collect_perm(
                     },
                 );
             } else if cur_pe == start_pe {
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     cur_pe as usize,
                     CollectAm {
                         array: the_array.clone(),
@@ -102,7 +102,7 @@ fn collect_perm(
                 data = vec![]; //to appease the compiler because we consume data above
             } else {
                 let pe_data = data.split_off(data.len() - pe_size);
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     cur_pe as usize,
                     CollectAm {
                         array: the_array.clone(),
