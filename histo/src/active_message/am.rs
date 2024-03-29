@@ -99,7 +99,7 @@ impl LamellarAM for LaunchAmSafeU32 {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            let _ = lamellar::world.exec_am_pe(
+            lamellar::world.exec_am_pe(
                 rank,
                 SafeU32 {
                     index: index as u32,

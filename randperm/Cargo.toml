@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 #lamellar = { git = "https://github.com/pnnl/lamellar-runtime", features = ["enable-rofi"] }
-#lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi","tokio-executor"] }
-lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi"] }
+lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi","tokio-executor"] }
+#lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi"] }
 #lamellar = { version = "0.6.0" , features = ["enable-rofi"] }
 futures = "0.3.28"
 rand = "0.6"
