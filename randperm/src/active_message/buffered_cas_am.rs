@@ -265,9 +265,8 @@ pub fn rand_perm<'a>(
     rand_perm_config: &RandPermCli,
     _safe: bool,
     index_size: &IndexSize,
-) -> (Duration, Duration, Duration) {
+) -> (Duration, Duration, Duration, usize) {
     let num_pes = world.num_pes();
-    let my_pe = world.my_pe();
     let local_lens = AtomicArray::new(world, world.num_pes(), lamellar::Distribution::Block);
     let the_array =
         LocalRwDarc::new(world, vec![0; rand_perm_config.pe_table_size(num_pes)]).unwrap();
@@ -327,13 +326,11 @@ pub fn rand_perm<'a>(
     );
     world.wait_all();
     world.barrier();
-    if my_pe == 0 {
-        println!(
-            "[{:?}]: target_pe_sum: {:?}",
-            world.my_pe(),
-            sum.load(Ordering::Relaxed)
-        );
-    }
 
-    (perm_time, collect_time, global_finish_time)
+    (
+        perm_time,
+        collect_time,
+        global_finish_time,
+        sum.load(Ordering::Relaxed),
+    )
 }

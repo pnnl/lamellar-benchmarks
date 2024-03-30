@@ -79,7 +79,7 @@ pub fn rand_perm<'a>(
     rand_perm_config: &RandPermCli,
     array_type: ArrayType,
     distribution: &ArrayDistribution,
-) -> (Duration, Duration, Duration) {
+) -> (Duration, Duration, Duration, usize) {
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
     std::env::set_var(
@@ -165,10 +165,8 @@ pub fn rand_perm<'a>(
     world.barrier();
     let global_finish_time = timer.elapsed();
 
-    if my_pe == 0 {
-        let sum = world.block_on(darts_array.sum());
-        println!("sum: {}", sum);
-    }
+    // if my_pe == 0 {
+    let sum = world.block_on(darts_array.sum());
 
-    (perm_time, collect_time, global_finish_time)
+    (perm_time, collect_time, global_finish_time, sum)
 }

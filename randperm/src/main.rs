@@ -1,14 +1,16 @@
 mod active_message;
 mod array;
 mod options;
+mod printer;
 
 use array::{ArrayDistribution, ArrayType};
-use options::{IndexSize, RandPermCli};
+use options::IndexSize;
+use printer::{print_am_times, print_array_times, print_results};
 
 use clap::{Parser, ValueEnum};
-use std::time::Duration;
+use std::collections::HashMap;
 
-#[derive(ValueEnum, Debug, Clone, Copy)]
+#[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Variant {
     CasDart,
     CasDartRemote,
@@ -22,43 +24,6 @@ pub enum Variant {
     UnsafeArray,
     AtomicArray,
     LocalLockArray,
-}
-
-fn print_am_times(
-    my_pe: usize,
-    variant: &Variant,
-    idx_size: &IndexSize,
-    times: (Duration, Duration, Duration),
-) {
-    if my_pe == 0 {
-        println!("{variant:?} {idx_size:?} {times:?} ",);
-    }
-}
-
-fn print_array_times(
-    cli: &RandPermCli,
-    my_pe: usize,
-    num_pes: usize,
-    variant: &Variant,
-    distribution: &ArrayDistribution,
-    times: (Duration, Duration, Duration),
-) {
-    if my_pe == 0 {
-        // alculate the size of indices used by the lamellar array,
-        // which is based on the number of elements on each PE (not the total table size)
-        let pe_table_size = cli.pe_table_size(num_pes);
-        let index_size = usize::BITS as usize - pe_table_size.leading_zeros() as usize;
-        let index_size = if index_size > 32 {
-            64
-        } else if index_size > 16 {
-            32
-        } else if index_size > 8 {
-            16
-        } else {
-            8
-        };
-        println!("{variant:?} {distribution:?} {index_size:?} bit indices {times:?} ",);
-    }
 }
 
 fn main() {
@@ -103,58 +68,98 @@ fn main() {
         None => vec![ArrayDistribution::Block, ArrayDistribution::Cyclic],
     };
 
+    let mut results = HashMap::new();
+
     for variant in variants {
+        let variant_results = results.entry(variant).or_insert(HashMap::new());
+
         for _i in 0..iterations {
             match variant {
                 Variant::CasDart => {
                     for idx_size in &am_index_size {
                         let times =
                             active_message::single_cas_am::rand_perm(&world, &cli, idx_size);
-                        print_am_times(my_pe, &variant, &idx_size, times);
+                        variant_results
+                            .entry(format!("{idx_size:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
+                        print_am_times(&cli, my_pe, &variant, &idx_size, times);
                     }
                 }
                 Variant::CasDartRemote => {
                     let times = active_message::single_cas_am_remote::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    variant_results
+                        .entry(format!("None"))
+                        .or_insert(Vec::new())
+                        .push(times.clone());
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::PushDart => {
                     let times = active_message::single_push_am::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    variant_results
+                        .entry(format!("None"))
+                        .or_insert(Vec::new())
+                        .push(times.clone());
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::CasDartGroup => {
                     for idx_size in &am_index_size {
                         let times = active_message::cas_am_group::rand_perm(&world, &cli, idx_size);
-                        print_am_times(my_pe, &variant, &idx_size, times);
+                        variant_results
+                            .entry(format!("{idx_size:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
+                        print_am_times(&cli, my_pe, &variant, &idx_size, times);
                     }
                 }
                 Variant::CasDartGroupRemote => {
                     let times = active_message::cas_am_group_remote::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::PushDartGroup => {
                     let times = active_message::push_am_group::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    variant_results
+                        .entry(format!("None"))
+                        .or_insert(Vec::new())
+                        .push(times.clone());
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::BufferedCasDart => {
                     for idx_size in &am_index_size {
                         let times = active_message::buffered_cas_am::rand_perm(
                             &world, &cli, false, idx_size,
                         );
-                        print_am_times(my_pe, &variant, &idx_size, times);
+                        variant_results
+                            .entry(format!("{idx_size:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
+                        print_am_times(&cli, my_pe, &variant, &idx_size, times);
                     }
                 }
                 Variant::BufferedCasDartRemote => {
                     let times = active_message::buffered_cas_am_remote::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    variant_results
+                        .entry(format!("None"))
+                        .or_insert(Vec::new())
+                        .push(times.clone());
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::BufferedPushDart => {
                     let times = active_message::buffered_push_am::rand_perm(&world, &cli);
-                    print_am_times(my_pe, &variant, &IndexSize::None, times);
+                    variant_results
+                        .entry(format!("None"))
+                        .or_insert(Vec::new())
+                        .push(times.clone());
+                    print_am_times(&cli, my_pe, &variant, &IndexSize::None, times);
                 }
                 Variant::UnsafeArray => {
                     for distribution in &array_distribution {
                         let times =
                             array::rand_perm(&world, &cli, ArrayType::Unsafe, &distribution);
+                        variant_results
+                            .entry(format!("{distribution:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
                         print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
                     }
                 }
@@ -162,6 +167,10 @@ fn main() {
                     for distribution in &array_distribution {
                         let times =
                             array::rand_perm(&world, &cli, ArrayType::Atomic, &distribution);
+                        variant_results
+                            .entry(format!("{distribution:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
                         print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
                     }
                 }
@@ -169,10 +178,30 @@ fn main() {
                     for distribution in &array_distribution {
                         let times =
                             array::rand_perm(&world, &cli, ArrayType::LocalLock, &distribution);
+                        variant_results
+                            .entry(format!("{distribution:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
                         print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
                     }
                 }
             }
+        }
+    }
+    for (variant, variant_results) in results {
+        for (sub_variant, times) in variant_results {
+            print_results(
+                // &cli,
+                my_pe,
+                // num_pes,
+                &format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
+                &format!(
+                    "{:<1$}",
+                    format!("{sub_variant}"),
+                    cli.max_index_size_len() + cli.max_array_distribution_len()
+                ),
+                &times,
+            )
         }
     }
 }
