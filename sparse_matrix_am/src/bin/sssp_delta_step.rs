@@ -32,7 +32,7 @@ use std::time::{Instant, Duration};
 
 // EXAMPLE RUN COMMAND
 // ```
-// RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=2 -A lamellar --mpi=pmi2 --exclusive /people/roek189/learning_lamellar/_lamellar-benchmarks/target/release/sssp_delta_step --rows-per-thread-per-pe 10 --avg-nnz-per-row 8 --random-seed 0 --delta 0.3
+// RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=2 -A lamellar --mpi=pmi2 --exclusive /people/roek189/learning_lamellar/_lamellar-benchmarks/target/release/sssp_delta_step --rows-per-thread-per-pe 10 --avg-nnz-per-row 8 --random-seed 0 --delta 0.3 --write-to-json
 // ```
 
 // BENCHMARKING
@@ -53,7 +53,7 @@ pub fn bucket_index_of_float( float: OFloat, delta: f64 ) -> usize {
     ( f64::from(float) / delta ).floor() as usize  // the unwrap command converts OrderedFloat<f64> to f64
 }
 
-/// Contains tentative weights and the bottom bucket
+/// Contains local tentative weights and the bottom bucket
 ///
 /// The tentative weights are stored as a column vector 
 ///   - we think of this column as the handle of the ladel
@@ -570,6 +570,10 @@ fn main() {
         //     tentative_distances_pe_0.push(t);
         // }
 
+        if cli.write_to_json {
+            write_to_json_file("sssp_unit_test_data_delta_step.json", &tentative_distances_pe_0 )
+        }
+
         println!("");                                                                                                        
         println!("Finished successfully");                                                                                                       
         println!("");                                                                                                        
@@ -655,6 +659,32 @@ impl LamellarAM for UpdateBottomBucketIndex {
 
 
 //  ===========================================================================
+//  WRITE OUTPUT TO JSON (OPTIONALLY)
+//  ===========================================================================
+
+
+
+use serde_json::to_writer;
+use std::env;
+use std::fs::File;
+
+fn write_to_json_file(filename: &str, data: &[f64]) {
+    // Get the current directory
+    let current_dir = env::current_dir().unwrap();
+
+    // Construct the path to the JSON file relative to the current directory
+    let file_path = current_dir.join(filename);
+
+    // Create a new file at the specified path
+    let file = File::create(file_path).unwrap();
+
+    // Serialize the data to JSON and write it to the file
+    to_writer(file, data).unwrap();
+}
+
+
+
+//  ===========================================================================
 //  COMMAND LINE INTERFACE
 //  ===========================================================================
 
@@ -681,6 +711,10 @@ struct Cli {
 
     /// Turn debugging on
     #[arg(short, long, )]
-    debug: bool,        
+    debug: bool,     
+    
+    /// If true, then write the first 1000 weights to a .json file
+    #[arg(short, long, )]
+    write_to_json: bool,         
 }
 

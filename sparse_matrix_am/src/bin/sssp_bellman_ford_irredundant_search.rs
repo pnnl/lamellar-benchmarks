@@ -222,12 +222,30 @@ fn main() {
         }
     }
 
+    
+    // finished -- report results
+    // --------------------------------    
 
+
+    let tentative_distances_pe_0: Vec< f64 >
+                                =   (*tentative_scores.read())
+                                        .clone()
+                                        .into_iter()
+                                        .take( rows_per_pe )
+                                        .map(|of| of.into_inner())
+                                        .collect();
 
     
     if world.my_pe() == 0 {
 
         time_to_loop            =   Instant::now().duration_since(start_time_main_loop);            
+
+        if cli.write_to_json {
+            println!("");
+            println!("WRITING TO JSON!!!!!!!!!!!!!!!!!!!!!!!");
+            println!("");
+            write_to_json_file("sssp_unit_test_data_bellman_ford_irredundant_search.json", &tentative_distances_pe_0 )
+        }            
 
         println!("");
         println!("Finished successfully");
@@ -246,7 +264,6 @@ fn main() {
 
     }
 }
-
 
 
 
@@ -279,6 +296,32 @@ impl LamellarAM for UpdateScoresAm {
 
 
 //  ===========================================================================
+//  WRITE OUTPUT TO JSON (OPTIONALLY)
+//  ===========================================================================
+
+
+
+use serde_json::to_writer;
+use std::env;
+use std::fs::File;
+
+fn write_to_json_file(filename: &str, data: &[f64]) {
+    // Get the current directory
+    let current_dir = env::current_dir().unwrap();
+
+    // Construct the path to the JSON file relative to the current directory
+    let file_path = current_dir.join(filename);
+
+    // Create a new file at the specified path
+    let file = File::create(file_path).unwrap();
+
+    // Serialize the data to JSON and write it to the file
+    to_writer(file, data).unwrap();
+}
+
+
+
+//  ===========================================================================
 //  COMMAND LINE INTERFACE
 //  ===========================================================================
 
@@ -298,6 +341,10 @@ struct Cli {
     /// Turn debugging information on
     #[arg(short, long, )]
     random_seed: usize,
+
+    /// If true, then write the first 1000 weights to a .json file
+    #[arg(short, long, )]
+    write_to_json: bool,     
 }
 
 
