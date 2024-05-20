@@ -42,7 +42,7 @@ fn main() {
     let cli                     =   Cli::parse();
 
     let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
-    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads(); // number of matrix rows stored on this pe
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads_per_pe(); // number of matrix rows stored on this pe
     let num_rows_global         =   rows_per_pe * world.num_pes();    
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
 
@@ -149,12 +149,12 @@ fn main() {
     // -------------------
 
     // place the matrix in csr format
-    let matrix_nnz_permuted: usize  =   matrix_permuted.read().iter().map(|x| x.len() ).sum();          
+    let matrix_nnz_permuted: usize  =   world.block_on(matrix_permuted.read()).iter().map(|x| x.len() ).sum();          
 
     let mut csr_offset              =   vec![ 0; rows_per_pe + 1 ];
     let mut csr_col_indices         =   Vec::with_capacity(matrix_nnz_permuted);
     
-    for (row_index, col_indices) in matrix_permuted.write().iter().enumerate() {
+    for (row_index, col_indices) in world.block_on(matrix_permuted.write()).iter().enumerate() {
         csr_offset[ row_index + 1 ] =   csr_offset[ row_index ] + col_indices.len();
         csr_col_indices.extend_from_slice( col_indices );
     }
@@ -183,7 +183,7 @@ fn main() {
         println!("");
 
         println!("Number of PE's:                     {:?}", world.num_pes() );  
-        println!("Cores per PE:                       {:?}", world.num_threads());        
+        println!("Cores per PE:                       {:?}", world.num_threads_per_pe());        
         println!("Matrix size:                        {:?}", num_rows_global );
         println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );        
         println!("Avg nnz per row:                    {:?}", matrix_nnz as f64 / rows_per_pe as f64 );
@@ -221,7 +221,7 @@ impl SendRows {
 #[lamellar::am]
 impl LamellarAM for SendRows {
     async fn exec(self) {
-        let mut receiver_of_rows    =   self.receiver_of_rows.write();
+        let mut receiver_of_rows    =   self.receiver_of_rows.write().await;
         for (row_index, row_data) in self.rows.iter().cloned() {
             receiver_of_rows[ row_index ] = row_data;
         }

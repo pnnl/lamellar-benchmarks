@@ -247,7 +247,7 @@ fn main() {
     let cli = Cli::parse();
 
     let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
-    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads_per_pe();
     let num_rows_global         =   rows_per_pe * world.num_pes();    
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_matrix             =   cli.random_seed;  
@@ -328,7 +328,7 @@ fn main() {
     let bottom_bucket_index_darc    =   LocalRwDarc::new( world.team(), Some(0)      ).unwrap();
     let bottom_bucket_is_empty_darc =   LocalRwDarc::new( world.team(), false        ).unwrap();
 
-    // let mut ladle_refmut            =   ladle.write();    
+    // let mut ladle_refmut            =   world.block_on(ladle.write());    
 
     // initialize a holder for relaxation requests
     let mut relaxation_request_bins 
@@ -358,16 +358,16 @@ fn main() {
         //  We don't "rebase" any of the ladles. Each PE just reports what it currently
         //  records as its bottom bucket index.    
 
-        if debug { println!("PE {:?}: bottom bucket index BEFORE global synchronization: {:?}", world.my_pe(), (*ladle.read()).cup_index.clone() ); }
+        if debug { println!("PE {:?}: bottom bucket index BEFORE global synchronization: {:?}", world.my_pe(), (*world.block_on(ladle.read())).cup_index.clone() ); }
         
         // We are about to take the minimum of the set { bottom bucket index for each PE }. 
         // We'll do this by taking an initial value X, and running X = min( X, bottom bucket index for PE i) for all i.  
         // We initialize X = +infinity. In this context, +infinity is represented by None 
         // (this is different from standard Rust; in standard Rust, None typically represents the bottom elelement of a poset)
-        **bottom_bucket_index_darc.write() = None;
+        **world.block_on(bottom_bucket_index_darc.write()) = None;
 
         let am  =   UpdateBottomBucketIndex {
-                        bottom_bucket_index_on_sending_pe:    (*ladle.read()).cup_index.clone(),   // the index of the bottom bucket on the current PE
+                        bottom_bucket_index_on_sending_pe:    (*world.block_on(ladle.read())).cup_index.clone(),   // the index of the bottom bucket on the current PE
                         bottom_bucket_index_on_receiving_pe:  bottom_bucket_index_darc.clone(),    // the index of the bottom bucket on the remote PE that we want to update
                     };
         let _   =   world.exec_am_all( am );
@@ -375,7 +375,7 @@ fn main() {
         world.wait_all();          
         world.barrier();  
 
-        let bottom_bucket_index_global: Option<usize>      =   *bottom_bucket_index_darc.read().clone();
+        let bottom_bucket_index_global: Option<usize>      =   *world.block_on(bottom_bucket_index_darc.read()).clone();
         if debug { println!("PE {:?}: bottom bucket index AFTER global synchronization: {:?}", world.my_pe(), bottom_bucket_index_global.clone() ); }                
         
         //  if the index is None, then break -- all vertices are settled
@@ -402,11 +402,11 @@ fn main() {
             // (3) send and execute the relaxation requests
 
             // create relaxation requests and place them in bins
-            if (*ladle.read()).cup_index == bottom_bucket_index_global {
+            if (*world.block_on(ladle.read())).cup_index == bottom_bucket_index_global {
 
-                for vertex_source in (*ladle.read()).cup_contents.iter().cloned() {
+                for vertex_source in (*world.block_on(ladle.read())).cup_contents.iter().cloned() {
                     let tentative_distance_vertex_source 
-                                                        =   (*ladle.read()).get_tentative_distance( vertex_source ).unwrap();
+                                                        =   (*world.block_on(ladle.read())).get_tentative_distance( vertex_source ).unwrap();
                     for ( vertex_target, weight ) in matrix.outer_view( vertex_source ).unwrap().iter() {
                         if debug { println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!         relaxing edge {:?}", (vertex_target,weight) );  }
                         if *weight > delta_ordered { continue } // we ignore heavy edges
@@ -418,11 +418,11 @@ fn main() {
                 }
 
                 // clear all vertices from the local bottom bucket
-                (*ladle.write()).cup_contents.clear();
+                (*world.block_on(ladle.write())).cup_contents.clear();
             }   
 
             // mark the bottom bucket empty (we may reverse this in the next step)
-            **bottom_bucket_is_empty_darc.write() = true;            
+            **world.block_on(bottom_bucket_is_empty_darc.write()) = true;            
             
             if debug { println!("PE {:?} before BARRIER 1", world.my_pe() );    }
 
@@ -431,7 +431,7 @@ fn main() {
             world.barrier();             
 
             // send the relaxation requests            
-            if (*ladle.read()).cup_index == bottom_bucket_index_global {            
+            if (*world.block_on(ladle.read())).cup_index == bottom_bucket_index_global {            
                 for destination_pe in 0..world.num_pes() {
                     if ! relaxation_request_bins[ destination_pe ].is_empty() {
                         // pull out the set of relaxation requests and replace it with an empty vector
@@ -458,9 +458,9 @@ fn main() {
             world.barrier(); 
             
             // if the local bottom bucket remains NON-empty, and it belongs to the global bottom bucket, then inform all other PE's
-            if  (*ladle.read()).cup_index == bottom_bucket_index_global
+            if  (*world.block_on(ladle.read())).cup_index == bottom_bucket_index_global
                 &&
-                ! (*ladle.read()).cup_contents.is_empty()
+                ! (*world.block_on(ladle.read())).cup_contents.is_empty()
             {
                 let am  =  MarkBottomBucketNonemptyAM {
                     bottom_is_empty_on_receiving_pe:  bottom_bucket_is_empty_darc.clone(), // the value on the remote PE that we want to update
@@ -475,7 +475,7 @@ fn main() {
             world.barrier(); 
             
             // if the global bottom bucket is globally empty,then break
-            if **bottom_bucket_is_empty_darc.read() {
+            if **world.block_on(bottom_bucket_is_empty_darc.read()) {
                 break
             }
           
@@ -487,13 +487,13 @@ fn main() {
         // at this point we have settled all the vertices in the bottom bucket.
         // now, create relaxation requests for the heavy edges, and place the requests in bins
         for vertex_source in row_owned_first_in .. row_owned_first_out {
-            let tentative_distance              =   (*ladle.read()).get_tentative_distance( vertex_source ).unwrap();
+            let tentative_distance              =   (*world.block_on(ladle.read())).get_tentative_distance( vertex_source ).unwrap();
             let bucket_index                    =   Some( bucket_index_of_float( tentative_distance, delta  ) );
             
             if bucket_index != bottom_bucket_index_global { continue } // ignore vertex_source if it doesn't lie in the (global) bottom bucket
 
             let tentative_distance_vertex_source 
-                                                =   (*ladle.read()).get_tentative_distance( vertex_source ).unwrap();
+                                                =   (*world.block_on(ladle.read())).get_tentative_distance( vertex_source ).unwrap();
             for ( vertex_target, weight ) in matrix.outer_view( vertex_source ).unwrap().iter() {
                 if *weight <= delta_ordered { continue } // we ignore light edges
                 let destination_pe              =   vertex_target / rows_per_pe; // determine which pe will receive the relaxation request
@@ -528,7 +528,7 @@ fn main() {
 
         // clear all vertices from the local bottom bucket
         // -----------------------------------------------
-        (*ladle.write()).cup_contents.clear();
+        (*world.block_on(ladle.write())).cup_contents.clear();
 
 
         // find the new local bottom bucket
@@ -537,10 +537,10 @@ fn main() {
         // Update the ladle by excluding every local bucket B_i such that i ≤ (the index of the bucket we just settled).
         // This will update the index of the bottom bucket in the ladle, and update the contents of the cup.
 
-        (*ladle.write()).rebase( 1 + bottom_bucket_index_global.unwrap() );
+        (*world.block_on(ladle.write())).rebase( 1 + bottom_bucket_index_global.unwrap() );
         
-        if debug { println!("PE {:?}: bottom bucket index local after rebase: {:?}", world.my_pe(), (*ladle.read()).cup_index );    }
-        if debug { println!("PE {:?}: tent = {:?}", world.my_pe(), & *ladle.read().tentative_distances );                           }
+        if debug { println!("PE {:?}: bottom bucket index local after rebase: {:?}", world.my_pe(), (*world.block_on(ladle.read())).cup_index );    }
+        if debug { println!("PE {:?}: tent = {:?}", world.my_pe(), & *world.block_on(ladle.read()).tentative_distances );                           }
 
         if debug { println!("PE {:?} before BARRIER 5", world.my_pe() );                                                            }    
         // wait
@@ -554,31 +554,100 @@ fn main() {
 
 
     let tentative_distances_pe_0
-                                =   (*ladle.read()).tentative_distances.clone();
+                                =   (*world.block_on(ladle.read())).tentative_distances.clone();
 
     
     if world.my_pe() == 0 {
 
         time_to_loop            =   Instant::now().duration_since(start_time_main_loop);   
         // let tentative_distances_pe_0
-        //                         =   *ladle.read().clone();
+        //                         =   *world.block_on(ladle.read()).clone();
         // let tentative_distances_pe_0
         //                         =   ladle_refmut.tentative_distances.clone();
         
         //                         =   Vec::with_capacity( num_rows_owned );
-        // for t in *ladle.read().tentative_distances.iter().cloned() {
+        // for t in *world.block_on(ladle.read()).tentative_distances.iter().cloned() {
         //     tentative_distances_pe_0.push(t);
         // }
 
+
         if cli.write_to_json {
-            write_to_json_file("sssp_unit_test_data_delta_step.json", &tentative_distances_pe_0 )
-        }
+
+            println!("");
+            println!("WRITING TO JSON!!!!!!!!!!!!!!!!!!!!!!!");
+            println!("");
+
+            // write the calculated path lengths to json
+            // -----------------------------------------
+            write_to_json_file("sssp_unit_test_data_bellman_ford.json", &tentative_distances_pe_0 );
+
+
+            // a function to generate the slice of the weighted adjacency matrix owned by any pe
+            // ---------------------------------------------------------------------------------
+            let matrix_slice_for_pe     =   | pe: usize | -> (Vec<usize>,Vec<usize>,Vec<f64>) {
+                // calculate which rows are owned by this pe
+                let row_owned_first_in      =   rows_per_pe * pe;
+                let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
+                let num_rows_owned          =   row_owned_first_out - row_owned_first_out;                
+                let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();
+                // 
+                let (indices_row, indices_col)  
+                                            =   dart_uniform_rows(
+                                                    seed_matrix + pe, // random seed
+                                                    num_rows_global, // number of matrix columns
+                                                    avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                    & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                                );
+
+                let (indices_row_0, indices_col_0)  
+                                            =   dart_uniform_rows(
+                                                    seed_matrix + pe, // random seed
+                                                    num_rows_global, // number of matrix columns
+                                                    avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                    & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                                );
+                println!("indices_col {:?}", & indices_col );
+                if indices_row != indices_row_0 {
+                    println!("");
+                    println!("!!!!!!!!! SAME INPUT DIFFERENT OUTPUT ");
+                    println!("len(output_0) = {:?}, len(utput_1) = {:?}", indices_row_0.len(), indices_row.len() );
+                    println!("{:?}", &indices_row_0);
+                    println!("{:?}", &indices_row);                    
+                    println!("");                   
+                }                                            
+                // define a random number generator
+                let mut rng                 =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
+                // define a vector of randomly generated weights
+                let weights: Vec<_>         =   (0..indices_col.len())
+                                                    .map(|x| rng.gen::<f64>() )
+                                                    .collect();
+                return (indices_row, indices_col, weights)              
+            };
+
+            // write the full adjacency matrix to json
+            // ---------------------------------------            
+            let mut indices_row         =   Vec::new();
+            let mut indices_col         =   Vec::new();  
+            let mut weights             =   Vec::new();           
+            for pe in 0 .. world.num_pes() {
+                let (mut ir, mut ic, mut w)           =   matrix_slice_for_pe( pe );
+                indices_row.append( &mut ir );
+                indices_col.append( &mut ic );
+                weights.append( &mut w );
+            }
+            indices_row.append( &mut indices_col );
+            write_to_json_file("sssp_unit_test_matrix_delta_step.json", &indices_row );
+            write_to_json_file("sssp_unit_test_weight_delta_step.json", &weights );   
+
+        }   
+
+
 
         println!("");                                                                                                        
         println!("Finished successfully");                                                                                                       
         println!("");                                                                                                        
         println!("Number of PE's:                     {:?}", world.num_pes() );                                                                                                          
-        println!("Cores per PE:                       {:?}", world.num_threads());                                                                                                               
+        println!("Cores per PE:                       {:?}", world.num_threads_per_pe());                                                                                                               
         println!("Matrix size:                        {:?}", num_rows_global );                                                                                                      
         println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );                                                                                                               
         println!("Avg nnz per row:                    {:?}", matrix.nnz() as f64 / rows_per_pe as f64 );                                                                                                     
@@ -611,7 +680,7 @@ pub struct RelaxAM {
 #[lamellar::am]
 impl LamellarAM for RelaxAM {
     async fn exec(self) {        
-        let mut receives_new_scores         =   self.receives_new_scores.write(); // get a writable handle on the local ladle
+        let mut receives_new_scores         =   self.receives_new_scores.write().await; // get a writable handle on the local ladle
         receives_new_scores.relax( & self.relaxation_requests );
     }
 }
@@ -626,7 +695,7 @@ pub struct MarkBottomBucketNonemptyAM {
 #[lamellar::am]
 impl LamellarAM for MarkBottomBucketNonemptyAM {
     async fn exec(self) {        
-        let mut bottom_is_empty_on_receiving_pe         =   **self.bottom_is_empty_on_receiving_pe.write(); // get a writable handle on the local ladle
+        let mut bottom_is_empty_on_receiving_pe         =   **self.bottom_is_empty_on_receiving_pe.write().await; // get a writable handle on the local ladle
         bottom_is_empty_on_receiving_pe                 =   false; // mark the bottom bucket as nonempty
     }
 }
@@ -642,7 +711,7 @@ pub struct UpdateBottomBucketIndex {
 #[lamellar::am]
 impl LamellarAM for UpdateBottomBucketIndex {
     async fn exec(self) {        
-        let mut bottom_bucket_index_on_receiving_pe     =   self.bottom_bucket_index_on_receiving_pe.write(); // get a writable handle on the local ladle
+        let mut bottom_bucket_index_on_receiving_pe     =   self.bottom_bucket_index_on_receiving_pe.write().await; // get a writable handle on the local ladle
         // take the minimum of the two indices, which has form Some(x) if both of the indices is Some(a), and which has form None if one of the indices is None
         let mut merged_bottom                           =   self.bottom_bucket_index_on_sending_pe.min( *bottom_bucket_index_on_receiving_pe.clone() );
         // if at least one of the indices is None, then return the max of the two indices (which equals None if the other index is None, and equals the other index, otherwise)
@@ -665,10 +734,14 @@ impl LamellarAM for UpdateBottomBucketIndex {
 
 
 use serde_json::to_writer;
+use serde::ser::Serialize;
 use std::env;
 use std::fs::File;
 
-fn write_to_json_file(filename: &str, data: &[f64]) {
+fn write_to_json_file< T >(filename: &str, data: &[T]) 
+    where 
+        T:  Sized + Serialize
+{
     // Get the current directory
     let current_dir = env::current_dir().unwrap();
 
@@ -681,6 +754,7 @@ fn write_to_json_file(filename: &str, data: &[f64]) {
     // Serialize the data to JSON and write it to the file
     to_writer(file, data).unwrap();
 }
+
 
 
 

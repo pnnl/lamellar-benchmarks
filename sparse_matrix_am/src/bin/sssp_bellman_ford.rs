@@ -28,6 +28,8 @@ use std::time::{Instant, Duration};
 
 fn main() {
 
+    println!("NOTE: when we perform a weight update with this function, we store a transposed copy of the adjacency matrix. This due to the data layout used by the algorithm to avoid certain types of communication.");
+
     let world                   =   lamellar::LamellarWorldBuilder::new().build();    
 
     // command line arguments
@@ -36,7 +38,7 @@ fn main() {
     let cli = Cli::parse();
 
     let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
-    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads_per_pe();
     let num_rows_global         =   rows_per_pe * world.num_pes();    
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_matrix             =   cli.random_seed;  
@@ -54,64 +56,132 @@ fn main() {
     let row_owned_first_in      =   rows_per_pe * world.my_pe();
     let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
     let num_rows_owned          =   row_owned_first_out - row_owned_first_out;
+    let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();    
     
 
     // define the adjacency matrix
     // ----------------------------    
-    let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();
-    let (indices_row,indices_col)         
-                                =   dart_uniform_rows(
-                                        seed_matrix + world.my_pe(), // random seed
-                                        num_rows_global, // number of matrix columns
-                                        avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
-                                        & owned_row_indices, // list of row indices; a row will be generated for each index
-                                    );
+    // let (indices_row,indices_col)         
+    //                             =   dart_uniform_rows(
+    //                                     seed_matrix + world.my_pe(), // random seed
+    //                                     num_rows_global, // number of matrix columns
+    //                                     avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+    //                                     & owned_row_indices, // list of row indices; a row will be generated for each index
+    //                                 );
 
 
-    // // this function returns the `index_row`th row of the permuted matrix, 
-    // // repersented by a pair of vectors (indices_row,indices_col)
-    // let get_row                 =   | index_row: usize | -> (Vec<usize>, Vec<usize>, Vec<OrderedFloat<f64>>) {
-    //     let mut indices_col     =   erdos_renyi_row(
-    //                                     seed_matrix + index_row,
-    //                                     num_rows_global,
-    //                                     edge_probability,
-    //                                     index_row,     
-    //                                 );    
-    //     // define a row vector (filled with value `index_row`)
-    //     let indices_row         =   vec![ index_row; indices_col.len() ]; 
-        // define a random number generator
-        let mut rng             =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
-        // define a vector of randomly generated weights
-        let weights: Vec<_>     =   (0..indices_col.len())
-                                        .map(|x| OrderedFloat(rng.gen::<f64>()) )
-                                        .collect();
 
-    //     (indices_row, indices_col, weights)       
-    // };
+    // // define a random number generator
+    // let mut rng             =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
+    // // define a vector of randomly generated weights
+    // let weights: Vec<_>     =   (0..indices_col.len())
+    //                                 .map(|x| OrderedFloat(rng.gen::<f64>()) )
+    //                                 .collect();
 
-    // // generate the portion of the matrix owned by this PE
-    // let mut indices_row         =   Vec::new();
-    // let mut indices_col         =   Vec::new();
-    // let mut weights             =   Vec::new();
-    // for index_row in row_owned_first_in .. row_owned_first_out {
-    //     let (indices_row_new, indices_col_new, weights_new)  =   get_row( index_row );
-    //     indices_row.extend_from_slice( & indices_row_new );
-    //     indices_col.extend_from_slice( & indices_col_new ); 
-    //     weights.extend_from_slice( & weights_new );                                                                           
-    // }
+
+
+    // a function to generate the slice of the weighted adjacency matrix owned by any pe
+    // ---------------------------------------------------------------------------------
+    let mut matrix_slice_for_pe =   | pe: usize | -> (Vec<usize>,Vec<usize>,Vec<OrderedFloat<f64>>) {
+        
+        // ---------------------------------------------
+        // generate a cycle graph, if the cycle flag is active
+        // ---------------------------------------------  
+        
+        let (cycle, bicycle, random) = (String::from("cycle"), String::from("bicycle"), String::from("random"));
+
+        println!("graph type === {:?}", cli.graph_type.clone() );
+
+        if cli.graph_type.as_str() == String::from("cycle") {
+            println!("-- cycle graph ");
+            let indices_row             =   owned_row_indices.clone();
+            let indices_col: Vec<_>     =   indices_row // each edge has form N --> (N+1) mod (# vertices)
+                                                .iter()
+                                                .cloned()
+                                                .map(|x| ( x + 1) % num_rows_global )
+                                                .collect();
+            let weights                 =   vec![ OrderedFloat(1f64); indices_row.len() ]; // all edges get weight 1
+            return (indices_row, indices_col, weights)   
+        }
+        
+        if cli.graph_type.as_str() == String::from("bicycle") {
+            println!("-- bicycle graph ");                
+            let x                       =   owned_row_indices.clone();
+            let y: Vec<_>               =   owned_row_indices // each edge has form N --> (N+1) mod (# vertices)
+                                                .iter()
+                                                .cloned()
+                                                .map(|x| ( x + 1) % num_rows_global )
+                                                .collect();
+            // connect every node to the node that precedes and follows it
+            let mut indices_row         =   x.clone();
+            let mut indices_col         =   y.clone();
+            indices_row.extend_from_slice( & y.clone() );
+            indices_col.extend_from_slice( & x.clone() );                
+
+            let weights                 =   vec![ OrderedFloat(1f64); indices_row.len() ]; // all edges get weight 1
+            return (indices_row, indices_col, weights)  
+        }
+
+        if cli.graph_type.as_str() == String::from("random") {
+            println!("-- randome graph ");                
+            let (indices_row, indices_col)  
+                                        =   dart_uniform_rows(
+                                                seed_matrix + pe, // random seed
+                                                num_rows_global, // number of matrix columns
+                                                avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                            );
+
+            let (indices_row_0, indices_col_0)  
+                                        =   dart_uniform_rows(
+                                                seed_matrix + pe, // random seed
+                                                num_rows_global, // number of matrix columns
+                                                avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                            );
+            println!("indices_col {:?}", & indices_col );
+            if indices_row != indices_row_0 {
+                println!("");
+                println!("!!!!!!!!! SAME INPUT DIFFERENT OUTPUT ");
+                println!("len(output_0) = {:?}, len(utput_1) = {:?}", indices_row_0.len(), indices_row.len() );
+                println!("{:?}", &indices_row_0);
+                println!("{:?}", &indices_row);                    
+                println!("");                   
+            }                                            
+            // define a random number generator
+            let mut rng                 =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
+            // define a vector of randomly generated weights
+            let weights: Vec<_>         =   (0..indices_col.len())
+                                                .map(|x| OrderedFloat(rng.gen::<f64>()) )
+                                                .collect();
+            return (indices_row, indices_col, weights) 
+        }     
+        
+        println!("-- edgeless graph ");                                
+        return (Vec::new(),Vec::new(),Vec::new())        
+               
+    };     
+   
+
+    // use the function to generate a matrix
+    // ---------------------------------------------------------------------------------
+    let (indices_row, indices_col, weights) 
+                                =   matrix_slice_for_pe( world.my_pe() );    
+    // let weights: Vec<_>         =   weights.into_iter().map(|x| OrderedFloat(x)).collect();
+
     let num_entries             =   indices_row.len();
     let matrix                  =   TriMat::from_triplets(
                                         (num_rows_global,num_rows_global),
+                                        indices_col,  // <------------------------------------- !!!!!!!!!!!!!!!!!!!!!!!!!!! WHEN WE CALL TriMat::from_triplets WE REVERSE ROWS AND COLUMNS, ESSENTIALLY TRANSPOSING THE MATIRX
                                         indices_row,
-                                        indices_col,
                                         weights, 
                                     );
     let matrix                  =   matrix.to_csr::<usize>();
 
-    // the number and sum-of-column-indices of the nonzero entries in each row
+    // set tentative scores
+    // --------------------------------
     let mut tentative_scores    =   vec![ OrderedFloat(f64::INFINITY); num_rows_global ];
     tentative_scores[0]         =   OrderedFloat(0.0); // the base node has weight 0
-
 
     // wrap in LocalRwDarc's
     let tentative_scores        =   LocalRwDarc::new( world.team(), tentative_scores        ).unwrap();
@@ -125,15 +195,15 @@ fn main() {
 
     let start_time_main_loop    =   Instant::now();    
 
-    for epoch in 0..num_rows_global {
+    for epoch in 0.. (10 * num_rows_global) {
 
-        **scores_have_changed.write()               =   false; // update our flag
+        **world.block_on(scores_have_changed.write())               =   false; // update our flag
 
         // check to see if any scores can be reduced by relaxing edges
         let new_scores = {
 
             let mut new_scores                      =   Vec::new();
-            let mut tentative_scores_temp           =   tentative_scores.write();
+            let mut tentative_scores_temp           =   world.block_on(tentative_scores.write());
             
             for row in row_owned_first_in .. row_owned_first_out {
 
@@ -170,9 +240,10 @@ fn main() {
         world.wait_all();          
         world.barrier();             
 
-        if ! **scores_have_changed.read() {
-            break
-        }
+        println!("NOTE: WE HAVE TO REINSTATE THE STOPPING CONDITION; LOOK FOR THIS MESSAGE IN THE CODE");
+        // if ! **world.block_on(scores_have_changed.read()) {
+        //     break
+        // }
     }
     
 
@@ -182,7 +253,7 @@ fn main() {
 
 
     let tentative_distances_pe_0: Vec< f64 >
-                                =   (*tentative_scores.read())
+                                =   (*world.block_on(tentative_scores.read()))
                                         .clone()
                                         .into_iter()
                                         .take( rows_per_pe )
@@ -194,18 +265,39 @@ fn main() {
         time_to_loop            =   Instant::now().duration_since(start_time_main_loop);            
 
         if cli.write_to_json {
+
             println!("");
             println!("WRITING TO JSON!!!!!!!!!!!!!!!!!!!!!!!");
             println!("");
-            write_to_json_file("sssp_unit_test_data_bellman_ford_.json", &tentative_distances_pe_0 )
-        }    
+
+            // write the calculated path lengths to json
+            // -----------------------------------------
+            write_to_json_file("sssp_unit_test_data_bellman_ford.json", &tentative_distances_pe_0 );
+
+
+            // write the full adjacency matrix to json
+            // ---------------------------------------            
+            let mut indices_row         =   Vec::new();
+            let mut indices_col         =   Vec::new();  
+            let mut weights             =   Vec::new();           
+            for pe in 0 .. world.num_pes() {
+                let (mut ir, mut ic, mut w)           =   matrix_slice_for_pe( pe );
+                indices_row.append( &mut ir );
+                indices_col.append( &mut ic );
+                weights.append( &mut w );
+            }
+            indices_row.append( &mut indices_col );
+            write_to_json_file("sssp_unit_test_matrix_bellman_ford.json", &indices_row );
+            write_to_json_file("sssp_unit_test_weight_bellman_ford.json", &weights );   
+
+        }             
 
         println!("");
         println!("Finished successfully");
         println!("");
 
         println!("Number of PE's:                     {:?}", world.num_pes() );  
-        println!("Cores per PE:                       {:?}", world.num_threads());        
+        println!("Cores per PE:                       {:?}", world.num_threads_per_pe());        
         println!("Matrix size:                        {:?}", num_rows_global );
         println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );        
         println!("Avg nnz per row:                    {:?}", matrix.nnz() as f64 / rows_per_pe as f64 );
@@ -237,8 +329,8 @@ pub struct UpdateScoresAm {
 #[lamellar::am]
 impl LamellarAM for UpdateScoresAm {
     async fn exec(self) {        
-        let mut receives_new_scores         =   self.receives_new_scores.write(); // get a writable handle on the local collection of diagonal elements
-        let mut scores_have_changed         =   self.scores_have_changed.write();
+        let mut receives_new_scores         =   self.receives_new_scores.write().await; // get a writable handle on the local collection of diagonal elements
+        let mut scores_have_changed         =   self.scores_have_changed.write().await;
         **scores_have_changed               =   true; // mark that at least one score has changed
         for ( vertex, score ) in self.new_scores.iter() {
             receives_new_scores[ *vertex ]  =   OrderedFloat( * score );
@@ -255,10 +347,14 @@ impl LamellarAM for UpdateScoresAm {
 
 
 use serde_json::to_writer;
+use serde::ser::Serialize;
 use std::env;
 use std::fs::File;
 
-fn write_to_json_file(filename: &str, data: &[f64]) {
+fn write_to_json_file< T >(filename: &str, data: &[T]) 
+    where 
+        T:  Sized + Serialize
+{
     // Get the current directory
     let current_dir = env::current_dir().unwrap();
 
@@ -280,6 +376,7 @@ fn write_to_json_file(filename: &str, data: &[f64]) {
 
 
 
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -297,7 +394,11 @@ struct Cli {
 
     /// If true, then write the first 1000 weights to a .json file
     #[arg(short, long, )]
-    write_to_json: bool,        
+    write_to_json: bool,  
+    
+    /// If true, then generate a cycle graph instead of a random one
+    #[arg(short, long, )]
+    graph_type: String,      
 }
 
 

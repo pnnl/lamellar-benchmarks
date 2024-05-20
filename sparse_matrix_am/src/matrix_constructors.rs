@@ -37,9 +37,13 @@ pub fn dart_uniform_rows(
         )
         -> (Vec<usize>,Vec<usize>) {
 
+    println!("!!!!!!!!!! SEED: {:?}", seed );
+    println!("!!!!!!!!!! row_indices: {:?}", row_indices );
+
     let mut rng             =   rand::rngs::StdRng::seed_from_u64( seed as u64 ); // a different / offset random seed for each row         
 
-    let mut generated_indices       =   HashSet::with_capacity(nnz); 
+    let mut generated_indices
+                            =   Vec::with_capacity(nnz); 
 
     let mut row;
     let mut col;
@@ -48,10 +52,10 @@ pub fn dart_uniform_rows(
     while generated_indices.len() < nnz {
         row                 =   row_indices[ ( rng.gen::<f64>() * m ) as usize ];
         col                 =   ( rng.gen::<f64>() * n ) as usize;
-        generated_indices.insert((row,col));
+        generated_indices.push((row,col));
     }
 
-    generated_indices.drain().unzip()
+    generated_indices.into_iter().unzip()
     
     // return (generated_indices_row, generated_indices_col)
 }

@@ -54,6 +54,7 @@ use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
 use sparse_matrix_am::matrix_constructors::dart_uniform_rows;
+use sparse_matrix_am::sssp_serial::dijkstra;
 
 use clap::{Parser, Subcommand};
 use ordered_float::OrderedFloat;
@@ -83,7 +84,7 @@ fn main() {
     let cli = Cli::parse();
 
     let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
-    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads_per_pe();
     let num_rows_global         =   rows_per_pe * world.num_pes();    
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_matrix             =   cli.random_seed;  
@@ -174,13 +175,13 @@ fn main() {
 
     for epoch in 0..num_rows_global {
 
-        **scores_have_changed.write()               =   false; // update our flag
+        **world.block_on(scores_have_changed.write())               =   false; // update our flag
 
         // check to see if any scores can be reduced by relaxing edges
         let new_scores = {
 
             let mut new_scores                      =   Vec::new();
-            let mut tentative_scores_temp           =   tentative_scores.write();
+            let mut tentative_scores_temp           =   world.block_on(tentative_scores.write());
             
             for row in row_owned_first_in .. row_owned_first_out {
 
@@ -217,7 +218,7 @@ fn main() {
         world.wait_all();          
         world.barrier();             
 
-        if ! **scores_have_changed.read() {
+        if ! **world.block_on(scores_have_changed.read()) {
             break
         }
     }
@@ -228,7 +229,7 @@ fn main() {
 
 
     let tentative_distances_pe_0: Vec< f64 >
-                                =   (*tentative_scores.read())
+                                =   (*world.block_on(tentative_scores.read()))
                                         .clone()
                                         .into_iter()
                                         .take( rows_per_pe )
@@ -241,10 +242,76 @@ fn main() {
         time_to_loop            =   Instant::now().duration_since(start_time_main_loop);            
 
         if cli.write_to_json {
+
             println!("");
             println!("WRITING TO JSON!!!!!!!!!!!!!!!!!!!!!!!");
             println!("");
-            write_to_json_file("sssp_unit_test_data_bellman_ford_irredundant_search.json", &tentative_distances_pe_0 )
+
+            // write the calculated path lengths to json
+            // -----------------------------------------
+            write_to_json_file("sssp_unit_test_data_bellman_ford_irredundant_search.json", &tentative_distances_pe_0 );
+
+
+            // a function to generate the slice of the weighted adjacency matrix owned by any pe
+            // ---------------------------------------------------------------------------------
+            let matrix_slice_for_pe     =   | pe: usize | -> (Vec<usize>,Vec<usize>,Vec<f64>) {
+                // calculate which rows are owned by this pe
+                let row_owned_first_in      =   rows_per_pe * pe;
+                let row_owned_first_out     =   ( row_owned_first_in + rows_per_pe ).min( num_rows_global );
+                let num_rows_owned          =   row_owned_first_out - row_owned_first_out;                
+                let owned_row_indices       =   (row_owned_first_in..row_owned_first_out).collect::<Vec<usize>>();
+                // 
+                let (indices_row, indices_col)  
+                                            =   dart_uniform_rows(
+                                                    seed_matrix + pe, // random seed
+                                                    num_rows_global, // number of matrix columns
+                                                    avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                    & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                                );
+
+                let (indices_row_0, indices_col_0)  
+                                            =   dart_uniform_rows(
+                                                    seed_matrix + pe, // random seed
+                                                    num_rows_global, // number of matrix columns
+                                                    avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
+                                                    & owned_row_indices, // list of row indices; a row will be generated for each index                
+                                                );
+                println!("indices_col {:?}", & indices_col );
+                if indices_row != indices_row_0 {
+                    println!("");
+                    println!("!!!!!!!!! SAME INPUT DIFFERENT OUTPUT ");
+                    println!("len(output_0) = {:?}, len(utput_1) = {:?}", indices_row_0.len(), indices_row.len() );
+                    println!("{:?}", &indices_row_0);
+                    println!("{:?}", &indices_row);                    
+                    println!("");                   
+                }                                            
+                // define a random number generator
+                let mut rng                 =   rand::rngs::StdRng::seed_from_u64( (seed_matrix +1) as u64 );
+                // define a vector of randomly generated weights
+                let weights: Vec<_>         =   (0..indices_col.len())
+                                                    .map(|x| rng.gen::<f64>() )
+                                                    .collect();
+                return (indices_row, indices_col, weights)              
+            };
+
+            // write the full adjacency matrix to json
+            // ---------------------------------------            
+            let mut indices_row         =   Vec::new();
+            let mut indices_col         =   Vec::new();  
+            let mut weights             =   Vec::new();           
+            for pe in 0 .. world.num_pes() {
+                let (mut ir, mut ic, mut w)           =   matrix_slice_for_pe( pe );
+                indices_row.append( &mut ir );
+                indices_col.append( &mut ic );
+                weights.append( &mut w );
+            }
+            indices_row.append( &mut indices_col );
+            write_to_json_file("sssp_unit_test_matrix_bellman_ford_irredundant_search.json", &indices_row );
+            write_to_json_file("sssp_unit_test_weight_bellman_ford_irredundant_search.json", &weights );
+
+            let sssp_dijkstra           =   dijkstra( num_rows_global, &indices_row, &indices_col, &weights );
+            write_to_json_file("sssp_unit_test_dijkstra_graphpet.json", &sssp_dijkstra );            
+
         }            
 
         println!("");
@@ -252,7 +319,7 @@ fn main() {
         println!("");
 
         println!("Number of PE's:                     {:?}", world.num_pes() );  
-        println!("Cores per PE:                       {:?}", world.num_threads());        
+        println!("Cores per PE:                       {:?}", world.num_threads_per_pe());        
         println!("Matrix size:                        {:?}", num_rows_global );
         println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );        
         println!("Avg nnz per row:                    {:?}", matrix.nnz() as f64 / rows_per_pe as f64 );
@@ -284,8 +351,8 @@ pub struct UpdateScoresAm {
 #[lamellar::am]
 impl LamellarAM for UpdateScoresAm {
     async fn exec(self) {        
-        let mut receives_new_scores         =   self.receives_new_scores.write(); // get a writable handle on the local collection of diagonal elements
-        let mut scores_have_changed         =   self.scores_have_changed.write();
+        let mut receives_new_scores         =   self.receives_new_scores.write().await; // get a writable handle on the local collection of diagonal elements
+        let mut scores_have_changed         =   self.scores_have_changed.write().await;
         **scores_have_changed               =   true; // mark that at least one score has changed
         for ( vertex, score ) in self.new_scores.iter() {
             receives_new_scores[ *vertex ]  =   OrderedFloat( * score );
@@ -302,10 +369,14 @@ impl LamellarAM for UpdateScoresAm {
 
 
 use serde_json::to_writer;
+use serde::ser::Serialize;
 use std::env;
 use std::fs::File;
 
-fn write_to_json_file(filename: &str, data: &[f64]) {
+fn write_to_json_file< T >(filename: &str, data: &[T]) 
+    where 
+        T:  Sized + Serialize
+{
     // Get the current directory
     let current_dir = env::current_dir().unwrap();
 

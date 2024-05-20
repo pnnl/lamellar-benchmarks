@@ -62,7 +62,7 @@ fn main() {
     let cli = Cli::parse();
 
     let rows_per_thread_per_pe  =   cli.rows_per_thread_per_pe;
-    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads();
+    let rows_per_pe             =   rows_per_thread_per_pe * world.num_threads_per_pe();
     let num_rows_global         =   rows_per_pe * world.num_pes();    
     let avg_nnz_per_row         =   cli.avg_nnz_per_row;
     let seed_matrix             =   cli.random_seed + world.my_pe(); 
@@ -221,7 +221,7 @@ fn main() {
     let mut destination_offset_walker
                                 =   vec![ 0; rows_per_pe + 1 ];
     {
-        let handle              =   destination_offset.read();
+        let handle              =   world.block_on(destination_offset.read());
         for p in 0 .. rows_per_pe + 1 {
             
             destination_offset_walker[p]
@@ -238,8 +238,10 @@ fn main() {
 
     // pre-allocate the vector of row indices
     let num_destination_row_indices  
-                                =   destination_offset_walker
-                                        .read()[ rows_per_pe ];
+                                =   world.block_on(
+                                        destination_offset_walker
+                                        .read()
+                                    )[ rows_per_pe ];
     let destination_row_indices =   LocalRwDarc::new( 
                                         world.team(),
                                         vec![ 0; num_destination_row_indices ],
@@ -270,7 +272,7 @@ fn main() {
 
     let time_to_transpose       =   Instant::now().duration_since(start_time_to_transpose);    
     
-    let matrix_nnz_transposed   =   destination_row_indices.read().len();
+    let matrix_nnz_transposed   =   world.block_on(destination_row_indices.read()).len();
 
     if world.my_pe() == 0 {
         println!("");
@@ -278,7 +280,7 @@ fn main() {
         println!("");
     
         println!("Number of PE's:                     {:?}", world.num_pes() );  
-        println!("Cores per PE:                       {:?}", world.num_threads());        
+        println!("Cores per PE:                       {:?}", world.num_threads_per_pe());        
         println!("Matrix size:                        {:?}", num_rows_global );
         println!("Rows per thread per PE:             {:?}", rows_per_thread_per_pe );        
         println!("Avg nnz per row:                    {:?}", nnz_in_this_pe as f64 / rows_per_pe as f64 );
@@ -313,7 +315,7 @@ pub struct SendOffsets {
 #[lamellar::am]
 impl LamellarAM for SendOffsets {
     async fn exec(self) {
-        let mut destination_offset    =   self.destination_offset.write();
+        let mut destination_offset    =   self.destination_offset.write().await;
         for ( local_column_number, offset ) in self.source_offset.iter().cloned().enumerate() {
             destination_offset[ local_column_number ] +=     offset;
         }
@@ -334,8 +336,8 @@ pub struct SendRowIndices {
 #[lamellar::am]
 impl LamellarAM for SendRowIndices {
     async fn exec(self) {
-        let mut destination_offset_walker   =   self.destination_offset_walker.write();
-        let mut destination_row_indices     =   self.destination_row_indices.write();
+        let mut destination_offset_walker   =   self.destination_offset_walker.write().await;
+        let mut destination_row_indices     =   self.destination_row_indices.write().await;
         let source_offset                   =   & self.source_offset;
         let source_row_indices              =   & self.source_row_indices;                
         

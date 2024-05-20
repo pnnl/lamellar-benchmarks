@@ -303,7 +303,7 @@ fn main() {
                                             =   Instant::now();  
 
             // concatenate all elements on PE0
-            let zipped_permutation          =   diagonal_elements_union.read().concat();
+            let zipped_permutation          =   world.block_on(diagonal_elements_union.read()).concat();
             // println!("zipped permutation: {:?}", &zipped_permutation);
             // println!("diagonal elements union: {:?}", &diagonal_elements_union);        
 
@@ -477,7 +477,7 @@ pub struct PoolDiagonalElementsAmX {
 #[lamellar::am]
 impl LamellarAM for PoolDiagonalElementsAmX {
     async fn exec(self) {
-        let mut diagonal_elements_to_stay   =   self.diagonal_elements_to_stay.write();
+        let mut diagonal_elements_to_stay   =   self.diagonal_elements_to_stay.write().await;
         for (epoch,vec) in self.diagonal_elements_to_move.iter().enumerate() {
             diagonal_elements_to_stay[epoch].extend_from_slice(vec);
         }

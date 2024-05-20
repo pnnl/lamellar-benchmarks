@@ -6,3 +6,5 @@
 pub mod matrix_constructors;
 pub mod toposort_am;
 pub mod permutation;
+pub mod sssp_serial;
+pub mod sssp_dijkstra;

@@ -37,10 +37,10 @@ impl LamellarAM for ToposortAm {
         if ! self.columns_to_delete.is_empty() {
 
             // let     diagonal_elements   =   self.diagonal_elements.write();
-            let     matrix              =   self.matrix.read();
-            let mut row_counts          =   self.row_counts.write();
-            let mut row_sums            =   self.row_sums.write();
-            let mut num_deleted_global  =   self.num_deleted_global.write();
+            let     matrix              =   self.matrix.read().await;
+            let mut row_counts          =   self.row_counts.write().await;
+            let mut row_sums            =   self.row_sums.write().await;
+            let mut num_deleted_global  =   self.num_deleted_global.write().await;
 
             // update the global count of number of deleted rows/columns
             **num_deleted_global        +=  self.columns_to_delete.len();
@@ -68,7 +68,7 @@ pub struct PoolDiagonalElementsAm {
 #[lamellar::am]
 impl LamellarAM for PoolDiagonalElementsAm {
     async fn exec(self) {
-        let mut diagonal_elements_to_stay  =   self.diagonal_elements_to_stay.write(); // get a writable handle on the local collection of diagonal elements
+        let mut diagonal_elements_to_stay  =   self.diagonal_elements_to_stay.write().await; // get a writable handle on the local collection of diagonal elements
         for (epoch,vec) in self.diagonal_elements_to_move.iter().enumerate() {
             diagonal_elements_to_stay[epoch].extend_from_slice(vec);
         }

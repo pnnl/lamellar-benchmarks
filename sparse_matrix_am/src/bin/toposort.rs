@@ -186,9 +186,9 @@ fn main() {
             //         then push the identified elements to 
 
             // let mut diagonal_elements_temp  
-            //                             =   diagonal_elements.write();
-            let row_counts_temp         =   row_counts.read();
-            let row_sums_temp           =   row_sums.read();  
+            //                             =   world.block_on(diagonal_elements.write());
+            let row_counts_temp         =   world.block_on(row_counts.read());
+            let row_sums_temp           =   world.block_on(row_sums.read());  
             
             for row in rows_owned.iter() {
                 if row_counts_temp[ *row ]  == 1 {
@@ -228,7 +228,7 @@ fn main() {
         world.wait_all();          
         world.barrier();             
 
-        if **num_deleted_global.read() == num_rows_global {
+        if **world.block_on(num_deleted_global.read()) == num_rows_global {
 
             time_to_loop            =   Instant::now().duration_since(start_time_main_loop);    
 
@@ -265,7 +265,7 @@ fn main() {
                                             =   Instant::now();  
 
             // concatenate all elements on PE0
-            let zipped_permutation          =   diagonal_elements_union.read().concat();
+            let zipped_permutation          =   world.block_on(diagonal_elements_union.read()).concat();
 
             // calculate the new row and column permutations
             let mut new_permutation_row: Vec<usize>     =   vec![0;num_rows_global];

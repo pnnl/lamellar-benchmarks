@@ -351,7 +351,7 @@ fn main() {}
 //             diagonal_elements.shrink_to_fit(); 
  
 //             { 
-//                 diagonal_elements_union.write().extend( vec![vec![]; epoch+1 ] ); // ensure diagonal_elements_union is long enough (before now it had length 0) 
+//                 world.block_on(world.block_on(diagonal_elements_union.write())).extend( vec![vec![]; epoch+1 ] ); // ensure diagonal_elements_union is long enough (before now it had length 0) 
 //             } 
  
 //             // send all elements to PE0 for integration 
@@ -367,8 +367,8 @@ fn main() {}
 //             time_to_pool            =    Instant::now().duration_since(start_time_pooling_permutations);                 
  
 //             // number of elements of each height 
-//             height_bins             =   diagonal_elements_union.read().iter().map(|x| x.len()).collect(); 
-//             // let u                   =   diagonal_elements_union.read(); 
+//             height_bins             =   world.block_on(diagonal_elements_union.read()).iter().map(|x| x.len()).collect(); 
+//             // let u                   =   world.block_on(diagonal_elements_union.read()); 
 //             // height_bins             =   (0..epoch) 
 //             //                                 .map(|x| u[x].len()) 
 //             //                                 .collect();              
@@ -386,7 +386,7 @@ fn main() {}
 //         //                                     =   Instant::now();   
             
 //         //     // concatenate all elements on PE0
-//         //     let zipped_permutation          =   diagonal_elements_union.read().concat();
+//         //     let zipped_permutation          =   world.block_on(diagonal_elements_union.read()).concat();
 //         //     // println!("zipped permutation: {:?}", &zipped_permutation);
 //         //     // println!("diagonal elements union: {:?}", &diagonal_elements_union);        
 
@@ -447,7 +447,7 @@ fn main() {}
 //         println!("Average number of nonzeros per row: {:?}", cli.avg_nz_per_row );        
 //         println!("Random seed:                        {:?}", cli.random_seed );
 //         println!("Number of PE's:                     {:?}", world.num_pes() );  
-//         println!("Cores per PE:                       {:?}", world.num_threads());
+//         println!("Cores per PE:                       {:?}", world.num_threads_per_pe());
 //         println!("Number of nonzeros on PE 0:         {:?}", matrix.values().map(|x| x.len()).sum::<usize>() );                   
 //         println!("");       
 //         println!("Time to generate rand perm's        {:?}", time_to_permute); 
@@ -566,7 +566,7 @@ fn main() {}
 // #[lamellar::am]
 // impl LamellarAM for PoolDiagonalElementsAmX {
 //     async fn exec(self) {
-//         let mut diagonal_elements_to_stay   =   self.diagonal_elements_to_stay.write();
+//         let mut diagonal_elements_to_stay   =   self.world.block_on(world.block_on(world.block_on(diagonal_elements_to_stay.write()))).await;
 //         for (epoch,vec) in self.diagonal_elements_to_move.iter().enumerate() {
 //             diagonal_elements_to_stay[epoch].extend_from_slice(vec);
 //         }
