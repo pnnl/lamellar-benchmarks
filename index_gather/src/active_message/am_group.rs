@@ -112,14 +112,15 @@ impl LamellarAM for LaunchAmSafeU32Group {
                 },
             );
         }
-        tg.exec()
-            .await
-            .iter()
-            .map(|x| match x {
-                AmGroupResult::Pe(_, v) => *v,
-                _ => panic!("invalid result"),
-            })
-            .collect::<Vec<_>>()
+        let res = tg.exec().await;
+        println!("returned taskgroup! {:?}", res.len());
+        // res.iter()
+        //     .map(|x| match x {
+        //         AmGroupResult::Pe(_, v) => *v,
+        //         _ => panic!("invalid result"),
+        //     })
+        //     .collect::<Vec<_>>()
+        Vec::<usize>::new()
     }
 }
 
@@ -277,7 +278,10 @@ pub fn index_gather<'a>(
 ) -> (Duration, Duration, Duration, Duration) {
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
-    std::env::set_var("LAMELLAR_OP_BATCH", format!("{}", ig_config.buffer_size));
+    std::env::set_var(
+        "LAMELLAR_BATCH_OP_SIZE",
+        format!("{}", ig_config.buffer_size),
+    );
     world.barrier();
     let mut timer = Instant::now();
     let (_init_time, launch_tasks) = if safe {

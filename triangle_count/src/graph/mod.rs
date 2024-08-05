@@ -271,7 +271,7 @@ impl Graph {
         }
         let g = Graph {
             world: world,
-            graph: graph.into_darc(),
+            graph: graph.blocking_into_darc(),
             my_pe: my_pe,
         };
         if my_pe == 0 {

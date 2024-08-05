@@ -298,13 +298,13 @@ pub fn rand_perm<'a>(
     };
     world.block_on(launch_tasks);
     world.wait_all();
-    let target = target.into_localrw(); //a cheap hack to ensure all other references to the darc are dropped, and thus the all the launched active messages have completed
+    let target = target.blocking_into_localrw(); //a cheap hack to ensure all other references to the darc are dropped, and thus the all the launched active messages have completed
     world.barrier();
     let perm_time = timer.elapsed();
 
     let collect_timer = Instant::now();
-    let data = world
-        .block_on(target.read())
+    let data = target
+        .blocking_read()
         .iter()
         .map(|x| x.load(Ordering::Relaxed))
         .filter(|x| *x != usize::MAX)

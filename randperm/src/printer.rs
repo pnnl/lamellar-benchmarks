@@ -20,8 +20,8 @@ pub(crate) fn print_am_times(
                 cli.max_index_size_len() + cli.max_array_distribution_len() + 1
             ),
             format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.0),
+            format!("{:<6.4?}", times.1),
+            format!("{:<6.4?}", times.2),
             times.3,
         );
     }
@@ -58,8 +58,8 @@ pub(crate) fn print_array_times(
                 cli.max_index_size_len() + cli.max_array_distribution_len() + 1
             ),
             format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.0),
+            format!("{:<6.4?}", times.1),
+            format!("{:<6.4?}", times.2),
             times.3,
         );
     }

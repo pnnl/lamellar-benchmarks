@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 pub enum ArrayType {
     Unsafe,
     Atomic,
+    ReadOnly,
     LocalLock,
 }
 
@@ -36,11 +37,14 @@ pub fn index_gather<'a>(
         "LAMELLAR_BATCH_OP_THREADS",
         format!("{}", ig_config.launch_threads),
     );
-    std::env::set_var("LAMELLAR_OP_BATCH", format!("{}", ig_config.buffer_size));
+    std::env::set_var(
+        "LAMELLAR_BATCH_OP_SIZE",
+        format!("{}", ig_config.buffer_size),
+    );
     world.barrier();
     let mut timer = Instant::now();
 
-    let index_gather_request = match array_type {
+    let _index_gather_request = match array_type {
         ArrayType::Unsafe => {
             let array = UnsafeArray::<usize>::new(
                 world,
@@ -54,6 +58,18 @@ pub fn index_gather<'a>(
         }
         ArrayType::Atomic => {
             let array = AtomicArray::<usize>::new(
+                world,
+                ig_config.total_table_size(num_pes),
+                distribution.into(),
+            );
+            let _init_time = timer.elapsed();
+            timer = Instant::now();
+
+            //the actual index_gather operation
+            array.batch_load(rand_indices.as_slice())
+        }
+        ArrayType::ReadOnly => {
+            let array = ReadOnlyArray::<usize>::new(
                 world,
                 ig_config.total_table_size(num_pes),
                 distribution.into(),
@@ -80,7 +96,8 @@ pub fn index_gather<'a>(
 
     let launch_issue_time = timer.elapsed();
     let launch_finish_time = timer.elapsed();
-    world.block_on(index_gather_request);
+    // world.block_on(index_gather_request);
+    world.wait_all();
     let local_finish_time = timer.elapsed();
     world.barrier();
     let global_finish_time = timer.elapsed();

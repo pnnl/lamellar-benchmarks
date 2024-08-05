@@ -17,7 +17,7 @@ pub struct RandPermCli {
     #[arg(short = 'f', long, default_value_t = 2)]
     pub target_factor: usize,
 
-    #[arg(short, long, env = "LAMELLAR_OP_BATCH", default_value_t = 10000)]
+    #[arg(short, long, env = "LAMELLAR_BATCH_OP_SIZE", default_value_t = 10000)]
     pub buffer_size: usize,
 
     #[arg(value_enum, long,num_args(0..))]

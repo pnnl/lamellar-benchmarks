@@ -186,7 +186,8 @@ struct LaunchAm<T: BufferedAm> {
 
 #[lamellar::local_am]
 impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
-    async fn exec(self) -> Vec<Vec<usize>> {
+    async fn exec(self) -> Vec<<T as LamellarAM>::Output> {
+        // let _timer = Instant::now();
         let num_pes = lamellar::num_pes;
         let mut pe_ams = vec![self.am_builder.new(); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
@@ -202,12 +203,13 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             }
         }
         //send any remaining buffered updates
-        let _timer = Instant::now();
+
         for (rank, am) in pe_ams.into_iter().enumerate() {
             if am.len() > 0 {
                 reqs.push(task_group.exec_am_pe(rank, am));
             }
         }
+        // println!("send time {:?}", _timer.elapsed());
         futures::future::join_all(reqs).await
         // .into_iter()
         // .flatten()
@@ -220,7 +222,7 @@ fn launch_ams<T: BufferedAm>(
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,
     am_builder: T,
-) -> Pin<Box<dyn Future<Output = Vec<Vec<Vec<usize>>>>>> {
+) -> Pin<Box<dyn Future<Output = Vec<Vec<<T as LamellarAM>::Output>>>>> {
     let num_pes = world.num_pes();
     let slice_size = ig_config.pe_updates(num_pes) as f32 / ig_config.launch_threads as f32;
     let mut launch_tasks = vec![];

@@ -1,29 +1,21 @@
 mod active_message;
 mod graph;
 mod options;
+mod printer;
+
+use std::collections::HashMap;
 
 use graph::{Graph, GraphType};
 use options::TcCli;
+use printer::{print_am_times, print_results};
 
 use clap::{Parser, ValueEnum};
-use std::time::Duration;
 
-#[derive(ValueEnum, Debug, Clone, Copy)]
+#[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Variant {
     Buffered,
     AmGroup,
     Single,
-}
-
-fn print_am_times(
-    my_pe: usize,
-    variant: &Variant,
-    buf_size: usize,
-    times: (Duration, Duration, Duration),
-) {
-    if my_pe == 0 {
-        println!("{variant:?} buf_size: {buf_size:?} {times:?} ",);
-    }
 }
 
 fn main() {
@@ -45,7 +37,10 @@ fn main() {
         None => vec![Variant::Buffered, Variant::AmGroup, Variant::Single],
     };
 
+    let mut results = HashMap::new();
+
     for variant in variants {
+        let variant_results = results.entry(variant).or_insert(HashMap::new());
         for _i in 0..iterations {
             match variant {
                 Variant::Buffered => {
@@ -53,6 +48,10 @@ fn main() {
                         let times = active_message::buffered::triangle_count(
                             &world, &cli, &graph, *buf_size,
                         );
+                        variant_results
+                            .entry(*buf_size)
+                            .or_insert(Vec::new())
+                            .push(times.clone());
                         print_am_times(my_pe, &variant, *buf_size, times);
                     }
                 }
@@ -61,14 +60,40 @@ fn main() {
                         let times = active_message::am_group::triangle_count(
                             &world, &cli, &graph, *buf_size,
                         );
+                        variant_results
+                            .entry(*buf_size)
+                            .or_insert(Vec::new())
+                            .push(times.clone());
                         print_am_times(my_pe, &variant, *buf_size, times);
                     }
                 }
                 Variant::Single => {
                     let times = active_message::single::triangle_count(&world, &cli, &graph);
+                    variant_results
+                        .entry(0)
+                        .or_insert(Vec::new())
+                        .push(times.clone());
                     print_am_times(my_pe, &variant, 0, times);
                 }
             }
+        }
+    }
+    let max_buf_len = cli
+        .buffer_size
+        .iter()
+        .map(|e| format!("{e}").len())
+        .max()
+        .unwrap();
+    for (variant, variant_results) in &results {
+        for (sub_variant, times) in variant_results {
+            print_results(
+                // &cli,
+                my_pe,
+                // num_pes,
+                &format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
+                &format!("{:<1$}", format!("{sub_variant}"), max_buf_len),
+                &times,
+            )
         }
     }
 }

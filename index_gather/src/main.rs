@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 #[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Variant {
+    TestAm,
     UnsafeAM,
     SafeAm,
     UnsafeBufferedAm,
@@ -22,6 +23,7 @@ pub enum Variant {
     SafeAmGroup,
     UnsafeArray,
     AtomicArray,
+    ReadOnlyArray,
     LocalLockArray,
 }
 
@@ -81,6 +83,22 @@ fn main() {
             );
 
             match variant {
+                Variant::TestAm => {
+                    for idx_size in &am_index_size {
+                        let times = active_message::test_am::index_gather(
+                            &world,
+                            &cli,
+                            &rand_index,
+                            false,
+                            idx_size,
+                        );
+                        variant_results
+                            .entry(format!("{idx_size:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
+                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                    }
+                }
                 Variant::UnsafeAM => {
                     for idx_size in &am_index_size {
                         let times = active_message::am::index_gather(
@@ -184,6 +202,22 @@ fn main() {
                             &cli,
                             &rand_index,
                             ArrayType::Unsafe,
+                            distribution,
+                        );
+                        variant_results
+                            .entry(format!("{distribution:?}"))
+                            .or_insert(Vec::new())
+                            .push(times.clone());
+                        print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
+                    }
+                }
+                Variant::ReadOnlyArray => {
+                    for distribution in &array_distribution {
+                        let times = array::index_gather(
+                            &world,
+                            &cli,
+                            &rand_index,
+                            ArrayType::ReadOnly,
                             distribution,
                         );
                         variant_results

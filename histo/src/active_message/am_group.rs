@@ -248,7 +248,7 @@ pub fn histo<'a>(
     index_size: &IndexSize,
 ) -> (Duration, Duration, Duration, Duration) {
     let num_pes = world.num_pes();
-    std::env::set_var("LAMELLAR_OP_BATCH", format!("{}", histo_config.buffer_size));
+    std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", histo_config.buffer_size));
     world.barrier();
     let mut timer = Instant::now();
     let (_init_time, launch_tasks) = if safe {

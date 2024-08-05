@@ -87,7 +87,7 @@ pub fn rand_perm<'a>(
         format!("{}", rand_perm_config.launch_threads),
     );
     std::env::set_var(
-        "LAMELLAR_OP_BATCH",
+        "LAMELLAR_BATCH_OP_SIZE",
         format!("{}", rand_perm_config.buffer_size),
     );
     world.barrier();
@@ -166,7 +166,8 @@ pub fn rand_perm<'a>(
     let global_finish_time = timer.elapsed();
 
     // if my_pe == 0 {
-    let sum = world.block_on(darts_array.sum());
+    let sum = darts_array.sum().block().unwrap();
 
+    // (perm_time, collect_time, global_finish_time, sum.unwrap())
     (perm_time, collect_time, global_finish_time, sum)
 }

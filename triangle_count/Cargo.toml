@@ -9,7 +9,7 @@ edition = "2021"
 #lamellar = { git = "https://github.com/pnnl/lamellar-runtime", features = ["enable-rofi"] } 
 lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi","tokio-executor"] }
 #lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi"] }
-#lamellar = { version = "0.6.0" , features = ["enable-rofi"] }
+#lamellar = { version = "0.6.1" , features = ["enable-rofi"] }
 parking_lot = "0.11"
 serde = { version = "1.0", features = ["derive"] }
 csv = "1"

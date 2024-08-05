@@ -126,7 +126,7 @@ pub fn rand_perm<'a>(
     let the_array =
         LocalRwDarc::new(world, vec![0; rand_perm_config.pe_table_size(num_pes)]).unwrap();
     std::env::set_var(
-        "LAMELLAR_OP_BATCH",
+        "LAMELLAR_BATCH_OP_SIZE",
         format!("{}", rand_perm_config.buffer_size),
     );
     world.barrier();

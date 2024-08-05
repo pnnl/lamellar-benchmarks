@@ -36,7 +36,7 @@ pub fn histo<'a>(
         "LAMELLAR_BATCH_OP_THREADS",
         format!("{}", histo_config.launch_threads),
     );
-    std::env::set_var("LAMELLAR_OP_BATCH", format!("{}", histo_config.buffer_size));
+    std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", histo_config.buffer_size));
     world.barrier();
     let mut timer = Instant::now();
 

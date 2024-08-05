@@ -102,7 +102,7 @@ pub(crate) fn triangle_count<'a>(
     let num_nodes = graph.num_nodes();
 
     let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block);
-    std::env::set_var("LAMELLAR_OP_BATCH", format!("{}", buf_size));
+    std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", buf_size));
     world.barrier();
     let timer = std::time::Instant::now();
 

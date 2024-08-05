@@ -90,6 +90,7 @@ trait BufferedAm: RemoteActiveMessage + LamellarAM + Serde + AmDist + Clone {
     fn to_am(self) -> Self::AM;
     fn add_index(&mut self, index: usize);
     fn len(&self) -> usize;
+    fn index_size(&self) -> usize;
 }
 
 impl BufferedAm for SafeBufferedAMu32 {
@@ -110,6 +111,9 @@ impl BufferedAm for SafeBufferedAMu32 {
     fn len(&self) -> usize {
         self.indices.len()
     }
+    fn index_size(&self) -> usize {
+        std::mem::size_of::<u32>()
+    }
 }
 
 impl BufferedAm for SafeBufferedAMusize {
@@ -128,6 +132,9 @@ impl BufferedAm for SafeBufferedAMusize {
     }
     fn len(&self) -> usize {
         self.indices.len()
+    }
+    fn index_size(&self) -> usize {
+        std::mem::size_of::<usize>()
     }
 }
 
@@ -148,6 +155,9 @@ impl BufferedAm for UnsafeBufferedAMu32 {
     fn len(&self) -> usize {
         self.indices.len()
     }
+    fn index_size(&self) -> usize {
+        std::mem::size_of::<u32>()
+    }
 }
 
 impl BufferedAm for UnsafeBufferedAMusize {
@@ -166,6 +176,10 @@ impl BufferedAm for UnsafeBufferedAMusize {
     }
     fn len(&self) -> usize {
         self.indices.len()
+    }
+
+    fn index_size(&self) -> usize {
+        std::mem::size_of::<usize>()
     }
 }
 
@@ -191,7 +205,7 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
             pe_ams[rank].add_index(offset);
-            if pe_ams[rank].len() >= self.buffer_size {
+            if pe_ams[rank].len() * self.am_builder.index_size() >= self.buffer_size {
                 let mut am = self.am_builder.new();
                 std::mem::swap(&mut am, &mut pe_ams[rank]);
                 let _ = task_group.exec_am_pe(rank, am); //we could await here but we will just do a wait_all later instead

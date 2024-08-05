@@ -29,4 +29,16 @@ impl TcCli {
         println!("buffer size: {:?}", self.buffer_size);
         println!("variants: {:?}", self.variants);
     }
+
+    pub fn max_variant_len(&self) -> usize {
+        if let Some(variants) = &self.variants {
+            variants
+                .iter()
+                .map(|v| format! {"{v:?}"}.len())
+                .max()
+                .unwrap()
+        } else {
+            "BufferedCasDartRemote".len()
+        }
+    }
 }

@@ -20,6 +20,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 #[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Variant {
+    TestAm,
     UnsafeAM,
     SafeAm,
     UnsafeBufferedAm,
@@ -88,6 +89,22 @@ fn main() {
             );
 
             match variant {
+                Variant::TestAm => {
+                    // for idx_size in &am_index_size {
+                    //     let times = active_message::test_am::histo(
+                    //         &world,
+                    //         &cli,
+                    //         &rand_index,
+                    //         true,
+                    //         idx_size,
+                    //     );
+                    //     variant_results
+                    //         .entry(format!("{idx_size:?}"))
+                    //         .or_insert(Vec::new())
+                    //         .push(times.clone());
+                    //     print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                    // }
+                }
                 Variant::UnsafeAM => {
                     for idx_size in &am_index_size {
                         let times =

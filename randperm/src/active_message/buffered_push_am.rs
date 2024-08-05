@@ -129,7 +129,7 @@ pub fn rand_perm<'a>(
     world.wait_all();
     world.barrier();
     let perm_time = timer.elapsed();
-    let target = target.into_darc();
+    let target = target.blocking_into_darc();
     let collect_timer = Instant::now();
     let mut data = Vec::with_capacity(target.len());
     data.extend_from_slice(&target);
