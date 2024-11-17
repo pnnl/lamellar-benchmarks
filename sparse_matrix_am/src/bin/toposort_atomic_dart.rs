@@ -444,6 +444,9 @@ fn main() {
         println!("");
         println!("Poset height:                       {:?}", poset_height );
         println!("Height bins:                        {:?}", height_bins );
+
+        println!("");
+        println!("{:?}", time_to_loop.as_secs() as f64 + time_to_loop.subsec_nanos() as f64 * 1e-9); // we add this extra line at the end so we can feed the run time into a bash script, if desired                           
     }
 }
 

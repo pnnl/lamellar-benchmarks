@@ -34,7 +34,8 @@ use std::time::{Instant, Duration};
 
 // EXAMPLE RUN COMMAND
 // ```
-// RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=1 srun --cpus-per-task=2 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=2 -A lamellar --mpi=pmi2 --exclusive /people/roek189/learning_lamellar/_lamellar-benchmarks/target/release/sssp_delta_step --rows-per-thread-per-pe 10 --avg-nnz-per-row 8 --random-seed 0 --delta 0.3 --write-to-json
+// RUST_LIB_BACKTRACE=1 RUST_BACKTRACE=full LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=1 srun --cpus-per-task=1 --cpu-bind=ldoms,v  -N 1 --ntasks-per-node=2 -A lamellar --mpi=pmi2 --exclusive /people/roek189/learning_lamellar/lamellar_benchmarks_repo/target/release/sssp_delta_step --rows-per-thread-per-pe 10 --avg-nnz-per-row 10 --random-seed 0 --delta 0.3 --write-to-json
+// LAMELLAR_DEADLOCK_TIMEOUT=10 LAMELLAR_THREADS=4 srun --cpus-per-task=4 --cpu-bind=ldoms,v  -N 16 --ntasks-per-node=16 -A lamellar --mpi=pmi2 --exclusive /people/roek189/learning_lamellar/lamellar_benchmarks_repo/target/release/sssp_delta_step --rows-per-thread-per-pe 10 --avg-nnz-per-row 10 --random-seed 0 --delta 0.3
 // ```
 
 // BENCHMARKING
@@ -111,7 +112,10 @@ fn main() {
                                         weights.clone(), 
                                     );
     let matrix                  =   matrix.to_csr::<usize>();
-    println!("!!!!!!!!! DELETE THE CSR MATRIX AFTER DEBUGGIN");
+
+    if cli.debug {
+        println!("!!!!!!!!! DELETE THE CSR MATRIX AFTER DEBUGGIN");
+    }
 
 
     // dump contents into new hash-of-vec matrix format with separate vecs for short and long edges
@@ -124,7 +128,10 @@ fn main() {
         }
             
     }
-    println!("FINISHED BUILDING HASH MATRIX");
+
+    if cli.debug{
+        println!("FINISHED BUILDING HASH MATRIX");
+    }
 
     // initialize distributed varialbles
     // ---------------------------------
@@ -177,15 +184,22 @@ fn main() {
     time_to_initialize              =   Instant::now().duration_since(start_time_initializing_values);     
     let start_time_main_loop        =   Instant::now();    
 
-    println!("ENTERING LOOP");
+
+    if cli.debug{
+        println!("ENTERING LOOP");
+    }
     loop {
 
-        println!("pe = {:?}", world.my_pe());
+        if cli.debug{
+            println!("pe = {:?}", world.my_pe());
+        }
 
         if world.my_pe() == 0 {
             if world.block_on(bottom_bucket_contents.read()).is_empty() {
 
-                println!("starting PE 0 top matter");
+                if cli.debug{
+                    println!("starting PE 0 top matter");
+                }
 
                 // relax the long edges for the current bucket
                 // -------------------------------------------
@@ -211,7 +225,9 @@ fn main() {
                     }
                 }
 
-                println!("FINISHED A WRITE LOOP FOR TENT WEIGHTS");                
+                if cli.debug{
+                    println!("FINISHED A WRITE LOOP FOR TENT WEIGHTS");                
+                }
                          
 
                 // calculate the new bottom bucket
@@ -225,7 +241,9 @@ fn main() {
                                                 .filter(|x| **x >=  upper_tent_limit )
                                                 .min();
 
-                println!("FINISHED A READ LOOP FOR TENT WEIGHTS");                                                                
+                if cli.debug{
+                    println!("FINISHED A READ LOOP FOR TENT WEIGHTS");                                                                
+                }
                 
                 // if min_tent_weight is None the break; every vertex is settled
                 if min_tent_weight.is_none() { break }
@@ -247,7 +265,9 @@ fn main() {
                     }
                 }  
                 
-                println!("FINISHED LAST WRITE LOOP FOR TENT WEIGHTS");                                                                                
+                if cli.debug{
+                    println!("FINISHED LAST WRITE LOOP FOR TENT WEIGHTS");                                                                                
+                }
             }
 
 
@@ -263,7 +283,10 @@ fn main() {
 
 
         }
-        println!("INSIDE LOOP: FINISHED PE 0 TOP MATTER");
+
+        if cli.debug{
+            println!("INSIDE LOOP: FINISHED PE 0 TOP MATTER");
+        }
 
         // send look-up requests (for rows of the adjacency matrix)
         // ---------------------
@@ -280,7 +303,10 @@ fn main() {
 
         world.wait_all();          
         world.barrier();    
-        println!("INSIDE LOOP: FINISHED SENDNG LOOKUP REQUESTS");              
+
+        if cli.debug{
+            println!("INSIDE LOOP: FINISHED SENDNG LOOKUP REQUESTS");              
+        }
 
 
         // fulfill look-up requests (for rows of the adjacency matrix)
@@ -304,7 +330,10 @@ fn main() {
 
         world.wait_all();          
         world.barrier();  
-        println!("INSIDE LOOP: FINISHED FULFILLING LOOKUP REQUESTS");        
+
+        if cli.debug{
+            println!("INSIDE LOOP: FINISHED FULFILLING LOOKUP REQUESTS");        
+        }
           
 
 
@@ -342,7 +371,9 @@ fn main() {
             }
         }
 
-        println!("INSIDE LOOP: FINISHED RELAXING SHORTED EDGES");                
+        if cli.debug{
+            println!("INSIDE LOOP: FINISHED RELAXING SHORTED EDGES");                
+        }
     }
 
 
@@ -454,7 +485,10 @@ fn main() {
         println!("Time to initialize matrix:          {:?}", time_to_initialize );                                                                                                       
         println!("Time to get shortest paths:         {:?}", time_to_loop );                                                                                                     
         println!("");                                                                                                        
-        // println!("Tenative distances on PE 0:         {:?}", tentative_distances_pe_0);                                                                                                      
+        // println!("Tenative distances on PE 0:         {:?}", tentative_distances_pe_0);    
+        
+        println!("");
+        println!("{:?}", time_to_loop.as_secs() as f64 + time_to_loop.subsec_nanos() as f64 * 1e-9); // we add this extra line at the end so we can feed the run time into a bash script, if desired                                                   
 
     }
 }

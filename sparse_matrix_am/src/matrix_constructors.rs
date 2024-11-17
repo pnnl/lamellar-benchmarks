@@ -14,7 +14,7 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc,Mutex};
 use std::thread;
 
@@ -37,13 +37,10 @@ pub fn dart_uniform_rows(
         )
         -> (Vec<usize>,Vec<usize>) {
 
-    println!("!!!!!!!!!! SEED: {:?}", seed );
-    println!("!!!!!!!!!! row_indices: {:?}", row_indices );
-
     let mut rng             =   rand::rngs::StdRng::seed_from_u64( seed as u64 ); // a different / offset random seed for each row         
 
     let mut generated_indices
-                            =   Vec::with_capacity(nnz); 
+                            =   HashSet::with_capacity(nnz); 
 
     let mut row;
     let mut col;
@@ -52,12 +49,12 @@ pub fn dart_uniform_rows(
     while generated_indices.len() < nnz {
         row                 =   row_indices[ ( rng.gen::<f64>() * m ) as usize ];
         col                 =   ( rng.gen::<f64>() * n ) as usize;
-        generated_indices.push((row,col));
+        generated_indices.insert((row,col));
     }
 
-    generated_indices.into_iter().unzip()
-    
-    // return (generated_indices_row, generated_indices_col)
+    let mut generated_indices: Vec<_>   =   generated_indices.into_iter().collect();
+    generated_indices.sort();
+    return generated_indices.into_iter().unzip()
 }
 
 
@@ -309,6 +306,145 @@ pub fn bernoulli_upper_unit_triangular_row_slice_csc(
     CsMat::new((side_length, side_length), indptr, indices, data)
 }
 
+
+
+
+
+use serde_pickle;
+use serde_pickle::DeOptions;
+use std::fs::File;
+use std::io::BufReader;
+
+
+/// Loads a sparse matrix stored in multiple pickle files and reconstructs it as a `sprs::TriMat`.
+///
+/// The function expects the following files to be present in the given directory:
+/// - `row_indices.pkl`: List of row indices (floats) of non-zero elements.
+/// - `col_indices.pkl`: List of column indices (floats) of non-zero elements.
+/// - `coefficients.pkl`: List of non-zero values (floats) in the matrix.
+/// - `num_rows.pkl`: Single float representing the number of rows in the matrix.
+/// - `num_columns.pkl`: Single float representing the number of columns in the matrix.
+///
+/// # Arguments
+///
+/// * `directory` - Path to the directory containing the pickle files.
+///
+/// # Returns
+///
+/// * A `TriMat<f64>` sparse matrix reconstructed from the data in the pickle files.
+///
+/// # Errors
+///
+/// * Returns an error if any of the pickle files cannot be read or deserialized.
+pub fn load_sparse_matrix(directory: &str) -> Result<TriMat<f64>, Box<dyn std::error::Error>> {
+    // Helper to load a pickle file as a Vec<f64>
+    fn load_pickle_as_vec(path: &str) -> Result<Vec<f64>, Box<dyn std::error::Error>> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        Ok(serde_pickle::from_reader(reader, DeOptions::default())?)
+    }
+
+    // Load row indices, column indices, and coefficients
+    let row_indices: Vec<f64> = load_pickle_as_vec(&format!("{}/row_indices.pkl", directory))?;
+    let col_indices: Vec<f64> = load_pickle_as_vec(&format!("{}/col_indices.pkl", directory))?;
+    let coefficients: Vec<f64> = load_pickle_as_vec(&format!("{}/coefficients.pkl", directory))?;
+
+    // Load number of rows and columns
+    let num_rows: f64 = load_pickle_as_vec(&format!("{}/num_rows.pkl", directory))?[0];
+    let num_cols: f64 = load_pickle_as_vec(&format!("{}/num_columns.pkl", directory))?[0];
+
+    // Convert row and column indices to usize
+    let row_indices: Vec<usize> = row_indices.into_iter().map(|x| x as usize).collect();
+    let col_indices: Vec<usize> = col_indices.into_iter().map(|x| x as usize).collect();
+
+    // Initialize the sparse matrix
+    let mut tri_mat = TriMat::with_capacity((num_rows as usize, num_cols as usize), coefficients.len());
+    for ((&row, &col), &value) in row_indices.iter().zip(&col_indices).zip(&coefficients) {
+        tri_mat.add_triplet(row, col, value);
+    }
+
+    Ok(tri_mat)
+}
+
+
+
+
+
+/// Load a list of f64's from a pickle file
+pub fn load_f64_vector_from_pickle( path: &str ) -> Result< Vec<f64>, Box<dyn std::error::Error>> {
+    // Open the file
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    // Deserialize the data
+    let vec = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() )?;
+
+    Ok( vec )
+}
+
+
+/// Demonstrates how we can a variety of errors when trying to load a vec of anything but floats.
+pub fn load_vector_error_demos( path: &str ) -> Result< Vec<usize>, Box<dyn std::error::Error>> {
+    // Open the file
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    // Deserialize the data
+    let file = File::open(path)?;    
+    let reader = BufReader::new(file);
+    let vec: Result< Vec< isize >, _> = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() );
+    println!("INTERNAL MESSAGE WITHIN LOAD FUNCTION: THIS IS WHAT WE LOADED: {:?}", &vec );    
+
+    let file = File::open(path)?;    
+    let reader = BufReader::new(file);    
+    let vec: Result< Vec< i64 >, _> = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() );
+    println!("INTERNAL MESSAGE WITHIN LOAD FUNCTION: THIS IS WHAT WE LOADED: {:?}", &vec );    
+
+    let file = File::open(path)?;    
+    let reader = BufReader::new(file);
+    let ve: Result< Vec< usize >, _> = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() );
+    println!("INTERNAL MESSAGE WITHIN LOAD FUNCTION: THIS IS WHAT WE LOADED: {:?}", &vec );
+
+    let file = File::open(path)?;    
+    let reader = BufReader::new(file);
+    let vec: Result< Vec< u64 >, _> = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() );
+    println!("INTERNAL MESSAGE WITHIN LOAD FUNCTION: THIS IS WHAT WE LOADED: {:?}", &vec );
+
+    let file = File::open(path)?;    
+    let reader = BufReader::new(file);
+    let vec: Result< Vec< f64 >, _> = serde_pickle::from_reader(reader, serde_pickle::DeOptions::default() );
+    println!("INTERNAL MESSAGE WITHIN LOAD FUNCTION: THIS IS WHAT WE LOADED: {:?}", &vec );    
+    let vec = vec?;
+
+    let file = File::open(path)?; 
+    let reader = BufReader::new(file);
+    let vec = vec.into_iter().map(|x| x as usize ).collect::<Vec<_>>();
+
+    Ok( vec )
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 fn main() {
     let seed = 1234;
     let side_length = 5;
@@ -337,5 +473,21 @@ impl Csc{
             self.offsets[column_number+1] 
         ] 
     }
+}
+
+
+/// Finds the maximum number of times an integer repeats in a vector
+pub fn max_repeats(vec: Vec<usize>) -> usize {
+    let mut counts = HashMap::new();
+
+    // Count occurrences of each integer
+    for &num in vec.iter() {
+        *counts.entry(num).or_insert(0) += 1;
+    }
+
+    // Find the maximum count
+    let max_count = counts.values().cloned().max().unwrap_or(0);
+
+    max_count
 }
 

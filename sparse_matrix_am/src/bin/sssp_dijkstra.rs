@@ -151,7 +151,10 @@ fn main() {
                                                 avg_nnz_per_row * rows_per_pe, // desired number of nonzeros
                                                 & owned_row_indices, // list of row indices; a row will be generated for each index                
                                             );
-            println!("indices_col {:?}", & indices_col );
+            if cli.debug {
+                println!("indices_col {:?}", & indices_col );
+            }
+            
             if indices_row != indices_row_0 {
                 println!("");
                 println!("!!!!!!!!! SAME INPUT DIFFERENT OUTPUT ");
@@ -267,8 +270,10 @@ fn main() {
     let mut weights             =   Vec::new();           
     for pe in 0 .. world.num_pes() {
         let (mut ir, mut ic, mut w)           =   matrix_slice_for_pe( pe );
-        println!("slice of ir: {:?}", &ir );
-        println!("slice of ic: {:?}", &ic );        
+        if cli.debug{
+            println!("slice of ir: {:?}", &ir );
+            println!("slice of ic: {:?}", &ic );        
+        }
         indices_row.append( &mut ir );
         indices_col.append( &mut ic );
         weights.append( &mut w );
