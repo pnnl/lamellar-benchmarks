@@ -31,16 +31,18 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
-                rank,
-                HistoAM {
-                    offset: offset,
-                    counts: self.counts.clone(),
-                },
-            );
+            lamellar::world
+                .exec_am_pe(
+                    rank,
+                    HistoAM {
+                        offset: offset,
+                        counts: self.counts.clone(),
+                    },
+                )
+                .await;
         }
     }
 }
@@ -87,7 +89,7 @@ fn main() {
             Err(_) => 1,
         });
 
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
     //initialize arrays
@@ -143,9 +145,7 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        unsafe{counts.as_slice().unwrap().iter().sum::<usize>()}
-    );
+    println!("pe {:?} sum {:?}", my_pe, unsafe {
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    });
 }

@@ -9,7 +9,7 @@ use std::time::Instant;
 //===== HISTO BEGIN ======
 
 fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
-    counts.batch_add(rand_index.local_data(), 1);
+    counts.batch_add(rand_index.local_data(), 1).block();
 }
 
 //===== HISTO END ======
@@ -33,13 +33,22 @@ fn main() {
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
 
-    let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let unsafe_counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    )
+    .block();
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    )
+    .block();
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
     // initialize arrays
-    let counts_init = unsafe {unsafe_counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { unsafe_counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
     unsafe {
         let mut rng = rng.lock();
@@ -48,9 +57,9 @@ fn main() {
         }
     }
     world.block_on(counts_init);
-    let counts = unsafe_counts.into_atomic();
+    let counts = unsafe_counts.into_atomic().block();
     //counts.wait_all(); equivalent in this case to the above statement
-    let rand_index = rand_index.into_read_only();
+    let rand_index = rand_index.into_read_only().block();
     world.barrier();
 
     let now = Instant::now();

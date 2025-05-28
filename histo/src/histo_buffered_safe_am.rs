@@ -47,20 +47,22 @@ impl LamellarAM for LaunchAm {
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
 
             buffs[rank].push(offset);
             if buffs[rank].len() >= self.buffer_amt {
                 let buff = buffs[rank].clone();
-                task_group.exec_am_pe(
-                    rank,
-                    HistoBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                task_group
+                    .exec_am_pe(
+                        rank,
+                        HistoBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .block();
                 buffs[rank].clear();
             }
         }
@@ -68,13 +70,15 @@ impl LamellarAM for LaunchAm {
         for rank in 0..num_pes {
             let buff = buffs[rank].clone();
             if buff.len() > 0 {
-                task_group.exec_am_pe(
-                    rank,
-                    HistoBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                task_group
+                    .exec_am_pe(
+                        rank,
+                        HistoBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .block();
             }
         }
     }
@@ -110,7 +114,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)
@@ -204,9 +208,7 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        unsafe {counts.as_slice().unwrap().iter().sum::<usize>()}
-    );
+    println!("pe {:?} sum {:?}", my_pe, unsafe {
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    });
 }
