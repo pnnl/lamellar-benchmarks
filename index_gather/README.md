@@ -24,9 +24,9 @@ These benchmarks requires the following dependencies:
 
 At the time of release, Lamellar has been tested with the following external packages:
 
-| **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** | **LAMELLAR** |
-|--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|-------------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   | 0.2.1        |
+| **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** |
+|--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|
+| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   |
 
 The OFI_DIR environment variable must be specified with the location of the OFI installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation.

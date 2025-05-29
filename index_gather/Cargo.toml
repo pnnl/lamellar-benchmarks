@@ -1,6 +1,6 @@
 [package]
 name = "index_gather"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Ryan D. Friese"]
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.3.0"
 rand = "0.6"
-lamellar = { version = "0.5.0"} #add features = ["enable-rofi"] to use rofi lamellae
+lamellar = { version = "0.7.1"} #add features = ["enable-rofi"] to use rofi lamellae
 parking_lot = { version = "0.12" }
 
 [profile.release]

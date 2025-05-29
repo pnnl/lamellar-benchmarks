@@ -49,7 +49,7 @@ impl LamellarAM for LaunchAm {
                         buff: buff,
                         counts: self.counts.clone(),
                     },
-                );
+                ).await;
                 buffs[rank].clear();
             }
         }
@@ -63,7 +63,7 @@ impl LamellarAM for LaunchAm {
                         buff: buff,
                         counts: self.counts.clone(),
                     },
-                );
+                ).await;
             }
         }
     }
@@ -99,7 +99,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)

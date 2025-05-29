@@ -5,7 +5,7 @@ use std::time::Instant;
 
 fn index_gather(array: &ReadOnlyArray<usize>, rand_index: OneSidedMemoryRegion<usize>) {
     let rand_slice = unsafe {rand_index.as_slice().expect("PE on world team")}; // Safe as we are the only consumer of this mem region
-    array.batch_load(rand_slice);
+    array.batch_load(rand_slice).block();
 }
 
 const COUNTS_LOCAL_LEN: usize = 1000000; //this will be 800MBB on each pe
@@ -27,7 +27,7 @@ fn main() {
             println!("table size per pe{}", COUNTS_LOCAL_LEN);
         }
 
-    let unsafe_array = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
+    let unsafe_array = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic).block();
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
@@ -43,7 +43,7 @@ fn main() {
         }
     }
     world.block_on(array_init);
-    let array = unsafe_array.into_read_only();
+    let array = unsafe_array.into_read_only().block();
     // let rand_index = rand_index.into_read_only();
     world.barrier();
 
