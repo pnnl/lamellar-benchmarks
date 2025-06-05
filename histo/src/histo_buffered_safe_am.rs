@@ -42,6 +42,7 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
+        // TOOD: Should tasks be queued and await all at the end instead?
         // let now = Instant::now();
         let num_pes = lamellar::num_pes;
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
@@ -61,8 +62,7 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    )
-                    .block();
+                    ).await;
                 buffs[rank].clear();
             }
         }
@@ -77,8 +77,7 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    )
-                    .block();
+                    ).await;
             }
         }
     }
