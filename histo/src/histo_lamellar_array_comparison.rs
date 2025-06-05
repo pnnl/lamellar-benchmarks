@@ -21,7 +21,7 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
     let now = Instant::now();
 
     //the actual histo
-    counts.batch_add(rand_index.local_data(), one).block(); //TODO: Consider making histo 'async' and changing to 'await'
+    let _ = counts.batch_add(rand_index.local_data(), one).spawn();
 
     //-----------------
     if my_pe == 0 {
@@ -71,19 +71,21 @@ fn main() {
         world.team(),
         global_count,
         lamellar::array::Distribution::Cyclic,
-    )
-    .block();
+    );
     let rand_index = UnsafeArray::<usize>::new(
         world.team(),
         l_num_updates * num_pes,
         lamellar::array::Distribution::Block,
-    )
-    .block();
+    );
+    
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
+    let counts = counts.block();
 
     // initialize arrays
     let counts_init = unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
+    let rand_index = rand_index.block();
+    
     unsafe {
         let mut rng = rng.lock();
         for elem in rand_index.local_as_mut_slice().iter_mut() {

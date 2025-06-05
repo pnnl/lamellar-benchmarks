@@ -44,15 +44,14 @@ impl LamellarAM for LaunchAm {
             buffs[rank].push(offset);
             if buffs[rank].len() >= self.buffer_amt {
                 let buff = buffs[rank].clone();
-                task_group
+                let _ = task_group
                     .exec_am_pe(
                         rank,
                         HistoBufferedAM {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    )
-                    .await;
+                    ).spawn();
                 buffs[rank].clear();
             }
         }
@@ -60,17 +59,18 @@ impl LamellarAM for LaunchAm {
         for rank in 0..num_pes {
             let buff = buffs[rank].clone();
             if buff.len() > 0 {
-                task_group
+                let _ = task_group
                     .exec_am_pe(
                         rank,
                         HistoBufferedAM {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    )
-                    .await;
+                    ).spawn();
             }
         }
+
+        task_group.await_all().await;
     }
 }
 
@@ -104,7 +104,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)
@@ -131,7 +131,8 @@ fn main() {
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
-
+    let counts =counts.block();
+    
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
             *elem = 0;

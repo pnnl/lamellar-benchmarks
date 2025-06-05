@@ -35,15 +35,14 @@ impl LamellarAM for LaunchAm {
         for idx in &self.rand_index {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world
+            let _ = lamellar::world
                 .exec_am_pe(
                     rank,
                     HistoAM {
                         offset: offset,
                         counts: self.counts.clone(),
                     },
-                )
-                .await;
+                ).spawn();
         }
     }
 }

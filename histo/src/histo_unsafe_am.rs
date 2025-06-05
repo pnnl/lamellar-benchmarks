@@ -89,9 +89,10 @@ fn main() {
             Err(_) => 1,
         });
 
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+    let counts = counts.block();
     //initialize arrays
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
