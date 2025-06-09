@@ -1,7 +1,7 @@
 [package]
 name = "index_gather"
-version = "0.5.0"
-authors = ["Ryan D. Friese"]
+version = "0.7.0"
+authors = ["Ryan D. Friese", "Joseph A. Cottam"]
 edition = "2021"
 
 [dependencies]

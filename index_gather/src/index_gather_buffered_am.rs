@@ -99,7 +99,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN).block();
+    let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)
@@ -126,6 +126,8 @@ fn main() {
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+
+    let counts = counts.block();
 
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {

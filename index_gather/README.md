@@ -22,12 +22,6 @@ These benchmarks requires the following dependencies:
 
 * Crates listed in Cargo.toml
 
-At the time of release, Lamellar has been tested with the following external packages:
-
-| **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** |
-|--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   |
-
 The OFI_DIR environment variable must be specified with the location of the OFI installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation.
 
@@ -60,19 +54,12 @@ TESTING
 
 The benchmarks are designed to be run with on multiple compute nodes (1 node is valid). Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentaiton for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the jbo manager and runtime launcher (e.g., MPI, please refer to the BUILING REQUIREMENTS section for a list of tested software versions).
 
-1. Allocates two compute nodes on the cluster:
+To run the benchmark through the slurm queue, first compile with `cargo build --release` then run one of the following:
+- `srun -N 2 target/release/index_gather_atomic_array`
+- `srun -N 2 target/release/index_gather_buffered_am`
+- `srun -N 2 target/release/index_gather_read_only_array`
 
-`salloc -N 2 -p compute`
-
-2. Run histo(_static) using `mpiexec` launcher.
-
-`mpiexec -n 2 ./target/release/index_gather_atomic_array 10000000`  (argument = number of updates to perform)
-
-3. Run histo_buffered_updates(_static)
-
-`mpiexec -n 2 ./target/release/index_gather_atomic_array 10000000 100`  (argument = number of updates to perform, number of updates to buffer)
-
-Note that if using the "local" lamellae, simply execute the binary directly
+*Note:* If using the "local" lamellae, simply execute the binary directly
 
 
 HISTORY
