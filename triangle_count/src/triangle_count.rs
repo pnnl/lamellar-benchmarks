@@ -32,7 +32,7 @@ impl LamellarAM for LaunchAm {
         let task_group = LamellarTaskGroup::new(lamellar::world.clone());
         let graph_data = self.graph.data();
         for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
-            task_group
+            let _ = task_group
                 .exec_am_all(TcAm {
                     graph: graph_data.clone(),
                     node: node_0,
@@ -42,9 +42,9 @@ impl LamellarAM for LaunchAm {
                         .map(|n| *n)
                         .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
                     final_cnt: self.final_cnt.clone(),
-                })
-                .await;
+                }).spawn();
         }
+        task_group.await_all().await;
     }
 }
 

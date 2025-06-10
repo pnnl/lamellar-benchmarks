@@ -219,10 +219,12 @@ struct LocalNeighborsAM {
 #[lamellar::am]
 impl LamellarAM for LocalNeighborsAM {
     async fn exec() {
-        let mut graph = self.graph.write().await;
         let mut remotes: Vec<(u32, OneSidedMemoryRegion<u32>)> = vec![];
-        for (node, neighbors) in &self.node_and_neighbors {
-            remotes.push((*node, graph.add_local_neighbors(*node, neighbors.clone())));
+        {
+            let mut graph = self.graph.write().await;
+            for (node, neighbors) in &self.node_and_neighbors {
+                remotes.push((*node, graph.add_local_neighbors(*node, neighbors.clone())));
+            }
         }
         lamellar::world
             .exec_am_all(RemoteNeighborsAM {
@@ -271,8 +273,7 @@ impl Graph {
         }
         let g = Graph {
             world: world,
-            graph: graph.into_darc().block(), // TODO: Should new be made async to 'await' instead?
-
+            graph: graph.into_darc().block(),
             my_pe: my_pe,
         };
         if my_pe == 0 {
@@ -420,12 +421,11 @@ impl Graph {
         let mut i = 0;
         for nodes in temp_neighbor_list.drain(..) {
             if size > num_edges / 10 {
-                world
+                let _ = world
                     .exec_am_local(RelabelAm {
                         nodes: temp_nodes,
                         relabeled: relabeled.clone(),
-                    })
-                    .block();
+                    }).spawn();
                 temp_nodes = vec![];
                 size = 0;
             }
@@ -437,16 +437,15 @@ impl Graph {
             i += 1;
         }
         if size > 0 {
-            world
+            let _ = world
                 .exec_am_local(RelabelAm {
                     nodes: temp_nodes,
                     relabeled: relabeled.clone(),
-                })
-                .block();
+                }).spawn();
         }
         println!("reorder issue time: {:?}", start.elapsed().as_secs_f64());
         world.wait_all();
-        println!("reorder  time: {:?}", start.elapsed().as_secs_f64());
+        println!("reorder time: {:?}", start.elapsed().as_secs_f64());
 
         let task_group = LamellarTaskGroup::new(world.team());
         let mut pe_neigh_lists: HashMap<usize, Vec<(u32, OneSidedMemoryRegion<u32>)>> =
@@ -468,7 +467,7 @@ impl Graph {
             let batch_size = neigh_lists.len() / 10;
 
             while neigh_lists.len() > batch_size {
-                task_group
+                let _ = task_group
                     .exec_am_pe(
                         *pe,
                         LocalNeighborsAM {
@@ -476,22 +475,22 @@ impl Graph {
                             node_and_neighbors: neigh_lists
                                 .split_off(neigh_lists.len() - batch_size),
                         },
-                    )
-                    .block();
+                    ).spawn();
             }
             if neigh_lists.len() > 0 {
-                task_group
+                let _ = task_group
                     .exec_am_pe(
                         *pe,
                         LocalNeighborsAM {
                             graph: graph.clone(),
                             node_and_neighbors: neigh_lists.clone(),
                         },
-                    )
-                    .block();
+                    ).spawn();
             }
         }
+
         println!("distribute issue time: {:?}", start.elapsed().as_secs_f64());
+        task_group.wait_all();
         world.wait_all();
         println!("distribute time: {:?}", start.elapsed().as_secs_f64());
         Ok(num_nodes)
