@@ -25,7 +25,7 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     if my_pe == 0 {
         println!("updates total {}", l_num_updates * num_pes);

@@ -80,7 +80,7 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     let mut counts_data = Vec::with_capacity(COUNTS_LOCAL_LEN);
     for _ in 0..COUNTS_LOCAL_LEN {

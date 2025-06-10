@@ -9,11 +9,11 @@ fn main() {
     let global_count = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
+        .unwrap_or(1000); //size of permuted array
     let target_factor = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
+        .unwrap_or(10); //multiplication factor for target array
 
     if my_pe == 0 {
         println!("array size {}", global_count);
@@ -78,7 +78,7 @@ fn main() {
         .collect::<Vec<usize>>();
 
     // continue launching remaining darts until they all stick
-    while remaining_darts.len() > 0 {
+    while !remaining_darts.is_empty() {
         let rand_index = (0..remaining_darts.len())
             .map(|_| rng.gen_range(0, global_count * target_factor))
             .collect::<Vec<usize>>();
