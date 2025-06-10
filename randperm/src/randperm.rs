@@ -50,9 +50,9 @@ fn main() {
     world.wait_all();
 
     let darts_array = darts_array.into_read_only().block();
+    let target_array = target_array.into_atomic().block();
     let local_darts = darts_array.local_data(); //will use this slice for first iteration
 
-    let target_array = target_array.into_atomic().block();
     world.barrier();
     if my_pe == 0 {
         println!("start");
