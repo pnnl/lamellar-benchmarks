@@ -51,7 +51,8 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
                 buffs[rank].clear();
             }
         }
@@ -66,7 +67,8 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
             }
         }
 
@@ -131,8 +133,8 @@ fn main() {
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
-    let counts =counts.block();
-    
+    let counts = counts.block();
+
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
             *elem = 0;

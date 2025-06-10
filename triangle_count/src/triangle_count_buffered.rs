@@ -33,7 +33,8 @@ impl LamellarAM for LaunchAm {
                         graph: graph_data.clone(),
                         data: buffer,
                         final_cnt: self.final_cnt.clone(),
-                    }).spawn();
+                    })
+                    .spawn();
                 buffer = vec![];
                 cur_len = 0;
             }
@@ -45,7 +46,8 @@ impl LamellarAM for LaunchAm {
                     graph: graph_data.clone(),
                     data: buffer,
                     final_cnt: self.final_cnt.clone(),
-                }).spawn();
+                })
+                .spawn();
         }
         task_group.await_all().await;
     }
@@ -138,13 +140,15 @@ fn main() {
             let start = (tid as f32 * batch_size).round() as u32;
             let end = ((tid + 1) as f32 * batch_size).round() as u32;
             reqs.push(
-                world.exec_am_local(LaunchAm {
-                    graph: graph.clone(),
-                    start: start,
-                    end: end,
-                    final_cnt: final_cnt.clone(),
-                    buf_size: *buf_size,
-                }).spawn()
+                world
+                    .exec_am_local(LaunchAm {
+                        graph: graph.clone(),
+                        start: start,
+                        end: end,
+                        final_cnt: final_cnt.clone(),
+                        buf_size: *buf_size,
+                    })
+                    .spawn(),
             );
         }
 

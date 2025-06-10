@@ -42,7 +42,8 @@ impl LamellarAM for LaunchAm {
                         offset: offset,
                         counts: self.counts.clone(),
                     },
-                ).spawn();
+                )
+                .spawn();
         }
     }
 }

@@ -61,7 +61,8 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
                 buffs[rank].clear();
             }
         }
@@ -76,7 +77,8 @@ impl LamellarAM for LaunchAm {
                             buff: buff,
                             counts: self.counts.clone(),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
             }
         }
 

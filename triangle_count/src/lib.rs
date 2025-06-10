@@ -425,7 +425,8 @@ impl Graph {
                     .exec_am_local(RelabelAm {
                         nodes: temp_nodes,
                         relabeled: relabeled.clone(),
-                    }).spawn();
+                    })
+                    .spawn();
                 temp_nodes = vec![];
                 size = 0;
             }
@@ -441,7 +442,8 @@ impl Graph {
                 .exec_am_local(RelabelAm {
                     nodes: temp_nodes,
                     relabeled: relabeled.clone(),
-                }).spawn();
+                })
+                .spawn();
         }
         println!("reorder issue time: {:?}", start.elapsed().as_secs_f64());
         world.wait_all();
@@ -475,7 +477,8 @@ impl Graph {
                             node_and_neighbors: neigh_lists
                                 .split_off(neigh_lists.len() - batch_size),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
             }
             if neigh_lists.len() > 0 {
                 let _ = task_group
@@ -485,7 +488,8 @@ impl Graph {
                             graph: graph.clone(),
                             node_and_neighbors: neigh_lists.clone(),
                         },
-                    ).spawn();
+                    )
+                    .spawn();
             }
         }
 

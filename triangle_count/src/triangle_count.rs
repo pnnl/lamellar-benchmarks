@@ -42,7 +42,8 @@ impl LamellarAM for LaunchAm {
                         .map(|n| *n)
                         .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
                     final_cnt: self.final_cnt.clone(),
-                }).spawn();
+                })
+                .spawn();
         }
         task_group.await_all().await;
     }
