@@ -1,9 +1,6 @@
-// use csv;
 use lamellar::memregion::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-
-// use parking_lot::RwLock;
 
 use crate::GraphOps;
 // use crate::Element;
@@ -71,7 +68,7 @@ impl GraphOps for MapGraph {
     }
     fn neighbors(&self, node: &u32) -> std::slice::Iter<'_, u32> {
         if let Some(n) = self.neighbors.get(node) {
-            match unsafe {n.as_slice()} {
+            match unsafe { n.as_slice() } {
                 Ok(n) => n.iter(),
                 Err(_) => panic!(
                     "node {:?} is not local to pe {:?}",

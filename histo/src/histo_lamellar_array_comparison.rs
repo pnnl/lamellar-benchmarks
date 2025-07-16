@@ -21,7 +21,7 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
     let now = Instant::now();
 
     //the actual histo
-    counts.batch_add(rand_index.local_data(), one);
+    let _ = counts.batch_add(rand_index.local_data(), one).spawn();
 
     //-----------------
     if my_pe == 0 {
@@ -50,7 +50,6 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
             array_type
         );
     }
-    println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
 
     if my_pe == 0 {
         println!("{{\"array_type\":\"{}\",\"updates_per_pe\":{},\"num_pes\":{},\"total_updates\":{},\"table_size_per_pe\":{},\"execution_time_secs\":{:.6},\"mups\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
@@ -66,6 +65,7 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
         );
     }
 
+    // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.as_slice().iter().sum()));
     counts.barrier();
     world.MB_sent()
 }
@@ -80,16 +80,27 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
-    let counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    );
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    );
+
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
+    let counts = counts.block();
 
     // initialize arrays
-    let counts_init = unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
+    let rand_index = rand_index.block();
+
     unsafe {
         let mut rng = rng.lock();
         for elem in rand_index.local_as_mut_slice().iter_mut() {
@@ -99,7 +110,7 @@ fn main() {
     world.block_on(counts_init);
     //counts.wait_all(); equivalent in this case to the above statement
 
-    let rand_index = rand_index.into_read_only();
+    let rand_index = rand_index.into_read_only().block();
     world.barrier();
 
     if my_pe == 0 {
@@ -116,10 +127,10 @@ fn main() {
         1,
         0.0,
     );
-    world.block_on(unsafe{counts.dist_iter_mut().for_each(|x| *x = 0)});
+    world.block_on(unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) });
     counts.barrier();
 
-    let counts = counts.into_local_lock();
+    let counts = counts.into_local_lock().block();
     if my_pe == 0 {
         println!("local lock atomic histo");
     }
@@ -137,7 +148,7 @@ fn main() {
     world.block_on(counts.dist_iter_mut().for_each(|x| *x = 0));
     counts.barrier();
 
-    let counts = counts.into_atomic();
+    let counts = counts.into_atomic().block();
     if my_pe == 0 {
         println!("atomic histo");
     }

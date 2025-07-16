@@ -9,7 +9,7 @@ use std::time::Instant;
 //===== HISTO BEGIN ======
 
 fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
-    counts.batch_add(rand_index.local_data(), 1);
+    let _ = counts.batch_add(rand_index.local_data(), 1).spawn();
 }
 
 //===== HISTO END ======
@@ -25,7 +25,7 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     if my_pe == 0 {
         println!("updates total {}", l_num_updates * num_pes);
@@ -33,14 +33,26 @@ fn main() {
         println!("table size per pe{}", COUNTS_LOCAL_LEN);
     }
 
-    let unsafe_counts = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Cyclic);
-    let rand_index =
-        UnsafeArray::<usize>::new(world.team(), l_num_updates * num_pes, lamellar::array::Distribution::Block);
+    let unsafe_counts = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Cyclic,
+    );
+
+    let rand_index = UnsafeArray::<usize>::new(
+        world.team(),
+        l_num_updates * num_pes,
+        lamellar::array::Distribution::Block,
+    );
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
 
+    let unsafe_counts = unsafe_counts.block();
+
     // initialize arrays
-    let counts_init = unsafe {unsafe_counts.dist_iter_mut().for_each(|x| *x = 0)};
+    let counts_init = unsafe { unsafe_counts.dist_iter_mut().for_each(|x| *x = 0) };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
+
+    let rand_index = rand_index.block();
     unsafe {
         let mut rng = rng.lock();
         for elem in rand_index.local_as_mut_slice().iter_mut() {
@@ -48,9 +60,9 @@ fn main() {
         }
     }
     world.block_on(counts_init);
-    let counts = unsafe_counts.into_atomic();
+    let counts = unsafe_counts.into_atomic().block();
     //counts.wait_all(); equivalent in this case to the above statement
-    let rand_index = rand_index.into_read_only();
+    let rand_index = rand_index.into_read_only().block();
     world.barrier();
 
     let now = Instant::now();

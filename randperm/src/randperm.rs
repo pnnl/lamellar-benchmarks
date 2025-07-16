@@ -9,11 +9,11 @@ fn main() {
     let global_count = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000); //size of permuted array
+        .unwrap_or(1000); //size of permuted array
     let target_factor = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 10); //multiplication factor for target array
+        .unwrap_or(10); //multiplication factor for target array
 
     if my_pe == 0 {
         println!("array size {}", global_count);
@@ -21,7 +21,11 @@ fn main() {
     }
 
     // start with unsafe because they are faster to initialize than AtomicArrays
-    let darts_array = UnsafeArray::<usize>::new(world.team(), global_count, lamellar::array::Distribution::Block);
+    let darts_array = UnsafeArray::<usize>::new(
+        world.team(),
+        global_count,
+        lamellar::array::Distribution::Block,
+    );
     let target_array = UnsafeArray::<usize>::new(
         world.team(),
         global_count * target_factor,
@@ -29,20 +33,26 @@ fn main() {
     );
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
+    //Ensure all arrays finish building...
+    let darts_array = darts_array.block();
+    let target_array = target_array.block();
+
     // initialize arrays
-    let darts_init = unsafe{darts_array
-        .dist_iter_mut()
-        .enumerate()
-        .for_each(|(i, x)| *x = i)}; // each PE some slice in [0..global_count]
-    let target_init = unsafe{target_array.dist_iter_mut().for_each(|x| *x = usize::MAX)};
+    let darts_init = unsafe {
+        darts_array
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(|(i, x)| *x = i)
+    }; // each PE some slice in [0..global_count]
+    let target_init = unsafe { target_array.dist_iter_mut().for_each(|x| *x = usize::MAX) };
     world.block_on(darts_init);
     world.block_on(target_init);
     world.wait_all();
 
-    let darts_array = darts_array.into_read_only();
+    let darts_array = darts_array.into_read_only().block();
+    let target_array = target_array.into_atomic().block();
     let local_darts = darts_array.local_data(); //will use this slice for first iteration
 
-    let target_array = target_array.into_atomic();
     world.barrier();
     if my_pe == 0 {
         println!("start");
@@ -53,8 +63,8 @@ fn main() {
     let rand_index = (0..local_darts.len())
         .map(|_| rng.gen_range(0, global_count * target_factor))
         .collect::<Vec<usize>>();
-      
-    // launch initial set of darts, and collect any that didnt stick    
+
+    // launch initial set of darts, and collect any that didnt stick
     let mut remaining_darts = world
         .block_on(target_array.batch_compare_exchange(&rand_index, usize::MAX, local_darts))
         .iter()
@@ -68,7 +78,7 @@ fn main() {
         .collect::<Vec<usize>>();
 
     // continue launching remaining darts until they all stick
-    while remaining_darts.len() > 0 {
+    while !remaining_darts.is_empty() {
         let rand_index = (0..remaining_darts.len())
             .map(|_| rng.gen_range(0, global_count * target_factor))
             .collect::<Vec<usize>>();
@@ -122,13 +132,16 @@ fn main() {
             (world.MB_sent()) / global_time,
         );
         println!("Secs: {:?}", global_time,);
-        let sum = world.block_on(the_array.sum());
-        println!(
-            "reduced sum: {sum} calculated sum {} ",
-            (global_count * (global_count + 1) / 2) - global_count
-        );
-        if sum != (global_count * (global_count + 1) / 2) - global_count {
-            println!("Error! randperm not as expected");
+        if let Some(sum) = world.block_on(the_array.sum()) {
+            println!(
+                "reduced sum: {sum} calculated sum {} ",
+                (global_count * (global_count + 1) / 2) - global_count
+            );
+            if sum != (global_count * (global_count + 1) / 2) - global_count {
+                println!("Error! randperm not as expected");
+            }
+        } else {
+            println!("Error! randperm computation failed");
         }
         let sum_correct = sum == (global_count * (global_count + 1) / 2) - global_count;
         println!("{{\"array_size\":{},\"target_factor\":{},\"target_array_size\":{},\"execution_time_secs\":{:.6},\"collect_time_secs\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6},\"sum_verification_passed\":{}}}",
