@@ -140,6 +140,20 @@ fn main() {
         );
     }
 
+    if my_pe == 0 {
+        println!("{{\"updates_per_pe\":{},\"num_pes\":{},\"total_updates\":{},\"table_size_per_pe\":{},\"num_threads\":{},\"execution_time_secs\":{:.6},\"mups\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
+            l_num_updates,
+            num_pes,
+            l_num_updates * num_pes,
+            COUNTS_LOCAL_LEN,
+            num_threads,
+            global_time,
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
+            world.MB_sent(),
+            world.MB_sent() / global_time
+        );
+    }
+
     println!(
         "pe {:?} sum {:?}",
         my_pe,

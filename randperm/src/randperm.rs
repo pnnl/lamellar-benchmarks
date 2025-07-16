@@ -130,5 +130,16 @@ fn main() {
         if sum != (global_count * (global_count + 1) / 2) - global_count {
             println!("Error! randperm not as expected");
         }
+        let sum_correct = sum == (global_count * (global_count + 1) / 2) - global_count;
+        println!("{{\"array_size\":{},\"target_factor\":{},\"target_array_size\":{},\"execution_time_secs\":{:.6},\"collect_time_secs\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6},\"sum_verification_passed\":{}}}",
+            global_count,
+            target_factor,
+            global_count * target_factor,
+            global_time,
+            collect_start.elapsed().as_secs_f64(),
+            world.MB_sent(),
+            world.MB_sent() / global_time,
+            sum_correct
+        );
     }
 }

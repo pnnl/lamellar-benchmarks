@@ -150,25 +150,44 @@ fn main() {
                 req.await;
             }
         });
+
+        let issue_time = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64())
+            println!("issue time: {:?}", issue_time)
         };
         // at this point all the triangle counting active messages have been initiated.
 
         world.wait_all(); //wait for all the triangle counting active messages to finish locally
+
+        let local_time = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            println!("local time: {:?}", timer.elapsed().as_secs_f64())
+            println!("local time: {:?}", local_time)
         };
 
         world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
 
+        let global_time = timer.elapsed().as_secs_f64();
         let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
         if my_pe == 0 {
             println!(
                 "triangles counted: {:?}\nglobal time: {:?}",
                 final_cnt_sum,
-                timer.elapsed().as_secs_f64()
+                global_time
             );
+
+            println!("{{\"graph_file\":\"{}\",\"num_nodes\":{},\"launch_threads\":{},\"buf_size\":{},\"triangle_count\":{},\"issue_time_secs\":{:.6},\"local_time_secs\":{:.6},\"global_time_secs\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
+                file,
+                graph.num_nodes(),
+                launch_threads,
+                buf_size,
+                final_cnt_sum,
+                issue_time,
+                local_time,
+                global_time,
+                world.MB_sent(),
+                world.MB_sent() / global_time
+            );
+
             println!();
         }
         world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0))); //reset the final count array
