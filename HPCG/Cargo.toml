@@ -23,5 +23,5 @@ debug = true
 
 
 [[bin]]
-name="DotProduct"
+name="dot_product"
 path="src/dot_product.rs"
