@@ -23,7 +23,10 @@ async fn compute_dot_product(world: &LamellarWorld, x: &impl Vector, y: &impl Ve
 }
 
 async fn async_main(world: &LamellarWorld) -> (f64, utils::Timing) {
-    let values_per_pe = 1000;
+    let args: Vec<String> = std::env::args().collect();
+
+    let values_magnitude:u32 = args.get(1).unwrap_or(&("3".to_owned())).parse().expect("Must supply an positive integer for values-magnitude (actual values-per-pe is 10**<supplied value>, default 3).");
+    let values_per_pe = 10_usize.pow(values_magnitude);
     let num_pes = world.num_pes();
 
     let vector_size = num_pes * values_per_pe ;
