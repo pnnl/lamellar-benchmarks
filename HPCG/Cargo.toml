@@ -1,0 +1,27 @@
+[package]
+name = "HPCG"
+version = "0.7.0"
+edition = "2021"
+authors = ["Ryan D. Friese", "Joseph A. Cottam"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+lazy_static = "1.3.0"
+rand = "0.9"
+lamellar = { version = "0.7.1"} #add features = ["enable-rofi"] to use rofi lamellae
+parking_lot = { version = "0.12" }
+tracing = "0.1"
+tracing-futures = "0.2"
+tracing-flame = "0.2"
+tracing-subscriber = "0.3"
+
+[profile.release]
+opt-level=3
+lto=true
+codegen-units=1
+debug = true 
+
+
+[[bin]]
+name="DotProduct"
+path="src/dot_product.rs"
