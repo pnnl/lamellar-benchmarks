@@ -8,7 +8,7 @@ use std::ops::{DerefMut, Deref};
 /// Dense vector trait members
 pub trait Vector {
     async fn mut_local_values(&mut self) -> impl DerefMut<Target=[f64]>;
-    async fn local_values(&mut self) -> impl Deref<Target=[f64]>;
+    async fn local_values(&self) -> impl Deref<Target=[f64]>;
 
     /// Fill vector with zero values.  
     async fn zero(&self);
@@ -53,7 +53,7 @@ impl Vector for LamellarVector {
         self.values.write_local_data().await
     }
 
-    async fn local_values(&mut self) -> impl Deref<Target=[f64]> {
+    async fn local_values(&self) -> impl Deref<Target=[f64]> {
         self.values.read_local_data().await
     }
 

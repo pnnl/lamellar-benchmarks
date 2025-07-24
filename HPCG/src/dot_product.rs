@@ -9,16 +9,21 @@ mod utils;
 use lamellar::array::prelude::*;
 use vector::{Vector, LamellarVector};
 
-async fn compute_dot_product(x: &impl Vector, y: &impl Vector) -> (f64, utils::Timing) {
+async fn compute_dot_product(world: &LamellarWorld, x: &impl Vector, y: &impl Vector) -> (f64, utils::Timing) {
     let timing = utils::Timing::start("Dot Product");
-    let result = 0.0;
+
+    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await; //TODO: I suspect this should be a darc
+    let local_x = x.local_values().await;
+    let local_y = y.local_values().await;
+    let local_result = local_x.iter().zip(local_y.iter()).map(|(a,b)| a*b).into_iter().fold(1.0, |a, e| a+e);
+    global_result.add(0,local_result).await;
+
     let timing = timing.end();
-    (result, timing)
+    (global_result.at(0).await, timing)
 }
 
 async fn async_main(world: &LamellarWorld) -> (f64, utils::Timing) {
     let values_per_pe = 1000;
-    let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
     let vector_size = num_pes * values_per_pe ;
@@ -29,7 +34,7 @@ async fn async_main(world: &LamellarWorld) -> (f64, utils::Timing) {
     x.fill_random().await;
     y.fill_random().await;
 
-    compute_dot_product(&x, &y).await
+    compute_dot_product(world, &x, &y).await
 }
 
 pub fn main() {
@@ -37,7 +42,9 @@ pub fn main() {
     let w= async_main(&world);
     let (result, timing) = world.block_on(w);
 
-    println!("Result: {result}");
-    println!("{timing}")
-
+    let my_pe = world.my_pe();
+    if my_pe == 0 {
+        println!("Result: {result}");
+        println!("{timing}")
+    }
 }
