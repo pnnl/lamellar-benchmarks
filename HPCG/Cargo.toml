@@ -25,3 +25,11 @@ debug = true
 [[bin]]
 name="dot_product"
 path="src/dot_product.rs"
+
+[[bin]]
+name="waxby"
+path="src/waxby.rs"
+
+# [[bin]]
+# name="waxby_am"
+# path="src/waxby_am.rs"
