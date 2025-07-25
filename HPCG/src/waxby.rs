@@ -33,6 +33,8 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
     let args: Vec<String> = std::env::args().collect();
 
     let values_magnitude:u32 = args.get(1).unwrap_or(&("3".to_owned())).parse().expect("Must supply an positive integer for values-magnitude (actual values-per-pe is 10**<supplied value>, default 3).");
+    let alpha:f64 = args.get(1).unwrap_or(&("1.0".to_owned())).parse().expect("Must supply a float for alpha (default 1).");
+    let beta:f64 = args.get(1).unwrap_or(&("1.0".to_owned())).parse().expect("Must supply a float for beta (default 1).");
     let values_per_pe = 10_usize.pow(values_magnitude);
     let num_pes = world.num_pes();
 
@@ -41,9 +43,6 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
     let mut w = LamellarVector::new(world, vector_size).await;
     let x = LamellarVector::new(world, vector_size).await;
     let y = LamellarVector::new(world, vector_size).await;
-
-    let alpha = 1.0;
-    let beta = 1.0;
 
     w.zero().await;
     x.fill_random().await;
