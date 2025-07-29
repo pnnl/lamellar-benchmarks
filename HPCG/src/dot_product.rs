@@ -20,6 +20,8 @@ async fn compute_dot_product(world: &LamellarWorld, x: &impl Vector, y: &impl Ve
     let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await; //TODO: I suspect this should be a darc
     let local_x = x.local_values().await;
     let local_y = y.local_values().await;
+
+    //NOTE: The zip implies that the arrays are distributed identically...which they may not be.
     let local_result = local_x.iter().zip(local_y.iter()).map(|(a,b)| a*b).into_iter().fold(1.0, |a, e| a+e);
     global_result.add(0,local_result).await;
     world.barrier();
