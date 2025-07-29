@@ -27,6 +27,11 @@ name="dot_product_am"
 path="src/dot_product_am.rs"
 
 [[bin]]
+name="dot_product"
+path="src/dot_product.rs"
+
+
+[[bin]]
 name="waxby"
 path="src/waxby.rs"
 
