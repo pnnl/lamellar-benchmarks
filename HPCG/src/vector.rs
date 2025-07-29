@@ -21,6 +21,9 @@ pub trait Vector {
 
     /// Copy the contents of a this (input) vector to the passed (target) vector.
     async fn copy(&self, target:&mut impl Vector);
+
+    /// How many elements are in the vector?
+    fn len(&self) -> usize;
 }
 
 
@@ -81,6 +84,10 @@ impl Vector for LamellarVector {
         target_slice.copy_from_slice(&source_slice);
 
         //TODO: If copy_from_slice doesn't work try: target_slice.clone_from(&source_slice)
+    }
+
+    fn len(&self) -> usize {
+        self.values.len()
     }
 }
 
