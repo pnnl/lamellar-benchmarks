@@ -3,13 +3,9 @@
 use lamellar::array::prelude::*;
 use lamellar::array::LocalLockArray;
 use rand::prelude::*;
-use std::ops::{DerefMut, Deref};
 
 /// Dense vector trait members
 pub trait Vector {
-    async fn mut_local_values(&mut self) -> impl DerefMut<Target=[f64]>;
-    async fn local_values(&self) -> impl Deref<Target=[f64]>;
-
     /// Fill vector with zero values.  
     async fn zero(&self);
 
@@ -20,7 +16,7 @@ pub trait Vector {
     async fn fill_random(&self);
 
     /// Copy the contents of a this (input) vector to the passed (target) vector.
-    async fn copy(&self, target:&mut impl Vector);
+    async fn copy(&self, target:&mut LocalLockVector);
 
     /// How many elements are in the vector?
     fn len(&self) -> usize;
@@ -28,14 +24,15 @@ pub trait Vector {
 
 
 
-pub struct LamellarVector {
-    values: LocalLockArray<f64>,
-    optimization_data: Option<usize> // placeholder for later use
+#[derive(Clone, Debug)]
+pub struct LocalLockVector {
+    pub values: LocalLockArray<f64>,
+    pub optimization_data: Option<usize> // placeholder for later use
 }
 
-impl LamellarVector {
-    pub async fn new(world: &LamellarWorld, size: usize) -> LamellarVector {
-        LamellarVector {
+impl LocalLockVector {
+    pub async fn new(world: &LamellarWorld, size: usize) -> LocalLockVector {
+        LocalLockVector {
             values: LocalLockArray::new(world, size,
                 lamellar::array::Distribution::Block,
                 ).await,
@@ -44,23 +41,14 @@ impl LamellarVector {
     }
 
     #[allow(dead_code)]
-    pub fn new_now(world: &LamellarWorld, size: usize) -> LamellarVector {
+    pub fn new_now(world: &LamellarWorld, size: usize) -> LocalLockVector {
         let w = Self::new(world, size);
         world.block_on(w)
     }
 
 }
 
-impl Vector for LamellarVector {
-    async fn mut_local_values(&mut self) -> impl DerefMut<Target=[f64]>{
-        self.values.write_local_data().await
-    }
-
-    async fn local_values(&self) -> impl Deref<Target=[f64]> {
-        self.values.read_local_data().await
-    }
-
-
+impl Vector for LocalLockVector {
     async fn zero(&self) {
         let mut local_data=self.values.write_local_data().await;
         local_data.iter_mut().for_each(|elem| *elem = 0.0);
@@ -76,11 +64,13 @@ impl Vector for LamellarVector {
         rng.fill(&mut *local_data);
     }
 
-    async fn copy(&self, target: &mut impl Vector) {
+    async fn copy(&self, target: &mut LocalLockVector) { //TODO: Generalize away from LocalLockVector
         let source_slice= self.values.read_local_data().await;
-        let mut target_slice = target.mut_local_values().await;
+        let mut target_slice = target.values.write_local_data().await;
 
-        if source_slice.len() != target_slice.len() {panic!("Could not copy to target with unequal local storage.")}
+        if source_slice.len() != target_slice.len() {
+            panic!("Could not copy to target with unequal local storage.")
+        }
         target_slice.copy_from_slice(&source_slice);
 
         //TODO: If copy_from_slice doesn't work try: target_slice.clone_from(&source_slice)
@@ -100,11 +90,11 @@ mod tests {
         let world = LamellarWorldBuilder::new().build();
 
         let size = 100;
-        let v1 = LamellarVector::new_now(&world, size);
+        let v1 = LocalLockVector::new_now(&world, size);
         let w = v1.fill_random();
         world.block_on(w);
 
-        let mut v2 = LamellarVector::new_now(&world, size);
+        let mut v2 = LocalLockVector::new_now(&world, size);
         let w = v2.zero();
         world.block_on(w);
 
@@ -122,11 +112,11 @@ mod tests {
         let world = LamellarWorldBuilder::new().build();
 
         let size = 100;
-        let v1 = LamellarVector::new_now(&world, size);
+        let v1 = LocalLockVector::new_now(&world, size);
         let w = v1.fill_random();
         world.block_on(w);
 
-        let mut v2 = LamellarVector::new_now(&world, size);        
+        let mut v2 = LocalLockVector::new_now(&world, size);
         let w = v1.copy(&mut v2);
         world.block_on(w);
 
@@ -148,7 +138,7 @@ mod tests {
         let world = LamellarWorldBuilder::new().build();
 
         let size = 100;
-        let v = LamellarVector::new_now(&world, size);
+        let v = LocalLockVector::new_now(&world, size);
         let w = v.fill_random();
         world.block_on(w);
         let mut prior = -1.0;
@@ -166,7 +156,7 @@ mod tests {
         let world = LamellarWorldBuilder::new().build();
 
         let size = 100;
-        let v = LamellarVector::new_now(&world, size);
+        let v = LocalLockVector::new_now(&world, size);
         let w = v.zero();
         world.block_on(w);
         for e in v.values.onesided_iter().into_iter() {

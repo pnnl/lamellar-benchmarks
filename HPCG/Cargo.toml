@@ -23,8 +23,8 @@ debug = true
 
 
 [[bin]]
-name="dot_product"
-path="src/dot_product.rs"
+name="dot_product_am"
+path="src/dot_product_am.rs"
 
 [[bin]]
 name="waxby"
