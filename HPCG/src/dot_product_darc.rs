@@ -9,7 +9,7 @@ mod utils;
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use vector::{Vector, LocalLockVector};
-
+use lamellar::darc::prelude::*;
 
 async fn compute_dot_product_timed(world: &LamellarWorld, x: &LocalLockVector, y: &LocalLockVector) -> (f64, utils::Timing) {
     let timing = utils::Timing::start("Dot Product");
@@ -20,7 +20,7 @@ async fn compute_dot_product_timed(world: &LamellarWorld, x: &LocalLockVector, y
 
 
 async fn compute_dot_product(world: &LamellarWorld, x: &LocalLockVector, y: &LocalLockVector) -> f64 {
-    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await; //TODO: I suspect this should be a darc
+    let global_result = GlobalRwDarc::new(world, Box::new(0.0));
 
     let my_pe = world.my_pe();
     let mut local_sum = 0.0;
@@ -30,8 +30,13 @@ async fn compute_dot_product(world: &LamellarWorld, x: &LocalLockVector, y: &Loc
             local_sum += x.values.at(i).await * y.values.at(i).await;
         }
     }
-    global_result.add(0, local_sum).await;
-    global_result.at(0).await
+
+    let global_result: GlobalRwDarc<Box<f64>> = global_result.await.unwrap();
+    let mut data = global_result.write().await;
+    **data += local_sum;
+    drop(data);
+    world.barrier();
+    **global_result.read().await
 }
 
 async fn async_main(world: &LamellarWorld) -> (f64, utils::Timing) {

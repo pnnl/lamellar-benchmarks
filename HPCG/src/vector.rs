@@ -40,12 +40,17 @@ impl LocalLockVector {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new_now(world: &LamellarWorld, size: usize) -> LocalLockVector {
         let w = Self::new(world, size);
         world.block_on(w)
     }
 
+    #[cfg(test)]
+    pub async fn ones(&self) {
+        let mut local_data=self.values.write_local_data().await;
+        local_data.iter_mut().for_each(|elem| *elem = 1.0);
+    }
 }
 
 impl Vector for LocalLockVector {
@@ -84,17 +89,27 @@ impl Vector for LocalLockVector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::LazyLock;
+     use lamellar::Backend;
+
+
+    static WORLD: LazyLock<LamellarWorld> = LazyLock::new(
+        || 
+        LamellarWorldBuilder::new()
+            .with_lamellae(Backend::Local)
+            .build()
+    );
 
     #[test]
     fn test_copy() {
-        let world = LamellarWorldBuilder::new().build();
+        let world = &(*WORLD);
 
         let size = 100;
-        let v1 = LocalLockVector::new_now(&world, size);
+        let v1 = LocalLockVector::new_now(world, size);
         let w = v1.fill_random();
         world.block_on(w);
 
-        let mut v2 = LocalLockVector::new_now(&world, size);
+        let mut v2 = LocalLockVector::new_now(world, size);
         let w = v2.zero();
         world.block_on(w);
 
@@ -109,14 +124,14 @@ mod tests {
 
     #[test]
     fn test_scale_value() {
-        let world = LamellarWorldBuilder::new().build();
+        let world = &(*WORLD);
 
         let size = 100;
-        let v1 = LocalLockVector::new_now(&world, size);
+        let v1 = LocalLockVector::new_now(world, size);
         let w = v1.fill_random();
         world.block_on(w);
 
-        let mut v2 = LocalLockVector::new_now(&world, size);
+        let mut v2 = LocalLockVector::new_now(world, size);
         let w = v1.copy(&mut v2);
         world.block_on(w);
 
@@ -135,10 +150,10 @@ mod tests {
 
     #[test]
     fn test_fill_random() {
-        let world = LamellarWorldBuilder::new().build();
+        let world = &(*WORLD);
 
         let size = 100;
-        let v = LocalLockVector::new_now(&world, size);
+        let v = LocalLockVector::new_now(world, size);
         let w = v.fill_random();
         world.block_on(w);
         let mut prior = -1.0;
@@ -153,14 +168,27 @@ mod tests {
 
     #[test]
     fn test_zero() {
-        let world = LamellarWorldBuilder::new().build();
+        let world = &(*WORLD);
 
         let size = 100;
-        let v = LocalLockVector::new_now(&world, size);
+        let v = LocalLockVector::new_now(world, size);
         let w = v.zero();
         world.block_on(w);
         for e in v.values.onesided_iter().into_iter() {
             assert_eq!(0.0, *e)
+        }
+    }
+
+    #[test]
+    fn test_ones() {
+        let world = &(*WORLD);
+
+        let size = 100;
+        let v = LocalLockVector::new_now(world, size);
+        let w = v.ones();
+        world.block_on(w);
+        for e in v.values.onesided_iter().into_iter() {
+            assert_eq!(1.0, *e)
         }
     }
 

@@ -18,7 +18,7 @@ struct DotProductAM {
     i: usize,
     x: LocalLockArray<f64>,
     y: LocalLockArray<f64>,
-    global_result: AtomicArray<f64> // TODO: I suspect this should be a darc
+    global_result: AtomicArray<f64> 
 }
 
 #[lamellar::am]
@@ -40,7 +40,7 @@ async fn compute_dot_product_timed(world: &LamellarWorld, x: &LocalLockVector, y
 
 
 async fn compute_dot_product(world: &LamellarWorld, x: &LocalLockVector, y: &LocalLockVector) -> f64 {
-    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await; //TODO: I suspect this should be a darc
+    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await;
     let task_group = LamellarTaskGroup::new(world);
 
     let start = x.values.first_global_index_for_pe(world.my_pe());
@@ -92,5 +92,27 @@ pub fn main() {
     if my_pe == 0 {
         println!("Result: {result}");
         println!("{timing}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_ones() {
+        let world = LamellarWorldBuilder::new().build();
+
+        let size = 100;
+        let v1 = LocalLockVector::new_now(&world, size);
+        let w = v1.ones();
+        world.block_on(w);
+
+        let v2 = LocalLockVector::new_now(&world, size);
+        let w = v2.ones();
+        world.block_on(w);
+
+        let w = compute_dot_product_timed(&world, &v1, &v2);
+        let (result, _time) = world.block_on(w);
+        assert_eq!(result, 1.0);
     }
 }

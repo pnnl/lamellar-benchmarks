@@ -4,28 +4,25 @@ mod vector;
 mod utils;
 
 use lamellar::array::prelude::*;
-use vector::{Vector, LamellarVector};
+use vector::{Vector, LocalLockVector};
 
-async fn waxby_timed(world: &LamellarWorld, w:&mut impl Vector, alpha: f64, x: &impl Vector, beta: f64, y: &impl Vector) -> utils::Timing {
+async fn waxby_timed(world: &LamellarWorld, w:&LocalLockVector, alpha: f64, x: &LocalLockVector, beta: f64, y: &LocalLockVector) -> utils::Timing {
     let timing = utils::Timing::start("WAXBY");
     waxby(world, w, alpha, x, beta, y).await;
     let timing = timing.end();
     timing
 }
 
-async fn waxby(world: &LamellarWorld, w:&mut impl Vector, alpha: f64, x: &impl Vector, beta: f64, y: &impl Vector) {
-    // TODO: If it took LamellarVector instead of Vector could skip the local_valus game
-    // and just do w.values.store(i, alpha*x.values.at(i) + beta * y.values.at(i))
-    // WHY am I using 'Vector'?  Is there a proper generic LamellarArray trait that gives 'at' and 'store'?
-    
-    let mut w_local = w.mut_local_values().await;
-    let x_local = x.local_values().await;
-    let y_local = y.local_values().await;
+async fn waxby(world: &LamellarWorld, w:&LocalLockVector, alpha: f64, x: &LocalLockVector, beta: f64, y: &LocalLockVector) {    
+    let my_pe = world.my_pe();
 
-    for i in 0..w_local.len() {
-        w_local[i] = alpha * x_local[i] + beta * y_local[i];
+    for i in 0..x.len() {
+        let (pe, _) = x.values.pe_and_offset_for_global_index(i).unwrap(); //Panic unlikely because should be part of the global range by construction
+        if pe == my_pe {
+            let value = alpha * x.values.at(i).await + beta * y.values.at(i).await;
+            let _ = w.values.store(i, value).await;
+        }
     }
-
     world.barrier();
 }
 
@@ -40,9 +37,9 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
 
     let vector_size = num_pes * values_per_pe ;
 
-    let mut w = LamellarVector::new(world, vector_size).await;
-    let x = LamellarVector::new(world, vector_size).await;
-    let y = LamellarVector::new(world, vector_size).await;
+    let mut w = LocalLockVector::new(world, vector_size).await;
+    let x = LocalLockVector::new(world, vector_size).await;
+    let y = LocalLockVector::new(world, vector_size).await;
 
     w.zero().await;
     x.fill_random().await;

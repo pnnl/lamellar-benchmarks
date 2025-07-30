@@ -3,45 +3,59 @@
 mod vector;
 mod utils;
 
+use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
-use vector::{Vector, LamellarVector};
+use lamellar::LamellarTaskGroup;
+use vector::{Vector, LocalLockVector};
 
-async fn waxby_timed(world: &LamellarWorld, w:&mut impl Vector, alpha: f64, x: &impl Vector, beta: f64, y: &impl Vector) -> utils::Timing {
+
+#[lamellar::AmData(Clone, Debug)]
+struct WAXBYAm {
+    i: usize,
+    w: LocalLockArray<f64>,
+    alpha: f64,
+    x: LocalLockArray<f64>,
+    beta: f64,
+    y: LocalLockArray<f64>
+}
+
+#[lamellar::am]
+impl lamellar::LamellarAM for WAXBYAm {
+    async fn exec(self) {
+        let value = self.alpha * self.x.at(self.i).await + self.beta * self.y.at(self.i).await;
+        self.w.store(self.i, value).await;
+    }
+}
+
+async fn waxby_timed(world: &LamellarWorld, w:&LocalLockVector, alpha: f64, x: &LocalLockVector, beta: f64, y: &LocalLockVector) -> utils::Timing {
     let timing = utils::Timing::start("WAXBY");
-    let result = waxby(world, w, alpha, x, beta, y).await;
+    let _ = waxby(world, w, alpha, x, beta, y).await;
     let timing = timing.end();
     timing
 }
 
-#[lamellar::AmData(Clone, Debug)]
-struct WAXBY_AM {
-    i: usize,
-    w: &Vector,
-    a: f64,
-    x: &Vector,
-    b: f64,
-    y: &Vector,
-}
+async fn waxby(world: &LamellarWorld, w:&LocalLockVector, alpha:f64, x: &LocalLockVector, beta:f64, y: &LocalLockVector) {
+    let start = x.values.first_global_index_for_pe(world.my_pe());
+    let task_group = LamellarTaskGroup::new(world);
 
-impl lamellar::LamellarAM for WAXBY_AM {
-    async fn exec(self) {
-        let w_local = self.w.write_local_values();
-        let x_local = self.x.local_values();
-        let y_local = self.y.local_values();
-        let local_i = self.i - self.offset;
-
-        //NOTE: This local_i game implies that all of the arrays are identically distributed...which they may not be.
-        w_local[local_i] = self.a * x_local[local_i] + self.b * y_local[local_i];
-    }
-}
-
-async fn waxby(world: &LamellarWorld, w:&mut impl Vector, alpha:f64, x: &impl Vector, beta:f64, y: &impl Vector) {
-    let my_pe = world.my_pe();
-    if my_pe == 0 {
-        for i in 0..w.len() {
-            world.exec_am(WAXBY_AM {i, w, alpha, x, beta, y})
+    if let Some(start) = start {
+        let end = start + x.values.num_elems_local();
+        for i in start..end {
+            let (target_pe, _) = x.values.pe_and_offset_for_global_index(i).unwrap(); //Panic accepted because should be part of the global range by construction
+            let _ = task_group.exec_am_pe(
+                target_pe, 
+                WAXBYAm {
+                    i:i, 
+                    w: w.values.clone(), 
+                    alpha: alpha, 
+                    x: x.values.clone(), 
+                    beta:beta, 
+                    y:y.values.clone()
+                });
         }
     }
+
+    task_group.await_all().await;
     world.barrier();
 }
 
@@ -58,9 +72,9 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
 
     let vector_size = num_pes * values_per_pe ;
 
-    let mut w = LamellarVector::new(world, vector_size).await;
-    let x = LamellarVector::new(world, vector_size).await;
-    let y = LamellarVector::new(world, vector_size).await;
+    let mut w = LocalLockVector::new(world, vector_size).await;
+    let x = LocalLockVector::new(world, vector_size).await;
+    let y = LocalLockVector::new(world, vector_size).await;
 
     w.zero().await;
     x.fill_random().await;
