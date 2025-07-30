@@ -76,7 +76,7 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
     let x = LocalLockVector::new(world, vector_size).await;
     let y = LocalLockVector::new(world, vector_size).await;
 
-    w.zero().await;
+    w.zero(world).await;
     x.fill_random().await;
     y.fill_random().await;
 
@@ -92,5 +92,35 @@ pub fn main() {
     let my_pe = world.my_pe();
     if my_pe == 0 {
         println!("{timing}")
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::test_utils::WORLD;
+
+    #[test]
+    fn test_waxby_am_ones() {
+        let size = 100;
+        let w = LocalLockVector::new_now(&WORLD, size);
+        let task = w.zero(&WORLD);
+        WORLD.block_on(task);
+
+        let x = LocalLockVector::new_now(&WORLD, size);
+        let task = x.ones(&WORLD);
+        WORLD.block_on(task);
+
+        let y = LocalLockVector::new_now(&WORLD, size);
+        let task = y.ones(&WORLD);
+        WORLD.block_on(task);
+
+        let task = waxby_timed(&WORLD,  &w, 2.0, &x, 3.0, &y);
+        let _time = WORLD.block_on(task);
+        
+        for e in w.values.onesided_iter().into_iter() {
+            assert_eq!(*e, 5.0);
+        }
     }
 }

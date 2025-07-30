@@ -41,7 +41,7 @@ async fn async_main(world: &LamellarWorld) -> utils::Timing {
     let x = LocalLockVector::new(world, vector_size).await;
     let y = LocalLockVector::new(world, vector_size).await;
 
-    w.zero().await;
+    w.zero(world).await;
     x.fill_random().await;
     y.fill_random().await;
 

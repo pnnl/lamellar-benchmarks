@@ -7,7 +7,7 @@ use rand::prelude::*;
 /// Dense vector trait members
 pub trait Vector {
     /// Fill vector with zero values.  
-    async fn zero(&self);
+    async fn zero(&self, world: &LamellarWorld);
 
     /// Multiply a single index's value by the passed value
     async fn scale_value(&self, index:usize, value:f64);
@@ -48,7 +48,7 @@ impl LocalLockVector {
 
     #[cfg(test)]
     pub async fn ones(&self, world: &LamellarWorld) {
-        let mut handle = self.values.write_local_data();
+        let handle = self.values.write_local_data();
         world.spawn(async move {
             let mut local_data = handle.await;
             local_data.iter_mut().for_each(|elem| *elem = 1.0);
@@ -57,9 +57,13 @@ impl LocalLockVector {
 }
 
 impl Vector for LocalLockVector {
-    async fn zero(&self) {
-        let mut local_data=self.values.write_local_data().await;
-        local_data.iter_mut().for_each(|elem| *elem = 0.0);
+    async fn zero(&self, world: &LamellarWorld) {
+        let handle = self.values.write_local_data();
+        world.spawn(async move {
+            let mut local_data = handle.await;
+            local_data.iter_mut().for_each(|elem| *elem = 0.0);
+        }
+        );
     }
 
     async fn scale_value(&self, index:usize, scale:f64) {
@@ -102,7 +106,7 @@ mod tests {
         WORLD.block_on(w);
 
         let mut v2 = LocalLockVector::new_now(&WORLD, size);
-        let w = v2.zero();
+        let w = v2.zero(&WORLD);
         WORLD.block_on(w);
 
         let w = v1.copy(&mut v2);
@@ -158,7 +162,7 @@ mod tests {
     fn test_zero() {
         let size = 100;
         let v = LocalLockVector::new_now(&WORLD, size);
-        let w = v.zero();
+        let w = v.zero(&WORLD);
         WORLD.block_on(w);
         for e in v.values.onesided_iter().into_iter() {
             assert_eq!(0.0, *e)
