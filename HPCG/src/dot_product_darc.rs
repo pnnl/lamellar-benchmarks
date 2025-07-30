@@ -79,11 +79,11 @@ mod tests {
     fn test_darc_dot_product_ones() {
         let size = 100;
         let v1 = LocalLockVector::new_now(&WORLD, size);
-        let w = v1.ones(&WORLD);
+        let w = v1.fill(&WORLD, 1.0);
         WORLD.block_on(w);
 
         let v2 = LocalLockVector::new_now(&WORLD, size);
-        let w = v2.ones(&WORLD);
+        let w = v2.fill(&WORLD, 1.0);
         WORLD.block_on(w);
 
         let w = compute_dot_product_timed(&WORLD, &v1, &v2);

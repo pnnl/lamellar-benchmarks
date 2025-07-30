@@ -101,26 +101,33 @@ mod tests {
     use super::*;
     use crate::utils::test_utils::WORLD;
 
-    #[test]
-    fn test_waxby_am_ones() {
+    fn do_test(xv: f64, alpha: f64, yv: f64, beta:f64, expected:f64, msg: &str) {
         let size = 100;
         let w = LocalLockVector::new_now(&WORLD, size);
-        let task = w.zero(&WORLD);
+        let task = w.fill(&WORLD, -1.0);
         WORLD.block_on(task);
 
         let x = LocalLockVector::new_now(&WORLD, size);
-        let task = x.ones(&WORLD);
+        let task = x.fill(&WORLD, xv);
         WORLD.block_on(task);
 
         let y = LocalLockVector::new_now(&WORLD, size);
-        let task = y.ones(&WORLD);
+        let task = y.fill(&WORLD, yv);
         WORLD.block_on(task);
 
-        let task = waxby_timed(&WORLD,  &w, 2.0, &x, 3.0, &y);
+        let task = waxby_timed(&WORLD,  &w, alpha, &x, beta, &y);
         let _time = WORLD.block_on(task);
         
         for e in w.values.onesided_iter().into_iter() {
-            assert_eq!(*e, 5.0);
-        }
+            assert_eq!(*e, expected, "WAXBY AM test: {}", msg);
+        }        
+    }
+
+    #[test]
+    fn test_waxby_am_various() {
+        do_test(1.0, 2.0, 1.0, 3.0, 5.0, "ones");
+        do_test(0.0, 2.0, 1.0, 3.0, 3.0, "no x");
+        do_test(1.0, 2.0, 0.0, 3.0, 2.0, "no y");
+        do_test(0.0, 2.0, 0.0, 3.0, 0.0, "no x and no y");
     }
 }

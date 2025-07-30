@@ -75,15 +75,15 @@ mod tests {
     fn test_dot_product_ones() {
         let size = 100;
         let v1 = LocalLockVector::new_now(&WORLD, size);
-        let w = v1.ones(&WORLD);
-        WORLD.block_on(w);
+        let task = v1.fill(&WORLD, 1.0);
+        WORLD.block_on(task);
 
         let v2 = LocalLockVector::new_now(&WORLD, size);
-        let w = v2.ones(&WORLD);
-        WORLD.block_on(w);
+        let task = v2.fill(&WORLD, 1.0);
+        WORLD.block_on(task);
 
-        // // let w = compute_dot_product_timed(&WORLD, &v1, &v2);
-        // let (result, _time) = WORLD.block_on(w);
-        // assert_eq!(result, size as f64);
+        let task = compute_dot_product_timed(&WORLD, &v1, &v2);
+        let (result, _time) = WORLD.block_on(task);
+        assert_eq!(result, size as f64);
     }
 }

@@ -40,30 +40,25 @@ impl LocalLockVector {
         }
     }
 
+    pub async fn fill(&self, world: &LamellarWorld, value: f64) {
+        let handle = self.values.write_local_data();
+        let task = world.spawn(async move {
+            let mut local_data = handle.await;
+            local_data.iter_mut().for_each(|elem| *elem = value);
+        });
+        task.await;
+    }
+
     #[cfg(test)]
     pub fn new_now(world: &LamellarWorld, size: usize) -> LocalLockVector {
         let w = Self::new(world, size);
         world.block_on(w)
     }
-
-    #[cfg(test)]
-    pub async fn ones(&self, world: &LamellarWorld) {
-        let handle = self.values.write_local_data();
-        world.spawn(async move {
-            let mut local_data = handle.await;
-            local_data.iter_mut().for_each(|elem| *elem = 1.0);
-        });
-    }
 }
 
 impl Vector for LocalLockVector {
     async fn zero(&self, world: &LamellarWorld) {
-        let handle = self.values.write_local_data();
-        world.spawn(async move {
-            let mut local_data = handle.await;
-            local_data.iter_mut().for_each(|elem| *elem = 0.0);
-        }
-        );
+        self.fill(world, 0.0).await;
     }
 
     async fn scale_value(&self, index:usize, scale:f64) {
@@ -170,13 +165,17 @@ mod tests {
     }
 
     #[test]
-    fn test_ones() {
+    fn test_fill() {
         let size = 100;
         let v = LocalLockVector::new_now(&WORLD, size);
-        let w = v.ones(&WORLD);
-        WORLD.block_on(w);
-        for e in v.values.onesided_iter().into_iter() {
-            assert_eq!(1.0, *e)
+        
+        for value in (0..500).step_by(3) {
+            let value = value as f64;
+            let w = v.fill(&WORLD, value);
+            WORLD.block_on(w);
+            for e in v.values.onesided_iter().into_iter() {
+                assert_eq!(*e, value)
+            }
         }
     }
 }
