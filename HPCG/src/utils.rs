@@ -63,3 +63,17 @@ impl fmt::Display for Timing {
     }
 
 }
+
+
+#[cfg(test)]
+pub mod test_utils {
+    use std::sync::LazyLock;
+    use lamellar::{Backend, LamellarWorld, LamellarWorldBuilder};
+
+    pub static WORLD: LazyLock<LamellarWorld> = LazyLock::new(
+        || 
+        LamellarWorldBuilder::new()
+            .with_lamellae(Backend::Local)
+            .build()
+    );
+}

@@ -20,7 +20,7 @@ async fn compute_dot_product_timed(world: &LamellarWorld, x: &LocalLockVector, y
 
 
 async fn compute_dot_product(world: &LamellarWorld, x: &LocalLockVector, y: &LocalLockVector) -> f64 {
-    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await; //TODO: I suspect this should be a darc
+    let global_result = AtomicArray::new(world, 1, lamellar::array::Distribution::Block).await;
 
     let my_pe = world.my_pe();
     let mut local_sum = 0.0;
@@ -62,5 +62,28 @@ pub fn main() {
     if my_pe == 0 {
         println!("Result: {result}");
         println!("{timing}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::test_utils::WORLD;
+
+
+    #[test]
+    fn test_dot_product_ones() {
+        let size = 100;
+        let v1 = LocalLockVector::new_now(&WORLD, size);
+        let w = v1.ones(&WORLD);
+        WORLD.block_on(w);
+
+        let v2 = LocalLockVector::new_now(&WORLD, size);
+        let w = v2.ones(&WORLD);
+        WORLD.block_on(w);
+
+        // // let w = compute_dot_product_timed(&WORLD, &v1, &v2);
+        // let (result, _time) = WORLD.block_on(w);
+        // assert_eq!(result, size as f64);
     }
 }

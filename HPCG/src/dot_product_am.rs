@@ -56,7 +56,7 @@ async fn compute_dot_product(world: &LamellarWorld, x: &LocalLockVector, y: &Loc
                     y: y.values.clone(),
                     global_result: global_result.clone()
                 }
-            );
+            ).spawn();
         }
     }
 
@@ -98,21 +98,21 @@ pub fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_utils::WORLD;
 
-    fn test_ones() {
-        let world = LamellarWorldBuilder::new().build();
-
+    #[test]
+    fn test_am_dot_product_ones() {
         let size = 100;
-        let v1 = LocalLockVector::new_now(&world, size);
-        let w = v1.ones();
-        world.block_on(w);
+        let v1 = LocalLockVector::new_now(&WORLD, size);
+        let w = v1.ones(&WORLD);
+        WORLD.block_on(w);
 
-        let v2 = LocalLockVector::new_now(&world, size);
-        let w = v2.ones();
-        world.block_on(w);
+        let v2 = LocalLockVector::new_now(&WORLD, size);
+        let w = v2.ones(&WORLD);
+        WORLD.block_on(w);
 
-        let w = compute_dot_product_timed(&world, &v1, &v2);
-        let (result, _time) = world.block_on(w);
-        assert_eq!(result, 1.0);
+        let w = compute_dot_product_timed(&WORLD, &v1, &v2);
+        let (result, _time) = WORLD.block_on(w);
+        assert_eq!(result, size as f64);
     }
 }

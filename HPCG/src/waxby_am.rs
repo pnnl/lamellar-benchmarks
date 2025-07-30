@@ -51,7 +51,7 @@ async fn waxby(world: &LamellarWorld, w:&LocalLockVector, alpha:f64, x: &LocalLo
                     x: x.values.clone(), 
                     beta:beta, 
                     y:y.values.clone()
-                });
+                }).spawn();
         }
     }
 

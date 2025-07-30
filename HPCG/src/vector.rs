@@ -27,7 +27,7 @@ pub trait Vector {
 #[derive(Clone, Debug)]
 pub struct LocalLockVector {
     pub values: LocalLockArray<f64>,
-    pub optimization_data: Option<usize> // placeholder for later use
+    pub _optimization_data: Option<usize> // placeholder for later use
 }
 
 impl LocalLockVector {
@@ -36,7 +36,7 @@ impl LocalLockVector {
             values: LocalLockArray::new(world, size,
                 lamellar::array::Distribution::Block,
                 ).await,
-            optimization_data: Option::None
+            _optimization_data: Option::None
         }
     }
 
@@ -47,9 +47,12 @@ impl LocalLockVector {
     }
 
     #[cfg(test)]
-    pub async fn ones(&self) {
-        let mut local_data=self.values.write_local_data().await;
-        local_data.iter_mut().for_each(|elem| *elem = 1.0);
+    pub async fn ones(&self, world: &LamellarWorld) {
+        let mut handle = self.values.write_local_data();
+        world.spawn(async move {
+            let mut local_data = handle.await;
+            local_data.iter_mut().for_each(|elem| *elem = 1.0);
+        });
     }
 }
 
@@ -89,32 +92,21 @@ impl Vector for LocalLockVector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::LazyLock;
-     use lamellar::Backend;
-
-
-    static WORLD: LazyLock<LamellarWorld> = LazyLock::new(
-        || 
-        LamellarWorldBuilder::new()
-            .with_lamellae(Backend::Local)
-            .build()
-    );
+    use crate::utils::test_utils::WORLD;
 
     #[test]
     fn test_copy() {
-        let world = &(*WORLD);
-
         let size = 100;
-        let v1 = LocalLockVector::new_now(world, size);
+        let v1 = LocalLockVector::new_now(&WORLD, size);
         let w = v1.fill_random();
-        world.block_on(w);
+        WORLD.block_on(w);
 
-        let mut v2 = LocalLockVector::new_now(world, size);
+        let mut v2 = LocalLockVector::new_now(&WORLD, size);
         let w = v2.zero();
-        world.block_on(w);
+        WORLD.block_on(w);
 
         let w = v1.copy(&mut v2);
-        world.block_on(w);
+        WORLD.block_on(w);
 
         let zipped = v1.values.onesided_iter().into_iter().zip(v2.values.onesided_iter().into_iter());
         for (a,b) in zipped {
@@ -124,20 +116,18 @@ mod tests {
 
     #[test]
     fn test_scale_value() {
-        let world = &(*WORLD);
-
         let size = 100;
-        let v1 = LocalLockVector::new_now(world, size);
+        let v1 = LocalLockVector::new_now(&WORLD, size);
         let w = v1.fill_random();
-        world.block_on(w);
+        WORLD.block_on(w);
 
-        let mut v2 = LocalLockVector::new_now(world, size);
+        let mut v2 = LocalLockVector::new_now(&WORLD, size);
         let w = v1.copy(&mut v2);
-        world.block_on(w);
+        WORLD.block_on(w);
 
         for i in 0..v2.values.len() {
             let w = v2.scale_value(i, 2.0);
-            world.block_on(w);
+            WORLD.block_on(w);
         }
 
         let zipped = v1.values.onesided_iter().into_iter().zip(v2.values.onesided_iter().into_iter());
@@ -150,12 +140,10 @@ mod tests {
 
     #[test]
     fn test_fill_random() {
-        let world = &(*WORLD);
-
         let size = 100;
-        let v = LocalLockVector::new_now(world, size);
+        let v = LocalLockVector::new_now(&WORLD, size);
         let w = v.fill_random();
-        world.block_on(w);
+        WORLD.block_on(w);
         let mut prior = -1.0;
         for e in v.values.onesided_iter().into_iter() {
             assert!(0.0 < *e);
@@ -168,12 +156,10 @@ mod tests {
 
     #[test]
     fn test_zero() {
-        let world = &(*WORLD);
-
         let size = 100;
-        let v = LocalLockVector::new_now(world, size);
+        let v = LocalLockVector::new_now(&WORLD, size);
         let w = v.zero();
-        world.block_on(w);
+        WORLD.block_on(w);
         for e in v.values.onesided_iter().into_iter() {
             assert_eq!(0.0, *e)
         }
@@ -181,15 +167,12 @@ mod tests {
 
     #[test]
     fn test_ones() {
-        let world = &(*WORLD);
-
         let size = 100;
-        let v = LocalLockVector::new_now(world, size);
-        let w = v.ones();
-        world.block_on(w);
+        let v = LocalLockVector::new_now(&WORLD, size);
+        let w = v.ones(&WORLD);
+        WORLD.block_on(w);
         for e in v.values.onesided_iter().into_iter() {
             assert_eq!(1.0, *e)
         }
     }
-
 }
