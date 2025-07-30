@@ -70,20 +70,25 @@ mod tests {
     use super::*;
     use crate::utils::test_utils::WORLD;
 
+    fn test_dot_product(size: usize, av: f64, bv: f64, expected: f64, msg: &str) {
+        let a = LocalLockVector::new_now(&WORLD, size);
+        let task = a.fill(&WORLD, av);
+        WORLD.block_on(task);
+
+        let b = LocalLockVector::new_now(&WORLD, size);
+        let task = b.fill(&WORLD, bv);
+        WORLD.block_on(task);
+
+        let task = compute_dot_product_timed(&WORLD, &a, &b);
+        let (result, _time) = WORLD.block_on(task);
+        assert_eq!(result, expected, "Dot Product: {}", msg);        
+    }
 
     #[test]
-    fn test_dot_product_ones() {
-        let size = 100;
-        let v1 = LocalLockVector::new_now(&WORLD, size);
-        let task = v1.fill(&WORLD, 1.0);
-        WORLD.block_on(task);
-
-        let v2 = LocalLockVector::new_now(&WORLD, size);
-        let task = v2.fill(&WORLD, 1.0);
-        WORLD.block_on(task);
-
-        let task = compute_dot_product_timed(&WORLD, &v1, &v2);
-        let (result, _time) = WORLD.block_on(task);
-        assert_eq!(result, size as f64);
-    }
+    fn test_various_dot_products() {
+        test_dot_product(100, 1.0, 1.0, 100.0, "Ones x100");
+        test_dot_product(50, 1.0, 1.0, 50.0, "Ones x50");
+        test_dot_product(100, 2.0, 2.0, 400.0, "Twos");
+        test_dot_product(100, 1.0, 2.0, 200.0, "a=1, b=2");
+    } 
 }
