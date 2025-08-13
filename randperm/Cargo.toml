@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 rand = "0.6"
-lamellar = { version = "0.7.1" } #add features = ["enable-rofi"] to use rofi lamellae
+lamellar = { version = "0.7.1", features = ["enable-rofi"] }
 
 [profile.release]
 opt-level=3

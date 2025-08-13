@@ -132,18 +132,25 @@ fn main() {
             (world.MB_sent()) / global_time,
         );
         println!("Secs: {:?}", global_time,);
-        if let Some(sum) = world.block_on(the_array.sum()) {
-            println!(
-                "reduced sum: {sum} calculated sum {} ",
-                (global_count * (global_count + 1) / 2) - global_count
-            );
-            if sum != (global_count * (global_count + 1) / 2) - global_count {
-                println!("Error! randperm not as expected");
+        let sum_option = world.block_on(the_array.sum());
+        let sum_correct = match sum_option {
+            Some(sum) => {
+                // put ((global_count * (global_count + 1) / 2) - global_count) into a variable
+                println!(
+                    "reduced sum: {sum} calculated sum {} ",
+                    (global_count * (global_count + 1) / 2) - global_count
+                );
+                let is_correct = sum == (global_count * (global_count + 1) / 2) - global_count;
+                if !is_correct {
+                    println!("Error! randperm not as expected");
+                }
+                is_correct
+            },
+            None => {
+                println!("Error! randperm computation failed");
+                false
             }
-        } else {
-            println!("Error! randperm computation failed");
-        }
-        let sum_correct = sum == (global_count * (global_count + 1) / 2) - global_count;
+        };
         println!("{{\"array_size\":{},\"target_factor\":{},\"target_array_size\":{},\"execution_time_secs\":{:.6},\"collect_time_secs\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6},\"sum_verification_passed\":{}}}",
             global_count,
             target_factor,

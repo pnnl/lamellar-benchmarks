@@ -178,6 +178,7 @@ fn main() {
         let global_time = timer.elapsed().as_secs_f64();
         let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
         if my_pe == 0 {
+            let triangle_count = final_cnt_sum.unwrap_or(0);
             println!(
                 "triangles counted: {:?}\nglobal time: {:?}",
                 final_cnt_sum,
@@ -189,7 +190,7 @@ fn main() {
                 graph.num_nodes(),
                 launch_threads,
                 buf_size,
-                final_cnt_sum,
+                triangle_count,
                 issue_time,
                 local_time,
                 global_time,
