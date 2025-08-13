@@ -135,12 +135,12 @@ fn main() {
         let sum_option = world.block_on(the_array.sum());
         let sum_correct = match sum_option {
             Some(sum) => {
-                // put ((global_count * (global_count + 1) / 2) - global_count) into a variable
+                let expected_sum = (global_count * (global_count + 1) / 2) - global_count;
                 println!(
                     "reduced sum: {sum} calculated sum {} ",
-                    (global_count * (global_count + 1) / 2) - global_count
+                    expected_sum
                 );
-                let is_correct = sum == (global_count * (global_count + 1) / 2) - global_count;
+                let is_correct = sum == expected_sum;
                 if !is_correct {
                     println!("Error! randperm not as expected");
                 }
