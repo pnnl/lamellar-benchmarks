@@ -47,20 +47,22 @@ impl LamellarAM for LaunchAm {
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
 
             buffs[rank].push(offset);
             if buffs[rank].len() >= self.buffer_amt {
                 let buff = buffs[rank].clone();
-                task_group.exec_am_pe(
-                    rank,
-                    HistoBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                let _ = task_group
+                    .exec_am_pe(
+                        rank,
+                        HistoBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .spawn();
                 buffs[rank].clear();
             }
         }
@@ -68,15 +70,19 @@ impl LamellarAM for LaunchAm {
         for rank in 0..num_pes {
             let buff = buffs[rank].clone();
             if buff.len() > 0 {
-                task_group.exec_am_pe(
-                    rank,
-                    HistoBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                let _ = task_group
+                    .exec_am_pe(
+                        rank,
+                        HistoBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .spawn();
             }
         }
+
+        task_group.await_all().await;
     }
 }
 
@@ -115,12 +121,12 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     let buffer_amt = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
     let num_threads = args
         .get(3)
         .and_then(|s| s.parse::<usize>().ok())
@@ -137,6 +143,7 @@ fn main() {
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+    let counts = counts.block();
 
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
@@ -204,9 +211,7 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        unsafe {counts.as_slice().unwrap().iter().sum::<usize>()}
-    );
+    println!("pe {:?} sum {:?}", my_pe, unsafe {
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    });
 }

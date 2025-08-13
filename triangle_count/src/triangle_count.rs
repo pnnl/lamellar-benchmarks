@@ -32,17 +32,20 @@ impl LamellarAM for LaunchAm {
         let task_group = LamellarTaskGroup::new(lamellar::world.clone());
         let graph_data = self.graph.data();
         for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
-            task_group.exec_am_all(TcAm {
-                graph: graph_data.clone(),
-                node: node_0,
-                neighbors: graph_data
-                    .neighbors_iter(&node_0)
-                    .take_while(|n| n < &&node_0)
-                    .map(|n| *n)
-                    .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
-                final_cnt: self.final_cnt.clone(),
-            });
+            let _ = task_group
+                .exec_am_all(TcAm {
+                    graph: graph_data.clone(),
+                    node: node_0,
+                    neighbors: graph_data
+                        .neighbors_iter(&node_0)
+                        .take_while(|n| n < &&node_0)
+                        .map(|n| *n)
+                        .collect::<Vec<u32>>(), //only send neighbors that are less than node_0 as an optimization
+                    final_cnt: self.final_cnt.clone(),
+                })
+                .spawn();
         }
+        task_group.await_all().await;
     }
 }
 
@@ -115,7 +118,7 @@ fn main() {
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
     graph.dump_to_bin(&format!("{file}.bin"));
-    let final_cnt = Darc::new(&world, AtomicUsize::new(0)).unwrap(); // initialize our local counter (which is accessible to all PEs)
+    let final_cnt = Darc::new(&world, AtomicUsize::new(0)).block().unwrap(); // initialize our local counter (which is accessible to all PEs)
 
     if my_pe == 0 {
         println!("num nodes {:?}", graph.num_nodes())

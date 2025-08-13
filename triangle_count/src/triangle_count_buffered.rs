@@ -28,23 +28,28 @@ impl LamellarAM for LaunchAm {
             cur_len += neighs.len();
             buffer.push((node_0, neighs)); // pack the node and neighbors into the buffer
             if cur_len > self.buf_size {
-                task_group.exec_am_all(BufferedTcAm {
-                    graph: graph_data.clone(),
-                    data: buffer,
-                    final_cnt: self.final_cnt.clone(),
-                });
+                let _ = task_group
+                    .exec_am_all(BufferedTcAm {
+                        graph: graph_data.clone(),
+                        data: buffer,
+                        final_cnt: self.final_cnt.clone(),
+                    })
+                    .spawn();
                 buffer = vec![];
                 cur_len = 0;
             }
         }
         if cur_len > 0 {
             //send the remaining data
-            task_group.exec_am_all(BufferedTcAm {
-                graph: graph_data.clone(),
-                data: buffer,
-                final_cnt: self.final_cnt.clone(),
-            });
+            let _ = task_group
+                .exec_am_all(BufferedTcAm {
+                    graph: graph_data.clone(),
+                    data: buffer,
+                    final_cnt: self.final_cnt.clone(),
+                })
+                .spawn();
         }
+        task_group.await_all().await;
     }
 }
 
@@ -114,7 +119,7 @@ fn main() {
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
 
-    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block); // convert it to an atomic array (which is accessible to all PEs)
+    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block(); // convert it to an atomic array (which is accessible to all PEs)
 
     if my_pe == 0 {
         println!("num nodes {:?}", graph.num_nodes())
@@ -134,13 +139,17 @@ fn main() {
         for tid in 0..launch_threads {
             let start = (tid as f32 * batch_size).round() as u32;
             let end = ((tid + 1) as f32 * batch_size).round() as u32;
-            reqs.push(world.exec_am_local(LaunchAm {
-                graph: graph.clone(),
-                start: start,
-                end: end,
-                final_cnt: final_cnt.clone(),
-                buf_size: *buf_size,
-            }));
+            reqs.push(
+                world
+                    .exec_am_local(LaunchAm {
+                        graph: graph.clone(),
+                        start: start,
+                        end: end,
+                        final_cnt: final_cnt.clone(),
+                        buf_size: *buf_size,
+                    })
+                    .spawn(),
+            );
         }
 
         //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.

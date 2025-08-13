@@ -35,13 +35,15 @@ impl LamellarAM for LaunchAm {
         for idx in &self.rand_index {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
-                rank,
-                HistoAM {
-                    offset: offset,
-                    counts: self.counts.clone(),
-                },
-            );
+            let _ = lamellar::world
+                .exec_am_pe(
+                    rank,
+                    HistoAM {
+                        offset: offset,
+                        counts: self.counts.clone(),
+                    },
+                )
+                .spawn();
         }
     }
 }
@@ -78,13 +80,15 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     let mut counts_data = Vec::with_capacity(COUNTS_LOCAL_LEN);
     for _ in 0..COUNTS_LOCAL_LEN {
         counts_data.push(AtomicUsize::new(0));
     }
-    let counts = Darc::new(&world, counts_data).expect("unable to create darc");
+    let counts = Darc::new(&world, counts_data)
+        .block()
+        .expect("unable to create darc");
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
     let rand_index = (0..l_num_updates)
         .into_iter()

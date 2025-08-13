@@ -26,12 +26,6 @@ These benchmarks requires the following dependencies:
 
 * Crates listed in Cargo.toml
 
-At the time of release, Lamellar has been tested with the following external packages:
-
-| **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** | **LAMELLAR** |
-|--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|-------------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   | 0.2.1        |
-
 The OFI_DIR environment variable must be specified with the location of the OFI installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation.
 
@@ -68,13 +62,11 @@ TESTING
 
 The benchmarks are designed to be run with on multiple compute nodes (1 node is valid). Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentaiton for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the jbo manager and runtime launcher (e.g., MPI, please refer to the BUILING REQUIREMENTS section for a list of tested software versions).
 
-1. Unzip the data file `./input_graphs/graph500-scale18-ef16_adj.tsv.tar.gz`
-2. Allocate two compute nodes on the cluster:
+Before running any benchmarks, unzip the data file `./input_graphs/graph500-scale18-ef16_adj.tsv.tar.gz`
 
-`salloc -N 2 -p compute`
-3. Run triangle_count(_buffered) using `mpiexec` launcher.
-
-`mpiexec -n 2 ./target/release/triangle_count(_buffered) ./input_graphs/graph500-scale18-ef16_adj.tsv`  (argument = number of launcher threads/tasks)
+To run the benchmark through the slurm queue, first compile with `cargo build --release` then run one of the following:
+- `srun -N 2 target/release/triangle_count input_graphs/graph500-scale18-ef16_adj.tsv`
+- `srun -N 2 target/release/triangle_count_buffered input_graphs/graph500-scale18-ef16_adj.tsv`
 
 GRAPHS
 ------

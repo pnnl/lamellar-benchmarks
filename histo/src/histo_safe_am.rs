@@ -39,16 +39,18 @@ struct LaunchAm {
 #[lamellar::local_am]
 impl LamellarAM for LaunchAm {
     async fn exec(self) {
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % lamellar::num_pes;
             let offset = idx / lamellar::num_pes;
-            lamellar::world.exec_am_pe(
-                rank,
-                HistoAM {
-                    offset: offset,
-                    counts: self.counts.clone(),
-                },
-            );
+            lamellar::world
+                .exec_am_pe(
+                    rank,
+                    HistoAM {
+                        offset: offset,
+                        counts: self.counts.clone(),
+                    },
+                )
+                .await;
         }
     }
 }
@@ -85,7 +87,7 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
     let num_threads = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
@@ -97,6 +99,8 @@ fn main() {
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+
+    let counts = counts.block();
     //initialize arrays
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
@@ -152,9 +156,7 @@ fn main() {
         );
     }
 
-    println!(
-        "pe {:?} sum {:?}",
-        my_pe,
-        unsafe {counts.as_slice().unwrap().iter().sum::<usize>()}
-    );
+    println!("pe {:?} sum {:?}", my_pe, unsafe {
+        counts.as_slice().unwrap().iter().sum::<usize>()
+    });
 }

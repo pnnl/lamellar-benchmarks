@@ -5,8 +5,8 @@ use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
 
-const COUNTS_LOCAL_LEN: usize =  1000000;//100_000_000; //this will be 800MB on each pe
-//===== HISTO BEGIN ======
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
+                                         //===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct IndexGatherBufferedAM {
@@ -16,9 +16,12 @@ struct IndexGatherBufferedAM {
 
 #[lamellar::am]
 impl LamellarAM for IndexGatherBufferedAM {
-    async fn exec(self) -> Vec<usize>{
-        let counts_slice = unsafe {self.counts.as_slice().unwrap()};
-        self.buff.iter().map(|i| counts_slice[*i]).collect::<Vec<usize>>()
+    async fn exec(self) -> Vec<usize> {
+        let counts_slice = unsafe { self.counts.as_slice().unwrap() };
+        self.buff
+            .iter()
+            .map(|i| counts_slice[*i])
+            .collect::<Vec<usize>>()
     }
 }
 
@@ -36,20 +39,22 @@ impl LamellarAM for LaunchAm {
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
-        for idx in unsafe {self.rand_index.as_slice().unwrap()} {
+        for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
 
             buffs[rank].push(offset);
             if buffs[rank].len() >= self.buffer_amt {
                 let buff = buffs[rank].clone();
-                task_group.exec_am_pe(
-                    rank,
-                    IndexGatherBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                task_group
+                    .exec_am_pe(
+                        rank,
+                        IndexGatherBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .await;
                 buffs[rank].clear();
             }
         }
@@ -57,13 +62,15 @@ impl LamellarAM for LaunchAm {
         for rank in 0..num_pes {
             let buff = buffs[rank].clone();
             if buff.len() > 0 {
-                task_group.exec_am_pe(
-                    rank,
-                    IndexGatherBufferedAM {
-                        buff: buff,
-                        counts: self.counts.clone(),
-                    },
-                );
+                task_group
+                    .exec_am_pe(
+                        rank,
+                        IndexGatherBufferedAM {
+                            buff: buff,
+                            counts: self.counts.clone(),
+                        },
+                    )
+                    .await;
             }
         }
     }
@@ -104,12 +111,12 @@ fn main() {
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
 
     let buffer_amt = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 1000);
+        .unwrap_or(1000);
     let num_threads = args
         .get(3)
         .and_then(|s| s.parse::<usize>().ok())
@@ -118,14 +125,16 @@ fn main() {
             Err(_) => 1,
         });
 
-        if my_pe == 0 {
-            println!("updates total {}", l_num_updates * num_pes);
-            println!("updates per pe {}", l_num_updates);
-            println!("table size per pe{}", COUNTS_LOCAL_LEN);
-        }
+    if my_pe == 0 {
+        println!("updates total {}", l_num_updates * num_pes);
+        println!("updates per pe {}", l_num_updates);
+        println!("table size per pe{}", COUNTS_LOCAL_LEN);
+    }
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
+
+    let counts = counts.block();
 
     unsafe {
         for elem in counts.as_mut_slice().unwrap().iter_mut() {
@@ -173,16 +182,13 @@ fn main() {
             "MUPS: {:?}",
             ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
         );
-        println!(
-            "Secs: {:?}",
-             global_time,
-        );
+        println!("Secs: {:?}", global_time,);
         println!(
             "GB/s Injection rate: {:?}",
             (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
         );
     }
-    
+
     if my_pe == 0 {
         println!(
             "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",
