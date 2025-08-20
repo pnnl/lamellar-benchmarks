@@ -121,15 +121,47 @@ def get_processor_info():
     
     return processor_info
 
-def get_package_versions():
-    """Get version of Lamellar"""
+def get_package_versions(benchmark_type=None):
+    """Get version of Lamellar based on benchmark type"""
     versions = {}
     
+    # Determine which directory to check based on benchmark type
+    benchmark_dirs = {
+        "histo": "histo",
+        "index_gather": "index_gather", 
+        "randperm": "randperm",
+        "triangle_count": "triangle_count"
+    }
+    
+    # Extract base benchmark name from full benchmark type
+    # Example: "histo_buffered_safe_am" -> "histo"
+    base_benchmark = None
+    if benchmark_type:
+        for prefix in benchmark_dirs.keys():
+            if benchmark_type.startswith(prefix):
+                base_benchmark = prefix
+                break
+    
+    cargo_toml_path = 'Cargo.toml'  # Default path
+    
+    # If we found a matching benchmark directory and not in that dir already
+    if base_benchmark and not os.path.exists(cargo_toml_path):
+        # Look for Cargo.toml in the benchmark directory
+        benchmark_dir = benchmark_dirs[base_benchmark]
+        potential_path = os.path.join(benchmark_dir, 'Cargo.toml')
+        if os.path.exists(potential_path):
+            cargo_toml_path = potential_path
+            print(f"Using Cargo.toml from {cargo_toml_path}", file=sys.stderr)    
     try:
-        if os.path.exists('Cargo.toml'):
+        if os.path.exists(cargo_toml_path):
+            # Get directory containing Cargo.toml
+            cargo_dir = os.path.dirname(cargo_toml_path) or '.'
+            
+            # Run cargo tree in the appropriate directory
             cargo_output = subprocess.check_output(
                 ['cargo', 'tree', '--depth=1'],
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
+                cwd=cargo_dir  # Execute in the directory with Cargo.toml
             ).decode('utf-8')
             
             for line in cargo_output.split('\n'):
@@ -139,7 +171,8 @@ def get_package_versions():
                     if dependency.startswith('lamellar '):
                         versions['lamellar_version'] = dependency
                     
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Error getting package versions: {e}")
         pass
     
     env_vars = ['LAMELLAR_VERSION']
@@ -179,7 +212,7 @@ def get_metadata(benchmark_type=None):
         'run_timestamp': datetime.datetime.now().timestamp(),
         'git_info': get_git_info(),
         'system_stats': get_system_stats(),
-        'package_versions': get_package_versions()
+        'package_versions': get_package_versions(benchmark_type)
     }
     
     if benchmark_type:
@@ -349,7 +382,7 @@ def main():
         return
     
     print("Collecting essential metadata...", file=sys.stderr)
-    metadata = get_metadata()
+    metadata = get_metadata(args.benchmark_type)
     
     # Add benchmark type to metadata if provided
     if args.benchmark_type:
