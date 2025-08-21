@@ -7,7 +7,7 @@ members = [
     #"index_gather",
     #"randperm",
     #"triangle_count",
-    #"primitives"
+    "primitives"
 ]
 
 [profile.release]
