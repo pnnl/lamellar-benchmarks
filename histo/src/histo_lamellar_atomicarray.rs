@@ -104,5 +104,20 @@ fn main() {
         );
         println!("(({l_num_updates}*{num_pes})/1_000_000) ");
     }
+
+    if my_pe == 0 {
+        println!("{{\"updates_per_pe\":{},\"num_pes\":{},\"total_updates\":{},\"table_size_per_pe\":{},\"execution_time_secs\":{:.6},\"mups\":{:.6},\"gb_per_sec_injection_rate\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
+            l_num_updates,
+            num_pes,
+            l_num_updates * num_pes,
+            COUNTS_LOCAL_LEN,
+            global_time,
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
+            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
+            world.MB_sent(),
+            world.MB_sent() / global_time
+        );
+    }
+
     // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
 }

@@ -50,6 +50,21 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
             array_type
         );
     }
+
+    if my_pe == 0 {
+        println!("{{\"array_type\":\"{}\",\"updates_per_pe\":{},\"num_pes\":{},\"total_updates\":{},\"table_size_per_pe\":{},\"execution_time_secs\":{:.6},\"mups\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
+            array_type,
+            l_num_updates,
+            num_pes,
+            l_num_updates * num_pes,
+            COUNTS_LOCAL_LEN,
+            global_time,
+            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
+            (world.MB_sent() - prev_amt),
+            (world.MB_sent() - prev_amt) / global_time
+        );
+    }
+
     // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.as_slice().iter().sum()));
     counts.barrier();
     world.MB_sent()

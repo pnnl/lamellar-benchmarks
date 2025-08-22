@@ -149,14 +149,19 @@ fn main() {
             req.await;
         }
     });
+
+    let issue_time = timer.elapsed().as_secs_f64();
+
     if my_pe == 0 {
-        println!("issue time: {:?}", timer.elapsed().as_secs_f64())
+        println!("issue time: {:?}", issue_time)
     };
     // at this point all the triangle counting active messages have been initiated.
 
     world.wait_all(); //wait for all the triangle counting active messages to finish locally
+
+    let local_time = timer.elapsed().as_secs_f64();
     if my_pe == 0 {
-        println!("local time: {:?}", timer.elapsed().as_secs_f64())
+        println!("local time: {:?}", local_time)
     };
 
     world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
@@ -176,11 +181,25 @@ fn main() {
     }
     world.barrier(); //at this point the final triangle counting result is available on PE 0
 
+    let global_time = timer.elapsed().as_secs_f64();
+
     if my_pe == 0 {
         println!(
             "triangles counted: {:?} global time: {:?}",
             final_cnt.load(Ordering::SeqCst),
-            timer.elapsed().as_secs_f64()
-        )
+            global_time
+        );
+
+        println!("{{\"graph_file\":\"{}\",\"num_nodes\":{},\"launch_threads\":{},\"triangle_count\":{},\"issue_time_secs\":{:.6},\"local_time_secs\":{:.6},\"global_time_secs\":{:.6},\"mb_sent\":{:.6},\"mb_per_sec\":{:.6}}}",
+            file,
+            graph.num_nodes(),
+            launch_threads,
+            final_cnt.load(Ordering::SeqCst),
+            issue_time,
+            local_time,
+            global_time,
+            world.MB_sent(),
+            world.MB_sent() / global_time
+        );
     };
 }
