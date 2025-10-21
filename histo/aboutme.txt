@@ -1,0 +1,39 @@
+This is a text file created by Kaylee explaining what the histo benchmark is 
+(potentially to any new interns).
+
+A 'histogram' in the context of this benchmark is a list of counters (as a distributed array), meant to measure 'events',  with one counter per 'bin'. They all run the same core histogram benchmark (many random increment bin X updates across distributed memory), then time it and log metrics. They differ in how the shared counter array is represented, and how updates are delivered (ex: message-by-message or batched).
+
+
+ For each script:
+
+1. histo_safe_am - implements the histogram with atomic, thread-safe updates in shared memory regions using Lamellar's Active Messages, ensuring correctmess at the cost of (some) performance.
+
+2. histo_unsafe_am - the same script as histo_buffered_safe, but uses unsafe memory access for faster updates - risks race conditions and dropped increments.
+
+3. histo_buffered_safe_am - extends histo_safe_am by batching updates into message buffers before sending, reducing message traffic while retaining atomic safety. Takes 3 CL arguments: updates (l_num_updates), representing number of histogram increments per pE, buffer size (buffer_amt), the number of updates batched before sending, and threads, the number of worker threads per PE 
+
+4. histo_buffered_unsafe_am - the same script as histo_buffered_safe_am, but performs unsafe batched writes.
+
+5. histo_darc - reimplements histogram testing through lamellar's DARC abstraction to automatically manage shared atomic vectors across PEs, simplifying memory handling.
+
+6. histo_lamellar_atomicarray - uses Lamellar's AtomicArray type for distributed atomic operations without explicit Active Messages, measuring the native atomic array performance.
+
+7. histo_lamellar_array_comparison - runs the same histogram workload across multiple Lamellar array types (UnsafeArray, LocalLockArray, and AtomicArray) to compare performance and communication overhead between them.
+
+together these form a full spectrum of histogram implementations testing different data-sharing models (memory regions vs. arrays vs. Darcs) and consistency trade-offs (safe vs unsafe, buffered vs unbuffered)
+
+FOR CLARITY PURPOSES:
+'Atomic' - any task that can't be interrupted halfway/needs to happen as one indivisible step. 'Atomic safety' guarantees that data STAYS CONSISTENT event when MANY threads/processors modify it at once.
+
+'PE' - 'processing element' - a single computational entity that performs work. (AKA a CPU core or hardware thread)
+
+'thread safety' - a thread safe update is just one that can be done safely from multiple threads at the same time without corrupting the data. (Updates can be made thread-safe by using atomics)
+
+Unsafe vs. Safe memory access in Rust - when code is marked 'unsafe', we're basically telling Rust that the memory is being used correctly even though the compiler can't check it. Unsafe code can skip synchronization or safety checks (ex: atomics, locks, or bounds checks). There is less overhead when doing this, but it can e dangerous when:
+- 2 threads write to the same spot simultaneously
+- a pointer points to freed or wrong memory
+in HPC unsafe versions are used as speed limits- how fast something could go if you ignore correctness.
+
+'race condition' - happens when the program's result depends on timing (ex: 2 threads 'race' to change a value and whoever wins changes to outcome. When an update is lost because they raced, they get a 'dropped increment').
+
+'message buffer' - PEs talk by sending messages (data packets). A message buffer collects many updats into a single larger message, reducing oberhead. (ex: insead of sending 1 update 1000000 times, send 1000 updates 1000 times. (Fewer messages = less traffic = better performance)

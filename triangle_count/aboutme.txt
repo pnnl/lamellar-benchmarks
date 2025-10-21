@@ -1,0 +1,14 @@
+These are Kaylee's personal notes over the triangle_count script.
+
+Lib.rs
+Defines a small graph 'library' on top of the lamellar runtime that all benchmarks use. AKA graph abstractions, edge & adjacency handling, PE distribution, etc. are handled by this script.
+
+Mapgraph.rs
+Concrete graph backend - distributed hash map.
+
+Triangle_count.rs 
+Builds world, loads graph. The node is split into launch_threads and contiguous chunks, each launched by a LaunchAm (local active message). Benchmarks the cost of running many small AMs.
+
+Triangle_count_buffered.rs
+Just like triangle_count, but with buffering/batching instead of work and uses per-PE counters instead of one global.
+Benchmarks how batching reduces AM launch overhead and how per-PE counters reduce atomic contention.
