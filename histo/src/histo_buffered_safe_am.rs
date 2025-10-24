@@ -1,5 +1,27 @@
+/*
+VARIABLES - 
+
+num_pes -
+
+processes - 
+
+num_threads -
+
+ */
+
+
+
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
+
+/*
+How we added lamellar-version and git-version detecting pipelines:
+1. Used functions from json crate: https://docs.rs/json/latest/json/
+2. For detecting Git commit (of the benchmark), we had to use a build.rs file.
+(we need to do this because otherwise, every environment we use will have to have git installed in it)
+
+ */
 
 use rand::prelude::*;
 use std::time::Instant;
@@ -59,6 +81,7 @@ fn get_lamellar_commit() -> String {
                     let cleaned: String = hash.chars()
                         .filter(|c| c.is_ascii_hexdigit())
                         .collect();
+                    // return version as string
                     if !cleaned.is_empty() { return cleaned; }
                 }
             }
@@ -112,7 +135,7 @@ fn one_level_up() -> PathBuf {
 }
 
 
- 
+/* 
 // Function to append output to target file as JSON
 // takes as input the name of the script as a mutable string and a mutable JsonValue object from the json crate
 fn append_json_line(script_stem: &str, obj: &JsonValue) {
@@ -128,8 +151,21 @@ fn append_json_line(script_stem: &str, obj: &JsonValue) {
         let _ = writeln!(f, "{}", json::stringify(obj.clone()));
     }
  }
+*/
 
-
+fn append_json_line(commit: &str, script_stem: &str, obj: &JsonValue) {
+    let dir = one_level_up();
+    // creating specific file for output directory as a variable that may or may not be used (_)
+    let _ = fs::create_dir_all(&dir);
+    // actually naming the output file
+    let lamellar_benchmark_commit = commit;
+    let path = dir.join(format!("{}_{}.json", script_stem, lamellar_benchmark_commit));
+    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
+        // DON'T WORRY - stringify is from the JSON crate, which converts it into valid JSON syntax- not a string!
+        // EDIT: we need to clone this so that it works for json::stringify and (implements Into<JsonValue>) and &JsonValue doesn't
+        let _ = writeln!(f, "{}", json::stringify(obj.clone()));
+    }
+}
 
 
 // ===== HISTO BEGIN ======
@@ -234,6 +270,9 @@ fn histo(
 //===== HISTO END ======
 
 fn main() {
+
+    // Build commit string:
+    let commit = env!("GIT_COMMIT_HASH");
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -372,7 +411,7 @@ fn main() {
     // append to our JSON file
     if my_pe == 0 {
         println!("{}", json::stringify(out.clone()));
-        append_json_line("histo_buffered_safe_am", &out);
+        append_json_line(commit, "histo_buffered_safe_am", &out);
     }
 
     // use this if you want to track where the benchmark data was stored:
