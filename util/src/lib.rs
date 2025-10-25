@@ -6,6 +6,7 @@ use std::io::Write;
 use std::collections::HashMap;
 use json::JsonValue;
 use std::time::{SystemTime, UNIX_EPOCH};
+use sysinfo;
 
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
@@ -13,6 +14,7 @@ pub struct SystemInformation {
     pub benchark_name: String,
     pub executable: PathBuf,
     pub parameters: Vec<String>,
+    pub run_date: String,
     pub output: Option<HashMap<String, String>>,
     pub build_type: String,
     pub package_info: HashMap<String, String>,
@@ -20,6 +22,7 @@ pub struct SystemInformation {
     pub slurm_params: HashMap<String, String>,
     pub system: HashMap<String, String>,
     pub environment_vars: HashMap<String, String>,
+    
 }
 
 impl SystemInformation  {
@@ -31,12 +34,13 @@ impl SystemInformation  {
             benchark_name: benchark_name,
             executable: executable,
             parameters: env::args().skip(1).collect(),
+            run_date: SystemInformation::get_run_date(),
             output: None,
             build_type: SystemInformation::get_build_type(),
             package_info: SystemInformation::get_package_info(),
             git: SystemInformation::get_git_info(),
             slurm_params: SystemInformation::collect_env_vars("SLURM"),
-            system: SystemInformation::get_package_info(),
+            system: SystemInformation::get_system_info(),
             environment_vars: SystemInformation::collect_env_vars("LAMELLAR"),
         }
     }
@@ -46,6 +50,7 @@ impl SystemInformation  {
             benchark_name: self.benchark_name,
             executable: self.executable,
             parameters: self.parameters,
+            run_date: self.run_date,
             output: Some(output),
             build_type: self.build_type,
             package_info: self.package_info,
@@ -63,6 +68,7 @@ impl SystemInformation  {
             "benchark name" => self.benchark_name.clone(),
             "executable" => self.executable.to_string_lossy().to_string(),
             "parameters" => self.parameters.clone(),
+            "run_date" => self.run_date.clone(),
             "output" => self.output.clone().unwrap_or(HashMap::new()),
             "build type" => self.build_type.clone(),
             "dependencies" => self.package_info.clone(),
@@ -101,17 +107,49 @@ impl SystemInformation  {
             .collect()
     }
 
+    fn get_run_date() -> String {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().to_string()
+    }
+
     /// If in a standard build context, will be the parent dir.  Else unknown...
     fn get_build_type() -> String {
         let exec = executable();
         let alt_name = PathBuf::from("<unknown>");
         let parent = exec.parent().unwrap_or(alt_name.as_path());
         let build_type = parent.file_name().unwrap_or(&OsStr::new("<unknown>")).to_string_lossy().to_string();
-        if build_type in ["debug", "release"] {
+        if ["debug", "release"].contains(&build_type.as_str()) {
             build_type
         } else {
             "<unknown>".to_string()
         }
+    }
+
+    fn get_system_info() -> HashMap<String, String> {
+        let mut system_info = HashMap::new();
+        let sys = sysinfo::System::new_all();
+
+        if let Some(os_name) = sysinfo::System::name() {
+            system_info.insert("os_name".to_string(), os_name);
+        }
+        if let Some(kernel_version) = sysinfo::System::kernel_version() {    
+            system_info.insert("kernel_version".to_string(), kernel_version);
+        }
+        if let Some(os_version) = sysinfo::System::os_version() {
+            system_info.insert("os_version".to_string(), os_version);
+        }
+        if let Some(hostname) = sysinfo::System::host_name() {
+            system_info.insert("hostname".to_string(), hostname);
+        }
+
+        system_info.insert("cpu_cores".to_string(), sys.cpus().len().to_string());
+        let cpu = &sys.cpus()[0];
+        system_info.insert("cpu_frequency_mhz".to_string(), cpu.frequency().to_string());
+        system_info.insert("cpu_vendor_id".to_string(), cpu.vendor_id().to_string());
+        system_info.insert("cpu_brand".to_string(), cpu.brand().to_string());
+        system_info.insert("total_memory_kb".to_string(), sys.total_memory().to_string());
+        system_info.insert("total_swap_kb".to_string(), sys.total_swap().to_string());
+        
+        system_info
     }
 
     /// Look for cargo manifest in the current directory OR in one specified by CARGO_MANIFEST_DIR environment variable.  
