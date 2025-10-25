@@ -100,15 +100,18 @@ impl SystemInformation  {
             .filter(|(key, _)| key.starts_with(prefix))
             .collect()
     }
-    
 
-    /// If in a standard build context, will be the parent dir.  Else unknown
+    /// If in a standard build context, will be the parent dir.  Else unknown...
     fn get_build_type() -> String {
         let exec = executable();
         let alt_name = PathBuf::from("<unknown>");
         let parent = exec.parent().unwrap_or(alt_name.as_path());
         let build_type = parent.file_name().unwrap_or(&OsStr::new("<unknown>")).to_string_lossy().to_string();
-        build_type
+        if build_type in ["debug", "release"] {
+            build_type
+        } else {
+            "<unknown>".to_string()
+        }
     }
 
     /// Look for cargo manifest in the current directory OR in one specified by CARGO_MANIFEST_DIR environment variable.  
