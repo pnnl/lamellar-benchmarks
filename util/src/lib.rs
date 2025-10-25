@@ -7,14 +7,16 @@ use std::collections::HashMap;
 use json::JsonValue;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
 pub struct SystemInformation {
     pub benchark_name: String,
     pub executable: PathBuf,
     pub parameters: Vec<String>,
     pub output: Option<HashMap<String, String>>,
-    pub build_parameters: HashMap<String, String>,
-    pub git: Option<HashMap<String, String>>,
+    pub build_type: String,
+    pub package_info: HashMap<String, String>,
+    pub git: HashMap<String, String>,
     pub slurm_params: HashMap<String, String>,
     pub system: HashMap<String, String>,
     pub environment_vars: HashMap<String, String>,
@@ -24,15 +26,17 @@ impl SystemInformation  {
     pub fn new() -> Self {
         let executable = executable();
         let benchark_name = default_benchmark_name();
+
         Self {
             benchark_name: benchark_name,
             executable: executable,
             parameters: env::args().skip(1).collect(),
             output: None,
-            build_parameters: SystemInformation::get_package_target(),
-            git: Some(SystemInformation::get_git_info()),
+            build_type: SystemInformation::get_build_type(),
+            package_info: SystemInformation::get_package_info(),
+            git: SystemInformation::get_git_info(),
             slurm_params: SystemInformation::collect_env_vars("SLURM"),
-            system: SystemInformation::get_dependencies(),
+            system: SystemInformation::get_package_info(),
             environment_vars: SystemInformation::collect_env_vars("LAMELLAR"),
         }
     }
@@ -43,7 +47,8 @@ impl SystemInformation  {
             executable: self.executable,
             parameters: self.parameters,
             output: Some(output),
-            build_parameters: self.build_parameters,
+            build_type: self.build_type,
+            package_info: self.package_info,
             git: self.git,
             slurm_params: self.slurm_params,
             system: self.system,
@@ -59,9 +64,10 @@ impl SystemInformation  {
             "executable" => self.executable.to_string_lossy().to_string(),
             "parameters" => self.parameters.clone(),
             "output" => self.output.clone().unwrap_or(HashMap::new()),
-            "build parameters" => self.build_parameters.clone(),
-            "git information" => self.git.clone(),
-            "system information" => self.system.clone(),
+            "build type" => self.build_type.clone(),
+            "dependencies" => self.package_info.clone(),
+            "git" => self.git.clone(),
+            "system" => self.system.clone(),
             "environment" => self.environment_vars.clone(),
             "slurm_params" => self.slurm_params.clone(),
         }
@@ -95,6 +101,50 @@ impl SystemInformation  {
             .collect()
     }
     
+
+    /// If in a standard build context, will be the parent dir.  Else unknown
+    fn get_build_type() -> String {
+        let exec = executable();
+        let alt_name = PathBuf::from("<unknown>");
+        let parent = exec.parent().unwrap_or(alt_name.as_path());
+        let build_type = parent.file_name().unwrap_or(&OsStr::new("<unknown>")).to_string_lossy().to_string();
+        build_type
+    }
+
+    /// Look for cargo manifest in the current directory OR in one specified by CARGO_MANIFEST_DIR environment variable.  
+    /// If found, grab depenendencies for packages specified in CHECK_PACKAGES array.
+    fn get_package_info() -> HashMap<String, String> {
+        let mut package_info = HashMap::new();
+
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+        let lock_path = format!("{}/Cargo.lock", manifest_dir);
+
+        if let Ok(contents) = fs::read_to_string(lock_path) {
+            let mut lines = contents.lines();
+            while let Some(line) = lines.next() {
+                if line.trim_start().starts_with("name = ") {
+                    if let Some(name) = line.split('=').nth(1) {
+                        let name = name.trim().trim_matches('"').to_string();
+                        if !CHECK_PACKAGES.contains(&name.as_str()) {
+                            continue;
+                        }
+
+                        if let Some(version_line) = lines.next() {
+                            if version_line.trim_start().starts_with("version = ") {
+                                if let Some(version) = version_line.split('=').nth(1) {
+                                    let version = version.trim().trim_matches('"').to_string();
+                                    package_info.insert(name, version);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        package_info
+    }
+
 
     fn get_git_info() -> HashMap<String, String> {
         let mut git_info = HashMap::new();
@@ -146,42 +196,6 @@ impl SystemInformation  {
         git_info
     }
 
-    fn get_package_target() -> HashMap<String, String> {
-        let mut build_info = HashMap::new();
-        if let Ok(profile) = env::var("PROFILE") {
-            build_info.insert("build_profile".to_string(), profile);
-        }
-        if let Ok(target) = env::var("TARGET") {
-            build_info.insert("build_target".to_string(), target);
-        }
-        build_info
-    }
-
-    fn get_dependencies() -> HashMap<String, String> {
-        let mut dependencies = HashMap::new();
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-        let lock_path = format!("{}/Cargo.lock", manifest_dir);
-
-        if let Ok(contents) = fs::read_to_string(lock_path) {
-            let mut lines = contents.lines();
-            while let Some(line) = lines.next() {
-                if line.trim_start().starts_with("name = ") {
-                    if let Some(name) = line.split('=').nth(1) {
-                        let name = name.trim().trim_matches('"').to_string();
-                        if let Some(version_line) = lines.next() {
-                            if version_line.trim_start().starts_with("version = ") {
-                                if let Some(version) = version_line.split('=').nth(1) {
-                                    let version = version.trim().trim_matches('"').to_string();
-                                    dependencies.insert(name, version);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        dependencies
-    }
 }
 
 /// Get the current executable path
@@ -193,6 +207,7 @@ fn executable() -> PathBuf {
 pub fn default_benchmark_name() -> String {
     executable().file_stem().unwrap_or(&OsStr::new("__unknown__")).to_string_lossy().to_string()
 }
+
 
 /// Generate a default output file name based on the benchmark name and current timestamp
 pub fn default_output_path() -> String {
