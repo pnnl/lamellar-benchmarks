@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use json::JsonValue;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo;
+use chrono;
 
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
@@ -108,7 +109,8 @@ impl SystemInformation  {
     }
 
     fn get_run_date() -> String {
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().to_string()
+        let datetime = chrono::Local::now();
+        datetime.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
     /// If in a standard build context, will be the parent dir.  Else unknown...
