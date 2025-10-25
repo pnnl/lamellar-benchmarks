@@ -136,7 +136,7 @@ impl SystemInformation  {
         if let Some(kernel_version) = sysinfo::System::kernel_version() {    
             system_info.insert("kernel_version".to_string(), kernel_version);
         }
-        if let Some(os_version) = sysinfo::System::os_version() {
+        if let Some(os_version) = sysinfo::System::long_os_version() {
             system_info.insert("os_version".to_string(), os_version);
         }
         if let Some(hostname) = sysinfo::System::host_name() {
@@ -144,12 +144,13 @@ impl SystemInformation  {
         }
 
         system_info.insert("cpu_cores".to_string(), sys.cpus().len().to_string());
+        system_info.insert("physical_cpu_cores".to_string(), sysinfo::System::physical_core_count().unwrap_or(0).to_string());
         let cpu = &sys.cpus()[0];
         system_info.insert("cpu_frequency_mhz".to_string(), cpu.frequency().to_string());
         system_info.insert("cpu_vendor_id".to_string(), cpu.vendor_id().to_string());
         system_info.insert("cpu_brand".to_string(), cpu.brand().to_string());
-        system_info.insert("total_memory_kb".to_string(), sys.total_memory().to_string());
-        system_info.insert("total_swap_kb".to_string(), sys.total_swap().to_string());
+        system_info.insert("ram_bytes".to_string(), sys.total_memory().to_string());
+        system_info.insert("swap_bytes".to_string(), sys.total_swap().to_string());
         
         system_info
     }
