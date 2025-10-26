@@ -11,12 +11,12 @@ use chrono;
 
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
-pub struct SystemInformation {
+pub struct BenchmarkInformation {
     pub benchark_name: String,
     pub executable: PathBuf,
     pub parameters: Vec<String>,
     pub run_date: String,
-    pub output: Option<HashMap<String, String>>,
+    pub output: HashMap<String, String>,
     pub build_type: String,
     pub package_info: HashMap<String, String>,
     pub git: HashMap<String, String>,
@@ -27,7 +27,7 @@ pub struct SystemInformation {
     pub rust_compiler: String,
 }
 
-impl SystemInformation  {
+impl BenchmarkInformation  {
     pub fn new() -> Self {
         let executable = executable();
         let benchark_name = default_benchmark_name();
@@ -36,24 +36,22 @@ impl SystemInformation  {
             benchark_name: benchark_name,
             executable: executable,
             parameters: env::args().skip(1).collect(),
-            run_date: SystemInformation::get_run_date(),
-            output: None,
-            build_type: SystemInformation::get_build_type(),
-            package_info: SystemInformation::get_package_info(),
-            git: SystemInformation::get_git_info(),
-            slurm_params: SystemInformation::collect_env_vars("SLURM"),
-            system: SystemInformation::get_system_info(),
-            environment_vars: SystemInformation::collect_env_vars("LAMELLAR"),
-            rust_edition: SystemInformation::get_rust_edition(),
-            rust_compiler: SystemInformation::get_rust_compiler(),
+            run_date: BenchmarkInformation::get_run_date(),
+            output: HashMap::new(),
+            build_type: BenchmarkInformation::get_build_type(),
+            package_info: BenchmarkInformation::get_package_info(),
+            git: BenchmarkInformation::get_git_info(),
+            slurm_params: BenchmarkInformation::collect_env_vars("SLURM"),
+            system: BenchmarkInformation::get_system_info(),
+            environment_vars: BenchmarkInformation::collect_env_vars("LAMELLAR"),
+            rust_edition: BenchmarkInformation::get_rust_edition(),
+            rust_compiler: BenchmarkInformation::get_rust_compiler(),
         }
     }
 
-    pub fn with_output(self, output: HashMap<String, String>) -> Self {
-        Self {
-            output: Some(output),
-            ..self
-        }
+    /// Add a key/value pair to the output section of the benchmark information.
+    pub fn with_output(&mut self, key: &str, value: String) {
+        self.output.insert(key.to_string(), value);
     }
 
     /// Convert the captured information into a JsonValue object.
@@ -64,7 +62,7 @@ impl SystemInformation  {
             "executable" => self.executable.to_string_lossy().to_string(),
             "parameters" => self.parameters.clone(),
             "run_date" => self.run_date.clone(),
-            "output" => self.output.clone().unwrap_or(HashMap::new()),
+            "output" => self.output.clone(),
             "build type" => self.build_type.clone(),
             "dependencies" => self.package_info.clone(),
             "git" => self.git.clone(),
@@ -322,9 +320,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_output_updates() {
+        let mut benchmark_info = BenchmarkInformation::new();
+        assert_eq!(benchmark_info.output.len(), 0);
+
+        benchmark_info.with_output("test_key", "test_value".into());
+        assert_eq!(benchmark_info.output.len(), 1);
+        assert_eq!(benchmark_info.output["test_key"], "test_value");
+    }
+
+    #[test]
     fn test_executable() {
         let exe_path = executable().to_string_lossy().to_string();
-        assert!(exe_path.contains("util"));
+        assert!(exe_path.contains("benchmark_record"));
         println!("Executable: {exe_path}");
     }
 
@@ -340,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_git_info() {
-        let git_info = SystemInformation::get_git_info();
+        let git_info = BenchmarkInformation::get_git_info();
         
         println!("Git info: {:?}", git_info);
         
@@ -378,7 +386,7 @@ mod tests {
     }
 
     fn test_empty_env() {
-        let env_info = SystemInformation::new();
+        let env_info = BenchmarkInformation::new();
 
         println!("Empty environment JSON:");
         env_info.display(Some(2));
@@ -399,7 +407,7 @@ mod tests {
             env::set_var("LAMELLAR_B", "B");
         }
 
-        let env_info = SystemInformation::new();
+        let env_info = BenchmarkInformation::new();
 
         assert_eq!(3, env_info.slurm_params.len());
         assert_eq!(2, env_info.environment_vars.len());
