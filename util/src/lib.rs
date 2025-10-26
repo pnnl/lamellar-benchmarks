@@ -23,7 +23,8 @@ pub struct SystemInformation {
     pub slurm_params: HashMap<String, String>,
     pub system: HashMap<String, String>,
     pub environment_vars: HashMap<String, String>,
-    
+    pub rust_edition: String,
+    pub rust_compiler: String,
 }
 
 impl SystemInformation  {
@@ -43,22 +44,15 @@ impl SystemInformation  {
             slurm_params: SystemInformation::collect_env_vars("SLURM"),
             system: SystemInformation::get_system_info(),
             environment_vars: SystemInformation::collect_env_vars("LAMELLAR"),
+            rust_edition: SystemInformation::get_rust_edition(),
+            rust_compiler: SystemInformation::get_rust_compiler(),
         }
     }
 
     pub fn with_output(self, output: HashMap<String, String>) -> Self {
         Self {
-            benchark_name: self.benchark_name,
-            executable: self.executable,
-            parameters: self.parameters,
-            run_date: self.run_date,
             output: Some(output),
-            build_type: self.build_type,
-            package_info: self.package_info,
-            git: self.git,
-            slurm_params: self.slurm_params,
-            system: self.system,
-            environment_vars: self.environment_vars,
+            ..self
         }
     }
 
@@ -77,6 +71,8 @@ impl SystemInformation  {
             "system" => self.system.clone(),
             "environment" => self.environment_vars.clone(),
             "slurm_params" => self.slurm_params.clone(),
+            "rust_edition" => self.rust_edition.clone(),
+            "rust_compiler" => self.rust_compiler.clone(),
         }
     }
 
@@ -126,6 +122,7 @@ impl SystemInformation  {
         }
     }
 
+    /// Gathers selected system information using the sysinfo crate.
     fn get_system_info() -> HashMap<String, String> {
         let mut system_info = HashMap::new();
         let sys = sysinfo::System::new_all();
@@ -155,6 +152,46 @@ impl SystemInformation  {
         system_info
     }
 
+
+    /// Attempts to read the rust edition from Cargo.toml in the current directory or CARGO_MANIFEST_DIR
+    fn get_rust_edition() -> String {
+        // Attempt to read Cargo.toml in the current directory or CARGO_MANIFEST_DIR
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+        let cargo_toml_path = format!("{}/Cargo.toml", manifest_dir);
+
+        if let Ok(contents) = fs::read_to_string(cargo_toml_path) {
+            for line in contents.lines() {
+                if line.trim_start().starts_with("edition = ") {
+                    if let Some(edition) = line.split('=').nth(1) {
+                        return edition.trim().trim_matches('"').to_string();
+                    }
+                }
+            }
+        }
+
+        "<unknown>".to_string()
+    }
+
+    /// Inspects the 'strings' portion of the binary to find the rustc version used to compile it.
+    fn get_rust_compiler() -> String {
+        let executable = executable();
+
+        if let Ok(output) = std::process::Command::new("strings")
+            .args(&["-a", executable.to_str().unwrap_or("")])
+            .output()
+        {
+            if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            for line in output_str.lines() {
+                if line.starts_with("rustc version") {
+                return line.to_string();
+                }
+            }
+            }
+        }
+        "<unknown>".to_string()
+    }
+
     /// Look for cargo manifest in the current directory OR in one specified by CARGO_MANIFEST_DIR environment variable.  
     /// If found, grab depenendencies for packages specified in CHECK_PACKAGES array.
     fn get_package_info() -> HashMap<String, String> {
@@ -173,14 +210,33 @@ impl SystemInformation  {
                             continue;
                         }
 
+                        let mut version = String::new();
+                        let mut source = String::new();
+
+                        // Look ahead for version line
                         if let Some(version_line) = lines.next() {
                             if version_line.trim_start().starts_with("version = ") {
-                                if let Some(version) = version_line.split('=').nth(1) {
-                                    let version = version.trim().trim_matches('"').to_string();
-                                    package_info.insert(name, version);
+                                if let Some(v) = version_line.split('=').nth(1) {
+                                    version = v.trim().trim_matches('"').to_string();
                                 }
                             }
                         }
+
+                        // Look ahead for source line
+                        if let Some(source_line) = lines.next() {
+                            if source_line.trim_start().starts_with("source = ") {
+                                if let Some(s) = source_line.split('=').nth(1) {
+                                    source = s.trim().trim_matches('"').to_string();
+                                }
+                            }
+                        }
+
+                        // Store as "version/source" format
+                        if !version.is_empty() || !source.is_empty() {
+                            let combined = format!("{}/{}", version, source);
+                            package_info.insert(name, combined);
+                        }
+
                     }
                 }
             }
