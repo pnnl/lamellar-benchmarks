@@ -28,12 +28,10 @@ pub struct BenchmarkInformation {
 }
 
 impl BenchmarkInformation  {
-    pub fn new() -> Self {
+    pub fn with_name(benchark_name: &str) -> Self {
         let executable = executable();
-        let benchark_name = default_benchmark_name();
-
         Self {
-            benchark_name: benchark_name,
+            benchark_name: benchark_name.to_string(),
             executable: executable,
             parameters: env::args().skip(1).collect(),
             run_date: BenchmarkInformation::get_run_date(),
@@ -47,6 +45,11 @@ impl BenchmarkInformation  {
             rust_edition: BenchmarkInformation::get_rust_edition(),
             rust_compiler: BenchmarkInformation::get_rust_compiler(),
         }
+    }
+
+    pub fn new() -> Self {
+        let benchmark_name = default_benchmark_name();
+        Self::with_name(&benchmark_name)
     }
 
     /// Add a key/value pair to the output section of the benchmark information.
@@ -306,13 +309,12 @@ pub fn default_benchmark_name() -> String {
     executable().file_stem().unwrap_or(&OsStr::new("__unknown__")).to_string_lossy().to_string()
 }
 
-
 /// Generate a default output file name based on the benchmark name and current timestamp
-pub fn default_output_path() -> String {
+pub fn default_output_path() -> PathBuf {
     let stem  = default_benchmark_name();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-    format!("{stem}-{timestamp}.json")
+    PathBuf::from(format!("{stem}-{timestamp}.json"))
 }
 
 #[cfg(test)]
@@ -330,6 +332,13 @@ mod tests {
     }
 
     #[test]
+    fn test_named() {
+        let benchmark_info = BenchmarkInformation::with_name("MyBenchmark");
+        assert_eq!(benchmark_info.benchark_name, "MyBenchmark");
+    }
+
+
+    #[test]
     fn test_executable() {
         let exe_path = executable().to_string_lossy().to_string();
         assert!(exe_path.contains("benchmark_record"));
@@ -339,10 +348,11 @@ mod tests {
     #[test]
     fn test_default_output_path() {
         let output_path = default_output_path();
-        println!("Default output file name: {output_path}");
+        let output_path_str = output_path.to_string_lossy().to_string();
+        println!("Default output file name: {output_path_str}");
 
-        assert!(output_path.ends_with(".json"));
-        assert!(output_path.contains(default_benchmark_name().as_str()));
+        assert!(output_path_str.ends_with(".json"));
+        assert!(output_path_str.contains(default_benchmark_name().as_str()));
     }
 
 
