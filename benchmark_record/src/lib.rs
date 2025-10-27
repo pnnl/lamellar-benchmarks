@@ -28,6 +28,14 @@ pub struct BenchmarkInformation {
 }
 
 impl BenchmarkInformation  {
+    /// Create a new BenchmarkInformation instance with default benchmark name.
+    /// This is the suggested way to construct a benchmark information record.
+    pub fn new() -> Self {
+        let benchmark_name = default_benchmark_name();
+        Self::with_name(&benchmark_name)
+    }
+
+    /// Create a new BenchmarkInformation instance with the given benchmark name
     pub fn with_name(benchark_name: &str) -> Self {
         let executable = executable();
         Self {
@@ -47,10 +55,6 @@ impl BenchmarkInformation  {
         }
     }
 
-    pub fn new() -> Self {
-        let benchmark_name = default_benchmark_name();
-        Self::with_name(&benchmark_name)
-    }
 
     /// Add a key/value pair to the output section of the benchmark information.
     pub fn with_output(&mut self, key: &str, value: String) {
