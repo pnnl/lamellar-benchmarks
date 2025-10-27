@@ -168,7 +168,7 @@ fn main() {
         buffer_amt,
     );
 
-    result_record.with_output("issue_time_secs", now.elapsed().as_secs_f64().to_string());
+    result_record.with_output("issue_time (secs)", now.elapsed().as_secs_f64().to_string());
 
     world.block_on(async move {
         for task in launch_tasks {
@@ -176,21 +176,21 @@ fn main() {
         }
     });
     
-    result_record.with_output("launch_task_time_secs", now.elapsed().as_secs_f64().to_string());
+    result_record.with_output("launch_task_time (secs)", now.elapsed().as_secs_f64().to_string());
     if my_pe == 0 {
         println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
     }
 
     world.wait_all();
-    result_record.with_output("local_run_time_secs", now.elapsed().as_secs_f64().to_string());
+    result_record.with_output("local_run_time (secs)", now.elapsed().as_secs_f64().to_string());
     result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / now.elapsed().as_secs_f64()).to_string());
 
     world.barrier();
     let global_time = now.elapsed().as_secs_f64();
     result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
-    result_record.with_output("secs", global_time.to_string());
+    result_record.with_output("global_execution_time (secs)", global_time.to_string());
     result_record.with_output("gb_per_s_injection_rate", ((8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time).to_string());
-    result_record.with_output("global_time_secs", global_time.to_string());
+    result_record.with_output("global_time (secs)", global_time.to_string());
     result_record.with_output("MB_sent", world.MB_sent().to_string());
     result_record.with_output("MB_per_s", (world.MB_sent() / global_time).to_string());
     result_record.with_output("global_mups", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());

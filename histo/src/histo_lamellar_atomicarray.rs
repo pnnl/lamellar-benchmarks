@@ -71,14 +71,14 @@ fn main() {
     counts.wait_all();
     let local_run = now.elapsed();
     
-    result_record.with_output("local_run_time_secs", local_run.as_secs_f64().to_string());
+    result_record.with_output("local_run_time (secs)", local_run.as_secs_f64().to_string());
     result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / local_run.as_secs_f64()).to_string());
 
     counts.barrier();
     let global_time = now.elapsed().as_secs_f64();
     
     let mb_sent = world.MB_sent();
-    result_record.with_output("global_time (secs)", global_time.to_string());
+    result_record.with_output("global_run_time (secs)", global_time.to_string());
     result_record.with_output("MB_sent", mb_sent.to_string());
     result_record.with_output("MB_per_sec", (mb_sent / global_time).to_string());
     result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());

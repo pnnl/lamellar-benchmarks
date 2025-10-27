@@ -139,7 +139,7 @@ fn main() {
 
     let mb_sent = world.MB_sent();
     result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
-    result_record.with_output("global_time_secs", global_time.to_string());
+    result_record.with_output("global_run_time (secs)", global_time.to_string());
     result_record.with_output("MB_sent", mb_sent.to_string());
     result_record.with_output("MB_per_sec", (mb_sent / global_time).to_string());
     result_record.with_output("global_mups_line", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());

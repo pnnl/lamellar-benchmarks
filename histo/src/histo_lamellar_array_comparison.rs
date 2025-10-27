@@ -129,9 +129,9 @@ fn main() {
     result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
     result_record.with_output("updates_per_pe", l_num_updates.to_string());
     result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
-    result_record.with_output("local_run_time_secs", res_unsafe.local_run_time_secs.to_string());
+    result_record.with_output("local_run_time (secs)", res_unsafe.local_run_time_secs.to_string());
     result_record.with_output("local_mups", res_unsafe.mups.to_string());
-    result_record.with_output("global_time_secs", res_unsafe.global_time_secs.to_string());
+    result_record.with_output("global_run_time (secs)", res_unsafe.global_time_secs.to_string());
     result_record.with_output("MB_sent", res_unsafe.mb_sent.to_string());
     result_record.with_output("MB_per_sec", (res_unsafe.mb_sent / res_unsafe.global_time_secs).to_string());
     result_record.with_output("array_type", "unsafe".into());
@@ -158,9 +158,9 @@ fn main() {
     );
 
     result_record.with_output("run_mode", "local_lock".into());
-    result_record.with_output("local_run_time_secs", res_local_lock.local_run_time_secs.to_string());
+    result_record.with_output("local_run_time (secs)", res_local_lock.local_run_time_secs.to_string());
     result_record.with_output("local_mups", res_local_lock.mups.to_string());
-    result_record.with_output("global_time_secs", res_local_lock.global_time_secs.to_string());
+    result_record.with_output("global_run_time (secs)", res_local_lock.global_time_secs.to_string());
     result_record.with_output("MB_sent", res_local_lock.mb_sent.to_string());
     result_record.with_output("MB_per_sec", (res_local_lock.mb_sent / res_local_lock.global_time_secs).to_string());
     result_record.with_output("array_type", "local_lock".into());
@@ -187,9 +187,9 @@ fn main() {
     );
     
     result_record.with_output("run_mode", "atomic".into());
-    result_record.with_output("local_run_time_secs", res_atomic.local_run_time_secs.to_string());
+    result_record.with_output("local_run_time (secs)", res_atomic.local_run_time_secs.to_string());
     result_record.with_output("local_mups", res_atomic.mups.to_string());
-    result_record.with_output("global_time_secs", res_atomic.global_time_secs.to_string());
+    result_record.with_output("global_run_time (secs)", res_atomic.global_time_secs.to_string());
     result_record.with_output("MB_sent", res_atomic.mb_sent.to_string());
     result_record.with_output("MB_per_sec", (res_atomic.mb_sent / res_atomic.global_time_secs).to_string());
     result_record.with_output("array_type", "atomic".into());

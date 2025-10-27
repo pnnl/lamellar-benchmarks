@@ -137,7 +137,7 @@ fn main() {
     let mb_sent = world.MB_sent();
     let mb_per_sec = mb_sent / global_time;
 
-    result_record.with_output("global_time", global_time.to_string());
+    result_record.with_output("global_execution_time (secs)", global_time.to_string());
     result_record.with_output("MUPS", global_mups.to_string());
     result_record.with_output("MB_sent", mb_sent.to_string());
     result_record.with_output("MB_per_sec", mb_per_sec.to_string());
