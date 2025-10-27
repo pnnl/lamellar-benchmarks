@@ -139,11 +139,9 @@ fn main() {
             Err(_) => 1,
         });
 
-    if my_pe == 0 {
-        result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
-        result_record.with_output("updates_per_pe", l_num_updates.to_string());
-        result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
-    }
+    result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    result_record.with_output("updates_per_pe", l_num_updates.to_string());
+    result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
@@ -170,9 +168,7 @@ fn main() {
         buffer_amt,
     );
 
-    if my_pe == 0 {
-        result_record.with_output("issue_time_secs", now.elapsed().as_secs_f64().to_string());
-    }
+    result_record.with_output("issue_time_secs", now.elapsed().as_secs_f64().to_string());
 
     world.block_on(async move {
         for task in launch_tasks {
@@ -180,28 +176,24 @@ fn main() {
         }
     });
     
+    result_record.with_output("launch_task_time_secs", now.elapsed().as_secs_f64().to_string());
     if my_pe == 0 {
         println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
-        result_record.with_output("launch_task_time_secs", now.elapsed().as_secs_f64().to_string());
     }
 
     world.wait_all();
-    if my_pe == 0 {
-        result_record.with_output("local_run_time_secs", now.elapsed().as_secs_f64().to_string());
-        result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / now.elapsed().as_secs_f64()).to_string());
-    }
+    result_record.with_output("local_run_time_secs", now.elapsed().as_secs_f64().to_string());
+    result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / now.elapsed().as_secs_f64()).to_string());
+
     world.barrier();
     let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
-        result_record.with_output("secs", global_time.to_string());
-        result_record.with_output("gb_per_s_injection_rate", ((8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time).to_string());
-        result_record.with_output("global_time_secs", global_time.to_string());
-        result_record.with_output("MB_sent", world.MB_sent().to_string());
-        result_record.with_output("MB_per_s", (world.MB_sent() / global_time).to_string());
-        result_record.with_output("global_mups", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
-    }
-
+    result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
+    result_record.with_output("secs", global_time.to_string());
+    result_record.with_output("gb_per_s_injection_rate", ((8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time).to_string());
+    result_record.with_output("global_time_secs", global_time.to_string());
+    result_record.with_output("MB_sent", world.MB_sent().to_string());
+    result_record.with_output("MB_per_s", (world.MB_sent() / global_time).to_string());
+    result_record.with_output("global_mups", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
     result_record.with_output("pe_sum", (unsafe { counts.as_slice().unwrap().iter().sum::<usize>() } as u64).to_string());
 
     

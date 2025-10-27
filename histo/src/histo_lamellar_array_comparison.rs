@@ -4,73 +4,9 @@ use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-
-// ===== IMPORTS FOR JSON OUTPUT =====
-use json::{object, JsonValue};
-use std::fs::{self, OpenOptions}; //Only import what we need - conserving memory is critical
-use std::io::Write as IoWrite;
-use std::path::PathBuf;
-use std::env;
+use benchmark_record;
 
 const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
-
-// ===== HELPER FUNCTIONS - OUTPUT TO JSON =====
-// Function to auto-detect version of Lamellar in Cargo.toml histo project and place the outputted JSON in that directory (call in append_json_line)
-// returns it as a string
-fn lamellar_version() -> Option<String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let lock_path = format!("{}/Cargo.lock", manifest_dir);
-
-    if let Ok(contents) = fs::read_to_string(lock_path) {
-        for line in contents.lines() {
-            if line.trim_start().starts_with("name = \"lamellar\"") {
-                // next line will have version
-                if let Some(version_line) = contents.lines().skip_while(|l| !l.contains("name = \"lamellar\"")).nth(1) {
-                    if let Some(version) = version_line.split('=').nth(1) {
-                        return Some(version.trim().trim_matches('"').to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-// Create directory we are putting the JSON output in
-// No input
-// function that returns a PathBuf, a flexible object in Rust specifically made to store file paths, containing the outputs directory
-fn one_level_up() -> PathBuf {
-    let exe_dir = env::current_exe()
-        // return option
-        .ok()
-        // if option returned (we have path), 
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    // define base as one directory behind the executable, then add the "outputs" folder
-    // .parent() is the function which actually goes one directory behind
-    let base = exe_dir.parent().unwrap_or(&exe_dir).to_path_buf();
-    if let Some(ver) = lamellar_version() {
-        base.join(format!("Outputs/{}", ver))
-    } else {
-        base.join("Outputs")
-    }
-}
-
-// Function to append output to target file as JSON
-// takes as input the name of the script as a mutable string and a mutable JsonValue object from the json crate
-fn append_json_line(script_stem: &str, obj: &JsonValue) {
-    let dir = one_level_up();
-    // creating specific file for output directory as a variable that may or may not be used (_)
-    let _ = fs::create_dir_all(&dir);
-    // actually naming the output file
-    let path = dir.join(format!("{script_stem}.json"));
-    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
-        // DON'T WORRY - stringify is from the JSON crate, which converts it into valid JSON syntax- not a string!
-        // EDIT: we need to clone this so that it works for json::stringify and (implements Into<JsonValue>) and &JsonValue doesn't
-        let _ = writeln!(f, "{}", json::stringify(obj.clone()));
-    }
- }
-
 
 // Small struct to return the metrics from histo()
 struct HistoResult {
@@ -146,14 +82,6 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1000);
 
-    // Accumulator object for JSON
-    // our bucket we keep the json in
-    let mut out = object! {
-        "binary": "histo_lamellar_array_comparison",
-        "my_pe": my_pe,
-        "num_pes": num_pes
-    };
-
     let counts = UnsafeArray::<usize>::new(
         world.team(),
         global_count,
@@ -164,7 +92,7 @@ fn main() {
         l_num_updates * num_pes,
         lamellar::array::Distribution::Block,
     );
-
+    let results_file = &benchmark_record::default_output_path();
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
     let counts = counts.block();
 
@@ -180,14 +108,11 @@ fn main() {
         }
     }
     world.block_on(counts_init);
-    //counts.wait_all(); equivalent in this case to the above statement
 
     let rand_index = rand_index.into_read_only().block();
     world.barrier();
 
-    if my_pe == 0 {
-        // println!("unsafe histo");
-    }
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
     let res_unsafe = histo(
         "unsafe",
         counts.clone().into(),
@@ -199,26 +124,27 @@ fn main() {
         1,
         0.0,
     );
-    // all of our json stored as out objects
+
+    result_record.with_output("run_mode", "unsafe".into());
+    result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    result_record.with_output("updates_per_pe", l_num_updates.to_string());
+    result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
+    result_record.with_output("local_run_time_secs", res_unsafe.local_run_time_secs.to_string());
+    result_record.with_output("local_mups", res_unsafe.mups.to_string());
+    result_record.with_output("global_time_secs", res_unsafe.global_time_secs.to_string());
+    result_record.with_output("MB_sent", res_unsafe.mb_sent.to_string());
+    result_record.with_output("MB_per_sec", (res_unsafe.mb_sent / res_unsafe.global_time_secs).to_string());
+    result_record.with_output("array_type", "unsafe".into());
     if my_pe == 0 {
-        out["run_mode"] = "unsafe".into();
-        out["updates_total"] = (l_num_updates * num_pes).into();
-        out["updates_per_pe"] = l_num_updates.into();
-        out["table_size_per_pe"] = COUNTS_LOCAL_LEN.into();
-        out["local_run_time_secs"] = res_unsafe.local_run_time_secs.into();
-        out["local_mups"] = res_unsafe.mups.into();
-        out["global_time_secs"] = res_unsafe.global_time_secs.into();
-        out["MB_sent"] = res_unsafe.mb_sent.into();
-        out["MB_per_sec"] = (res_unsafe.mb_sent / res_unsafe.global_time_secs).into();
-        out["array_type"] = "unsafe".into();
+        result_record.write(results_file);
+        println!("Finished 'unsafe' run mode");
     }
+
     world.block_on(unsafe { counts.dist_iter_mut().for_each(|x| *x = 0) });
     counts.barrier();
 
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
     let counts = counts.into_local_lock().block();
-    if my_pe == 0 {
-        //println!("local lock atomic histo");
-    }
     let res_local_lock = histo(
         "local_lock",
         counts.clone().into(),
@@ -230,23 +156,24 @@ fn main() {
         1,
         res_unsafe.mb_sent,
     );
-    // local lock object
+
+    result_record.with_output("run_mode", "local_lock".into());
+    result_record.with_output("local_run_time_secs", res_local_lock.local_run_time_secs.to_string());
+    result_record.with_output("local_mups", res_local_lock.mups.to_string());
+    result_record.with_output("global_time_secs", res_local_lock.global_time_secs.to_string());
+    result_record.with_output("MB_sent", res_local_lock.mb_sent.to_string());
+    result_record.with_output("MB_per_sec", (res_local_lock.mb_sent / res_local_lock.global_time_secs).to_string());
+    result_record.with_output("array_type", "local_lock".into());
+
     if my_pe == 0 {
-        out["run_mode"] = "local_lock".into();
-        out["local_run_time_secs"] = res_local_lock.local_run_time_secs.into();
-        out["local_mups"] = res_local_lock.mups.into();
-        out["global_time_secs"] = res_local_lock.global_time_secs.into();
-        out["MB_sent"] = res_local_lock.mb_sent.into();
-        out["MB_per_sec"] = (res_local_lock.mb_sent / res_local_lock.global_time_secs).into();
-        out["array_type"] = "local_lock".into();
+        result_record.write(results_file);
+        println!("Finished 'local_lock' run mode");
     }
     world.block_on(counts.dist_iter_mut().for_each(|x| *x = 0));
     counts.barrier();
 
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
     let counts = counts.into_atomic().block();
-    if my_pe == 0 {
-        // println!("atomic histo");
-    }
     let res_atomic = histo(
         "atomic",
         counts.clone().into(),
@@ -258,19 +185,18 @@ fn main() {
         1,
         res_local_lock.mb_sent,
     );
-    if my_pe == 0 {
-        out["run_mode"] = "atomic".into();
-        out["local_run_time_secs"] = res_atomic.local_run_time_secs.into();
-        out["local_mups"] = res_atomic.mups.into();
-        out["global_time_secs"] = res_atomic.global_time_secs.into();
-        out["MB_sent"] = res_atomic.mb_sent.into();
-        out["MB_per_sec"] = (res_atomic.mb_sent / res_atomic.global_time_secs).into();
-        out["array_type"] = "atomic".into();
-    }
+    
+    result_record.with_output("run_mode", "atomic".into());
+    result_record.with_output("local_run_time_secs", res_atomic.local_run_time_secs.to_string());
+    result_record.with_output("local_mups", res_atomic.mups.to_string());
+    result_record.with_output("global_time_secs", res_atomic.global_time_secs.to_string());
+    result_record.with_output("MB_sent", res_atomic.mb_sent.to_string());
+    result_record.with_output("MB_per_sec", (res_atomic.mb_sent / res_atomic.global_time_secs).to_string());
+    result_record.with_output("array_type", "atomic".into());
 
-    // Print and append JSON output (match behavior of other histo binaries)
+
     if my_pe == 0 {
-        println!("{}", json::stringify(out.clone()));
-        append_json_line("histo_lamellar_array_comparison", &out);
+        result_record.write(results_file);
+        println!("Finished 'atomic' run mode");
     }
 }
