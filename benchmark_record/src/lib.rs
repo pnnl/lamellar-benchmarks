@@ -5,7 +5,6 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::collections::HashMap;
 use json::JsonValue;
-use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo;
 use chrono;
 
@@ -316,9 +315,7 @@ pub fn default_benchmark_name() -> String {
 /// Generate a default output file name based on the benchmark name and current timestamp
 pub fn default_output_path() -> PathBuf {
     let stem  = default_benchmark_name();
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-
-    PathBuf::from(format!("{stem}-{timestamp}.json"))
+    PathBuf::from(format!("{stem}_result.json"))
 }
 
 #[cfg(test)]
