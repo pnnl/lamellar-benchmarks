@@ -1,0 +1,474 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   2.110155833s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_safe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_buffered_safe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_buffered_safe_am.rs", Edition2021) }
+   2.110178458s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_safe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-9e2526577947e568/bin-histo_buffered_safe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.128200500s  INFO prepare_target{force=false package_id=lamellar v0.7.1 target="lamellar"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar v0.7.1/Check { test: false }/TargetInner { doctest: false, ..: lib_target("lamellar", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lamellar-0.7.1/src/lib.rs", Edition2021) }
+   2.128217708s  INFO prepare_target{force=false package_id=lamellar v0.7.1 target="lamellar"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/lamellar-9b9d8bae31a44465/lib-lamellar`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   2.220718458s  INFO prepare_target{force=false package_id=lamellar v0.7.1 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar v0.7.1/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lamellar-0.7.1/build.rs", Edition2021) }
+   2.220730000s  INFO prepare_target{force=false package_id=lamellar v0.7.1 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/lamellar-2c993fb29592fa5f/run-build-script-build-script-build`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::custom_build::build_work
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   2.223577708s  INFO prepare_target{force=false package_id=rofisys v0.4.0 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for rofisys v0.4.0/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rofisys-0.4.0/build.rs", Edition2021) }
+   2.223585791s  INFO prepare_target{force=false package_id=rofisys v0.4.0 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/rofisys-a2ac885341bb7386/run-build-script-build-script-build`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::custom_build::build_work
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   2.378624750s  INFO prepare_target{force=false package_id=rofisys v0.4.0 target="rofisys"}: cargo::core::compiler::fingerprint: fingerprint error for rofisys v0.4.0/Check { test: false }/TargetInner { ..: lib_target("rofisys", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rofisys-0.4.0/src/lib.rs", Edition2021) }
+   2.378646791s  INFO prepare_target{force=false package_id=rofisys v0.4.0 target="rofisys"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/rofisys-7dc04d22c922f126/lib-rofisys`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   9: cargo::ops::cargo_compile::compile_ws
+  10: cargo::ops::cargo_compile::compile_with_exec
+  11: cargo::ops::cargo_compile::compile
+  12: cargo::commands::check::exec
+  13: <cargo::cli::Exec>::exec
+  14: cargo::main
+  15: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  16: std::rt::lang_start::<()>::{closure#0}
+  17: std::rt::lang_start_internal
+  18: _main
+   2.475648833s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_safe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_buffered_safe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_buffered_safe_am.rs", Edition2021) }
+   2.475664708s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_safe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-3cd07867dff79cfb/test-bin-histo_buffered_safe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.476452333s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_unsafe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_buffered_unsafe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_buffered_unsafe_am.rs", Edition2021) }
+   2.476461291s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_unsafe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-486c2ff0e2f02ea9/bin-histo_buffered_unsafe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.477078625s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_unsafe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_buffered_unsafe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_buffered_unsafe_am.rs", Edition2021) }
+   2.477085333s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_buffered_unsafe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-bdf738859be6fce0/test-bin-histo_buffered_unsafe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.477633666s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_darc"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_darc", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_darc.rs", Edition2021) }
+   2.477639583s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_darc"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-2bbeeeb6c7a8ddf1/bin-histo_darc`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.478189458s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_darc"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_darc", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_darc.rs", Edition2021) }
+   2.478194125s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_darc"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-97e0a9679a2645d7/test-bin-histo_darc`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.478752041s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_array_comparison"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_lamellar_array_comparison", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_lamellar_array_comparison.rs", Edition2021) }
+   2.478757791s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_array_comparison"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-32f05b6c768aa32e/bin-histo_lamellar_array_comparison`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.479341833s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_array_comparison"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_lamellar_array_comparison", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_lamellar_array_comparison.rs", Edition2021) }
+   2.479348000s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_array_comparison"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-a3c3c962e1265c87/test-bin-histo_lamellar_array_comparison`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.480074625s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_atomicarray"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_lamellar_atomicarray", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_lamellar_atomicarray.rs", Edition2021) }
+   2.480088500s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_atomicarray"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-3e8b52205a63b117/bin-histo_lamellar_atomicarray`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.480750625s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_atomicarray"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_lamellar_atomicarray", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_lamellar_atomicarray.rs", Edition2021) }
+   2.480758500s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_lamellar_atomicarray"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-7b044074c38b9691/test-bin-histo_lamellar_atomicarray`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.481326041s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_safe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_safe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_safe_am.rs", Edition2021) }
+   2.481332375s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_safe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-88173142012b5cf8/bin-histo_safe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.481874083s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_safe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_safe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_safe_am.rs", Edition2021) }
+   2.481880250s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_safe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-a72f8c3aee2cdd76/test-bin-histo_safe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.482659875s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_unsafe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: false }/TargetInner { name: "histo_unsafe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_unsafe_am.rs", Edition2021) }
+   2.482667416s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_unsafe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-1fe03324929ac09b/bin-histo_unsafe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.483252291s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_unsafe_am"}: cargo::core::compiler::fingerprint: fingerprint error for histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo)/Check { test: true }/TargetInner { name: "histo_unsafe_am", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/src/histo_unsafe_am.rs", Edition2021) }
+   2.483259333s  INFO prepare_target{force=false package_id=histo v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo) target="histo_unsafe_am"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/.fingerprint/histo-882da2f23c409de6/test-bin-histo_unsafe_am`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   Compiling rofisys v0.4.0
+error: failed to run custom build command for `rofisys v0.4.0`
+note: To improve backtraces for build dependencies, set the CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=true environment variable to enable debug information generation.
+
+Caused by:
+  process didn't exit successfully: `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/build/rofisys-160fa4c802f228ad/build-script-build` (exit status: 101)
+  --- stdout
+  running: cd "/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/histo/target/debug/build/rofisys-a2ac885341bb7386/out/ofi_src" && "sh" "-c" "exec \"$0\" \"$@\"" "autoreconf" "-ivf"
+
+  --- stderr
+  autoreconf: line 0: exec: autoreconf: not found
+
+  thread 'main' panicked at /Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/autotools-0.2.7/src/lib.rs:790:5:
+
+  command did not execute successfully, got: exit status: 127
+
+  build script failed, must exit now
+  stack backtrace:
+     0: __rustc::rust_begin_unwind
+               at /rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/panicking.rs:697:5
+     1: core::panicking::panic_fmt
+               at /rustc/1159e78c4747b02ef996e55082b704c09b970588/library/core/src/panicking.rs:75:14
+     2: autotools::fail
+     3: autotools::Config::build
+     4: build_script_build::build_bindings
+     5: build_script_build::main
+     6: core::ops::function::FnOnce::call_once
+  note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.

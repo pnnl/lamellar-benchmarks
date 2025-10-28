@@ -5,14 +5,6 @@ use std::time::Instant;
 use std::path::PathBuf;
 
 
-/* edits:
-- removed json crate (use BenchmarkInformation crate only
-- import BenchmarkInformation 
-- add result_record into main 
-- removed original json file-writing logic */
-
-
-// ===== IMPORTS FOR BENCHMARK RECORDING =====
 use benchmark_record::BenchmarkInformation;
 
 const COUNTS_LOCAL_LEN: usize = 1_000_000;
@@ -35,8 +27,8 @@ fn main() {
         .unwrap_or(1000);
 
     // === Initialize Benchmark Record ===
-    let mut bench = BenchmarkInformation::with_name("index_gather_atomic_array");
-    bench.parameters = args.clone();
+    let mut bench = BenchmarkInformation::new();
+    bench.parameters = args.clone(); // no need to keep track of this here - use the object we already have to avoid cloning
     bench.output.insert(
         "updates_total".to_string(),
         (l_num_updates * num_pes).to_string(),
@@ -104,7 +96,8 @@ fn main() {
     );
     bench.output.insert(
         "gb_s_injection_rate".to_string(),
-        format!("{:.3}", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / duration),
+        format!("{:.3}", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / duration), // just take the value and do it as a .tostring
+// no need to format this 
     );
 
     // === Output and Save ===
@@ -125,6 +118,7 @@ fn main() {
 
     if my_pe == 0 {
         println!("Global time: {:.3}s, MUPS: {:.3}", duration, global_mups);
+        //result_record.write(&benchmark_record::default_output_path()); 
         bench.write(&out_path);
     }
 }

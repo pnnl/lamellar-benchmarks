@@ -7,11 +7,27 @@
   ],
   "benchmark_dir": ".",
   "n": 3,
-  "benchmark_parameters": [],
   "lamellar_versions": ["0.7.1"],
+  "benchmark_parameters": [
+    {
+      "name": "input_file",
+      "values": [
+        "./graphs/soc-LiveJournal1.mm",
+        "./graphs/orkut.mm",
+        "./graphs/example.bin"
+      ],
+      "applies_to": ["triangle_count", "triangle_count_buffered"]
+    },
+    {
+      "name": "num_threads",
+      "values": [2, 4, 8, 16],
+      "applies_to": ["triangle_count", "triangle_count_buffered"]
+    }
+  ],
   "slurm_configurations": [
     { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
     { "nodes": [1, 2, 4], "ntasks-per-node": [2], "cpus-per-task": [32] },
     { "nodes": [1, 2, 4], "ntasks-per-node": [4], "cpus-per-task": [16] }
   ]
 }
+

@@ -1,0 +1,370 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   2.027901167s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="lamellar_graph"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: false }/TargetInner { ..: lib_target("lamellar_graph", ["lib"], "/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/lib.rs", Edition2021) }
+   2.027926375s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="lamellar_graph"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-1b5b54339cd6dd19/lib-lamellar_graph`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.032345500s  INFO prepare_target{force=false package_id=benchmark_record v0.1.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/benchmark_record) target="benchmark_record"}: cargo::core::compiler::fingerprint: fingerprint error for benchmark_record v0.1.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/benchmark_record)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("benchmark_record", ["lib"], "/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/benchmark_record/src/lib.rs", Edition2024) }
+   2.032357209s  INFO prepare_target{force=false package_id=benchmark_record v0.1.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/benchmark_record) target="benchmark_record"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/benchmark_record-be016ed2751b73c8/lib-benchmark_record`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   2.033015042s  INFO prepare_target{force=false package_id=chrono v0.4.42 target="chrono"}: cargo::core::compiler::fingerprint: fingerprint error for chrono v0.4.42/Check { test: false }/TargetInner { ..: lib_target("chrono", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/chrono-0.4.42/src/lib.rs", Edition2021) }
+   2.033023542s  INFO prepare_target{force=false package_id=chrono v0.4.42 target="chrono"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/chrono-d80d370fef47f856/lib-chrono`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   9: cargo::ops::cargo_compile::compile_ws
+  10: cargo::ops::cargo_compile::compile_with_exec
+  11: cargo::ops::cargo_compile::compile
+  12: cargo::commands::check::exec
+  13: <cargo::cli::Exec>::exec
+  14: cargo::main
+  15: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  16: std::rt::lang_start::<()>::{closure#0}
+  17: std::rt::lang_start_internal
+  18: _main
+   2.033661750s  INFO prepare_target{force=false package_id=iana-time-zone v0.1.64 target="iana_time_zone"}: cargo::core::compiler::fingerprint: fingerprint error for iana-time-zone v0.1.64/Check { test: false }/TargetInner { ..: lib_target("iana_time_zone", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/iana-time-zone-0.1.64/src/lib.rs", Edition2021) }
+   2.033667917s  INFO prepare_target{force=false package_id=iana-time-zone v0.1.64 target="iana_time_zone"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/iana-time-zone-3d0c89bef757d960/lib-iana_time_zone`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   2.034001209s  INFO prepare_target{force=false package_id=core-foundation-sys v0.8.7 target="core_foundation_sys"}: cargo::core::compiler::fingerprint: fingerprint error for core-foundation-sys v0.8.7/Check { test: false }/TargetInner { ..: lib_target("core_foundation_sys", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/core-foundation-sys-0.8.7/src/lib.rs", Edition2018) }
+   2.034006375s  INFO prepare_target{force=false package_id=core-foundation-sys v0.8.7 target="core_foundation_sys"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/core-foundation-sys-ba5d5290beabbf25/lib-core_foundation_sys`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   2.034261375s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="num_traits"}: cargo::core::compiler::fingerprint: fingerprint error for num-traits v0.2.19/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("num_traits", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-traits-0.2.19/src/lib.rs", Edition2021) }
+   2.034266292s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="num_traits"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/num-traits-4aa2b114e102af24/lib-num_traits`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   2.036281084s  INFO prepare_target{force=false package_id=sysinfo v0.36.1 target="sysinfo"}: cargo::core::compiler::fingerprint: fingerprint error for sysinfo v0.36.1/Check { test: false }/TargetInner { ..: lib_target("sysinfo", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sysinfo-0.36.1/src/lib.rs", Edition2021) }
+   2.036289750s  INFO prepare_target{force=false package_id=sysinfo v0.36.1 target="sysinfo"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/sysinfo-3ad06e39f716642e/lib-sysinfo`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   9: cargo::ops::cargo_compile::compile_ws
+  10: cargo::ops::cargo_compile::compile_with_exec
+  11: cargo::ops::cargo_compile::compile
+  12: cargo::commands::check::exec
+  13: <cargo::cli::Exec>::exec
+  14: cargo::main
+  15: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  16: std::rt::lang_start::<()>::{closure#0}
+  17: std::rt::lang_start_internal
+  18: _main
+   2.040970834s  INFO prepare_target{force=false package_id=objc2-core-foundation v0.3.2 target="objc2_core_foundation"}: cargo::core::compiler::fingerprint: fingerprint error for objc2-core-foundation v0.3.2/Check { test: false }/TargetInner { ..: lib_target("objc2_core_foundation", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/objc2-core-foundation-0.3.2/src/lib.rs", Edition2021) }
+   2.040981542s  INFO prepare_target{force=false package_id=objc2-core-foundation v0.3.2 target="objc2_core_foundation"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/objc2-core-foundation-e4bca36fbb90bb2e/lib-objc2_core_foundation`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   2.042989750s  INFO prepare_target{force=false package_id=objc2-io-kit v0.3.2 target="objc2_io_kit"}: cargo::core::compiler::fingerprint: fingerprint error for objc2-io-kit v0.3.2/Check { test: false }/TargetInner { ..: lib_target("objc2_io_kit", ["lib"], "/Users/kaylee.scanlin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/objc2-io-kit-0.3.2/src/lib.rs", Edition2021) }
+   2.042999584s  INFO prepare_target{force=false package_id=objc2-io-kit v0.3.2 target="objc2_io_kit"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/objc2-io-kit-89db00714022f411/lib-objc2_io_kit`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   2.209527250s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="lamellar_graph"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: true }/TargetInner { ..: lib_target("lamellar_graph", ["lib"], "/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/lib.rs", Edition2021) }
+   2.209541542s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="lamellar_graph"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-df456d713f0088e1/test-lib-lamellar_graph`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.210416000s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: false }/TargetInner { name: "triangle_count", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/triangle_count.rs", Edition2021) }
+   2.210423917s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-d7ae9f688ebc7cc7/bin-triangle_count`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.211073917s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: true }/TargetInner { name: "triangle_count", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/triangle_count.rs", Edition2021) }
+   2.211081875s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-29728e3ebe09e0fa/test-bin-triangle_count`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.211776667s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count_buffered"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: false }/TargetInner { name: "triangle_count_buffered", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/triangle_count_buffered.rs", Edition2021) }
+   2.211785584s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count_buffered"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-3ce15b92f013e4dd/bin-triangle_count_buffered`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   2.212638500s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count_buffered"}: cargo::core::compiler::fingerprint: fingerprint error for lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)/Check { test: true }/TargetInner { name: "triangle_count_buffered", doc: true, ..: with_path("/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/src/triangle_count_buffered.rs", Edition2021) }
+   2.212646459s  INFO prepare_target{force=false package_id=lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count) target="triangle_count_buffered"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count/target/debug/.fingerprint/lamellar_graph-4b4cf989ec9678fd/test-bin-triangle_count_buffered`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+    Checking objc2-core-foundation v0.3.2
+    Checking core-foundation-sys v0.8.7
+    Checking num-traits v0.2.19
+    Checking iana-time-zone v0.1.64
+    Checking chrono v0.4.42
+    Checking objc2-io-kit v0.3.2
+    Checking sysinfo v0.36.1
+    Checking benchmark_record v0.1.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/benchmark_record)
+    Checking lamellar_graph v0.7.0 (/Users/kaylee.scanlin/Documents/PNNL/Lamellar/lamellar-benchmarks/triangle_count)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.11s
