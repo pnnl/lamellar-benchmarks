@@ -315,7 +315,7 @@ pub fn default_benchmark_name() -> String {
 /// Generate a default output file name based on the benchmark name and current timestamp
 pub fn default_output_path() -> PathBuf {
     let stem  = default_benchmark_name();
-    PathBuf::from(format!("{stem}_result.json"))
+    PathBuf::from(format!("{stem}_result.jsonl"))
 }
 
 #[cfg(test)]
