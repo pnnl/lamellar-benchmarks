@@ -6,7 +6,7 @@
   "benchmark_dir": ".",
   "n": 3,
   "benchmark_parameters": [ 
-    { "name": "global_count", "values": [1_000, 1_000_000] },
+    { "name": "global_count", "values": [1000] },
     { "name": "target_factor", "values": [10, 20] }
     ],
   "lamellar_versions": ["0.7.1"],
