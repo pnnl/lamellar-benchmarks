@@ -3,77 +3,18 @@ use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
 
-// ===== IMPORTS FOR JSON OUTPUT =====
-use json::{object, JsonValue};
-use std::fs::{self, OpenOptions}; //Only import what we need - conserving memory is critical
-use std::io::Write as IoWrite;
 use std::path::PathBuf;
-use std::env;
+use std::time::Instant;
 
-// ===== HELPER FUNCTIONS - OUTPUT TO JSON =====
-// Function to auto-detect version of Lamellar in Cargo.toml histo project and place the outputted JSON in that directory (call in append_json_line)
-// returns it as a string
-fn lamellar_version() -> Option<String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let lock_path = format!("{}/Cargo.lock", manifest_dir);
-
-    if let Ok(contents) = fs::read_to_string(lock_path) {
-        for line in contents.lines() {
-            if line.trim_start().starts_with("name = \"lamellar\"") {
-                // next line will have version
-                if let Some(version_line) = contents.lines().skip_while(|l| !l.contains("name = \"lamellar\"")).nth(1) {
-                    if let Some(version) = version_line.split('=').nth(1) {
-                        return Some(version.trim().trim_matches('"').to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-// Create directory we are putting the JSON output in
-// No input
-// function that returns a PathBuf, a flexible object in Rust specifically made to store file paths, containing the outputs directory
-fn one_level_up() -> PathBuf {
-    let exe_dir = env::current_exe()
-        // return option
-        .ok()
-        // if option returned (we have path), 
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    // define base as one directory behind the executable, then add the "outputs" folder
-    // .parent() is the function which actually goes one directory behind
-    let base = exe_dir.parent().unwrap_or(&exe_dir).to_path_buf();
-    if let Some(ver) = lamellar_version() {
-        base.join(format!("Outputs/{}", ver))
-    } else {
-        base.join("Outputs")
-    }
-}
-
-// Function to append output to target file as JSON
-// takes as input the name of the script as a mutable string and a mutable JsonValue object from the json crate
-fn append_json_line(script_stem: &str, obj: &JsonValue) {
-    let dir = one_level_up();
-    // creating specific file for output directory as a variable that may or may not be used (_)
-    let _ = fs::create_dir_all(&dir);
-    // actually naming the output file
-    let path = dir.join(format!("{script_stem}.json"));
-    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
-        // DON'T WORRY - stringify is from the JSON crate, which converts it into valid JSON syntax- not a string!
-        // EDIT: we need to clone this so that it works for json::stringify and (implements Into<JsonValue>) and &JsonValue doesn't
-        let _ = writeln!(f, "{}", json::stringify(obj.clone()));
-    }
- }
-
+// === Structured benchmark logging ===
+use benchmark_record::BenchmarkInformation;
 
 #[lamellar::AmLocalData]
 struct LaunchAm {
     graph: Graph,
     start: u32,
     end: u32,
-    final_cnt: AtomicArray<usize>, //Instead of Darc<AtomicUsize> (as in the non buffered version), we can also use a atomic array to keep track of the counts.
+    final_cnt: AtomicArray<usize>, // count per-PE (one slot per PE)
     buf_size: usize,
 }
 
@@ -84,6 +25,7 @@ impl LamellarAM for LaunchAm {
         let graph_data = self.graph.data();
         let mut buffer = vec![];
         let mut cur_len = 0;
+
         for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
             let neighs = graph_data
                 .neighbors_iter(&node_0)
@@ -91,7 +33,7 @@ impl LamellarAM for LaunchAm {
                 .map(|n| *n)
                 .collect::<Vec<u32>>();
             cur_len += neighs.len();
-            buffer.push((node_0, neighs)); // pack the node and neighbors into the buffer
+            buffer.push((node_0, neighs)); // pack node + neighbors
             if cur_len > self.buf_size {
                 let _ = task_group
                     .exec_am_all(BufferedTcAm {
@@ -104,8 +46,9 @@ impl LamellarAM for LaunchAm {
                 cur_len = 0;
             }
         }
+
         if cur_len > 0 {
-            //send the remaining data
+            // send remaining
             let _ = task_group
                 .exec_am_all(BufferedTcAm {
                     graph: graph_data.clone(),
@@ -114,6 +57,7 @@ impl LamellarAM for LaunchAm {
                 })
                 .spawn();
         }
+
         task_group.await_all().await;
     }
 }
@@ -153,9 +97,8 @@ impl LamellarAM for BufferedTcAm {
     async fn exec() {
         let mut cnt = 0;
         for (_node_0, neighbors) in &self.data {
-            // this loop is not present in the non-buffered version
+            // loop over neighbors that are local to this PE
             for node_1 in neighbors.iter().filter(|n| self.graph.node_is_local(n)) {
-                //check to make sure node_1 is local to this pe
                 let neighs_1 = self
                     .graph
                     .neighbors_iter(node_1)
@@ -163,11 +106,13 @@ impl LamellarAM for BufferedTcAm {
                 cnt += BufferedTcAm::sorted_intersection_count(neighbors.iter(), neighs_1);
             }
         }
-        self.final_cnt.local_data().at(0).fetch_add(cnt); //we only need to update our local portion of the count, and we know each pe only has a single element of the cnt array
+        // one element per PE: update local slot
+        self.final_cnt.local_data().at(0).fetch_add(cnt);
     }
 }
 
 fn main() {
+    // --- args / world -------------------------------------------------------
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
     let launch_threads = if args.len() > 2 {
@@ -183,31 +128,66 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    // JSON accumulator
-    let mut out = object! {
-        "binary": "triangle_count_buffered",
-        "my_pe": my_pe,
-        "num_pes": num_pes
-    };
-    //this loads, reorders, and distributes the graph to all PEs
+    // --- graph & counters ---------------------------------------------------
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
-
-    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block(); // convert it to an atomic array (which is accessible to all PEs)
+    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
 
     if my_pe == 0 {
-        println!("num nodes {:?}", graph.num_nodes())
+        println!("num nodes {:?}", graph.num_nodes());
+    }
+
+    // --- output path with git short hash (once per run) ---------------------
+    // Build it once; we'll append one JSONL line per buf_size.
+    let out_path: PathBuf = {
+        let mut base = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        // create a temp bench just to read git; or you can build it outside and reuse
+        let temp_bench = BenchmarkInformation::with_name("triangle_count_buffered");
+        let short_hash = temp_bench
+            .git
+            .get("short_hash")
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unknown".to_string());
+        let safe_hash: String = short_hash.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+
+        base.push(format!("triangle_count_buffered_{}.jsonl", safe_hash));
+        base
     };
-    // this section of code creates and executes a number of "LaunchAMs" so that we
-    // can use multiple threads to initiate the triangle counting active message.
+    if my_pe == 0 {
+        if let Some(parent) = out_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
+    // --- per-thread batch size (same as original) ---------------------------
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
 
-    for buf_size in [10, 100, 1000, 10000, 100000, 1000000].iter() {
-        // for buf_size in [100000].iter() {
+    // --- main loop over buffer sizes (preserved) ----------------------------
+    for buf_size in [10usize, 100, 1000, 10000, 100000, 1000000].iter().copied() {
         if my_pe == 0 {
             println!("using buf_size: {:?}", buf_size);
         }
+
+        // fresh record per buf_size (one JSON line per iteration)
+        let mut bench = BenchmarkInformation::with_name("triangle_count_buffered");
+        bench.parameters = args.clone();
+        bench.output.insert("num_pes".into(), num_pes.to_string());
+        bench
+            .output
+            .insert("launch_threads".into(), launch_threads.to_string());
+        bench.output.insert("buf_size".into(), buf_size.to_string());
+        bench
+            .output
+            .insert("num_nodes".into(), graph.num_nodes().to_string());
+
         world.barrier();
-        let timer = std::time::Instant::now();
+        let timer = Instant::now();
+
+        // spawn LaunchAMs
         let mut reqs = vec![];
         for tid in 0..launch_threads {
             let start = (tid as f32 * batch_size).round() as u32;
@@ -216,54 +196,81 @@ fn main() {
                 world
                     .exec_am_local(LaunchAm {
                         graph: graph.clone(),
-                        start: start,
-                        end: end,
+                        start,
+                        end,
                         final_cnt: final_cnt.clone(),
-                        buf_size: *buf_size,
+                        buf_size,
                     })
                     .spawn(),
             );
         }
 
-        //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
-        // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
+        // wait for LaunchAMs to finish (issue time)
         world.block_on(async move {
             for req in reqs {
                 req.await;
             }
         });
-        if my_pe == 0 {
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64())
-        };
-        // at this point all the triangle counting active messages have been initiated.
 
-        world.wait_all(); //wait for all the triangle counting active messages to finish locally
+        let issue_secs = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            println!("local time: {:?}", timer.elapsed().as_secs_f64())
-        };
+            println!("issue time: {:.6}", issue_secs);
+        }
+        bench
+            .output
+            .insert("issue_time_secs".into(), format!("{:.6}", issue_secs));
 
-        world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
-
-        let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
+        // wait for local completion
+        world.wait_all();
+        let local_secs = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            let global_secs = timer.elapsed().as_secs_f64();
+            println!("local time: {:.6}", local_secs);
+        }
+        bench
+            .output
+            .insert("local_time_secs".into(), format!("{:.6}", local_secs));
+
+        // global completion
+        world.barrier();
+        let final_cnt_sum = world.block_on(final_cnt.sum()); // reduce count across PEs
+
+        let global_secs = timer.elapsed().as_secs_f64();
+        if my_pe == 0 {
             println!(
-                "triangles counted: {:?}\nglobal time: {:?}",
-                final_cnt_sum,
-                global_secs
+                "triangles counted: {:?}\nglobal time: {:.6}",
+                final_cnt_sum, global_secs
             );
-            // populate JSON and append
-            out["buf_size"] = (*buf_size as u64).into();
-            if let Some(sum) = final_cnt_sum {
-                out["triangles_counted"] = (sum as u64).into();
-            } else {
-                out["triangles_counted"] = JsonValue::Null;
-            }
-            out["global_time_secs"] = global_secs.into();
-            println!("{}", json::stringify(out.clone()));
-            append_json_line("triangle_count_buffered", &out);
+        }
+        bench
+            .output
+            .insert("global_time_secs".into(), format!("{:.6}", global_secs));
+
+        // record triangle count (or null)
+        if let Some(sum) = final_cnt_sum {
+            bench
+                .output
+                .insert("triangles_counted".into(), (sum as u64).to_string());
+        } else {
+            bench.output.insert("triangles_counted".into(), "null".into());
+        }
+
+        // network stats
+        let mb_sent = world.MB_sent();
+        bench
+            .output
+            .insert("MB_sent".into(), format!("{:.6}", mb_sent));
+        bench.output.insert(
+            "MB_per_sec".into(),
+            format!("{:.6}", mb_sent / global_secs.max(1e-12)),
+        );
+
+        // write one JSONL line (only PE 0)
+        if my_pe == 0 {
+            bench.write(&out_path);
             println!();
         }
-        world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0))); //reset the final count array
+
+        // reset the counter array for the next buf_size
+        world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0)));
     }
 }
