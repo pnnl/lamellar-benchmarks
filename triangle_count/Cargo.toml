@@ -10,6 +10,7 @@ csv = "1"
 lamellar = { version = "0.7.1" } #add features = ["enable-rofi"] to use rofi lamellae
 bincode = "1.3"
 json = "0.12.4"
+benchmark_record = {path = "../benchmark_record"} 
 
 
 [profile.release]
