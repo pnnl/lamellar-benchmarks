@@ -1,9 +1,6 @@
 use lamellar::array::prelude::*;
 use rand::prelude::*;
-use std::path::PathBuf;
 use std::time::Instant;
-
-// === Benchmark metadata utility ===
 use benchmark_record::BenchmarkInformation;
 
 const DEFAULT_GLOBAL_COUNT: usize = 1000;
@@ -29,11 +26,10 @@ fn main() {
 
     // --- benchmark record ---
     let mut bench = BenchmarkInformation::with_name("randperm");
-    bench.parameters = args.clone();
-    bench.output.insert("num_pes".into(), num_pes.to_string());
-    bench.output.insert("global_count".into(), global_count.to_string());
-    bench.output.insert("target_factor".into(), target_factor.to_string());
-    bench.output.insert("table_size_total".into(), (global_count * target_factor).to_string());
+    bench.with_output("num_pes", num_pes.to_string());
+    bench.with_output("global_count", global_count.to_string());
+    bench.with_output("target_factor", target_factor.to_string());
+    bench.with_output("table_size_total", (global_count * target_factor).to_string());
 
     // --- array setup ---
     let darts_array = UnsafeArray::<usize>::new(
@@ -131,60 +127,40 @@ fn main() {
 
     // Global metrics
     let global_time = permute_secs; // total permute time measured above
-    bench.output.insert("permute_time_secs".into(), format!("{:.6}", permute_secs));
-    bench.output.insert("collect_time_secs".into(), format!("{:.6}", collect_secs));
-    bench.output.insert("global_time_secs".into(), format!("{:.6}", global_time));
+    bench.with_output("permute_time_secs", format!("{:.6}", permute_secs));
+    bench.with_output("collect_time_secs", format!("{:.6}", collect_secs));
+    bench.with_output("global_time_secs", format!("{:.6}", global_time));
 
     let total_updates = global_count; // one write per element across PEs
     let mups = (total_updates as f64 / 1_000_000.0) / global_time.max(1e-12);
-    bench.output.insert("MUPS".into(), format!("{:.6}", mups));
+    bench.with_output("MUPS", format!("{:.6}", mups));
 
     let mb_sent = world.MB_sent();
-    bench.output.insert("MB_sent".into(), format!("{:.6}", mb_sent));
-    bench.output.insert("MB_per_sec".into(), format!("{:.6}", mb_sent / global_time.max(1e-12)));
+    bench.with_output("MB_sent", format!("{:.6}", mb_sent));
+    bench.with_output("MB_per_sec", format!("{:.6}", mb_sent / global_time.max(1e-12)));
 
     // optional correctness check
     if my_pe == 0 {
         if let Some(sum) = world.block_on(the_array.sum()) {
             let expected = (global_count * (global_count + 1) / 2) - global_count; // n(n-1)/2
-            bench.output.insert("reduced_sum".into(), (sum as u64).to_string());
-            bench.output.insert("expected_sum".into(), (expected as u64).to_string());
-            bench.output.insert("sum_match".into(), (sum == expected).to_string());
+            bench.with_output("reduced_sum", (sum as u64).to_string());
+            bench.with_output("expected_sum", (expected as u64).to_string());
+            bench.with_output("sum_match", (sum == expected).to_string());
         } else {
-            bench.output.insert("reduced_sum".into(), "null".into());
-            bench.output.insert("expected_sum".into(), "null".into());
-            bench.output.insert("sum_match".into(), "false".into());
+            bench.with_output("reduced_sum", "null".into());
+            bench.with_output("expected_sum", "null".into());
+            bench.with_output("sum_match", "false".into());
         }
     }
 
-    // --- build output path with git short hash ---
-    let out_path: PathBuf = {
-        let mut base = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-
-        let short_hash = bench
-            .git
-            .get("short_hash")
-            .cloned()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        let safe_hash: String = short_hash.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-        let file_name = format!("randperm_{}.jsonl", safe_hash);
-        base.push(file_name);
-        base
-    };
-
     if my_pe == 0 {
-        if let Some(parent) = out_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
+        let result_path = benchmark_record::default_output_path("benchmarking");
         println!(
             "PE {my_pe}: permute {:.6}s, collect {:.6}s, MUPS {:.6} -> {:?}",
-            permute_secs, collect_secs, mups, out_path
+            permute_secs, collect_secs, mups, result_path
         );
-        bench.write(&out_path);
+        bench.write(&result_path);
+        println!("Benchmark Results");
+        bench.display(Some(3));
     }
 }
