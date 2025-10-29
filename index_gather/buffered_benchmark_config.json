@@ -1,12 +1,15 @@
 {
-  "group_name": "index_gather",
+  "group_name": "buffered_index_gather",
   "benchmarks": [
-    "index_gather_atomic_array",
-    "index_gather_read_only_array"
+    "index_gather_buffered_am"
   ],
   "benchmark_dir": ".",
   "n": 3,
-  "benchmark_parameters": [],
+  "benchmark_parameters": [ 
+    "1000 256",
+    "1000 1024",
+    "1000 4096"
+  ],
   "lamellar_versions": ["0.7.1"],
   "slurm_configurations": [
     { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },

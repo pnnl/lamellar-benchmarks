@@ -6,9 +6,11 @@
   "benchmark_dir": ".",
   "n": 3,
   "benchmark_parameters": [ 
-    { "name": "global_count", "values": [1000] },
-    { "name": "target_factor", "values": [10, 20] }
-    ],
+    "1000 10",
+    "1000 20",
+    "10000 10",
+    "10000 20"
+  ],
   "lamellar_versions": ["0.7.1"],
   "slurm_configurations": [
     { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
