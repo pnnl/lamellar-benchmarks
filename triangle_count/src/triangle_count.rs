@@ -1,15 +1,8 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
-
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-// ===== IMPORTS FOR JSON OUTPUT =====
-use json::{object, JsonValue};
-use std::fs::{self, OpenOptions}; //Only import what we need - conserving memory is critical
-use std::io::Write as IoWrite;
-use std::path::PathBuf;
-use std::env;
+use benchmark_record;
 
 #[lamellar::AmData]
 struct CntAm {
@@ -111,25 +104,22 @@ impl LamellarAM for TcAm {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
-    let launch_threads = if args.len() > 2 {
-        match &args[2].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
+    let launch_threads = args
+        .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    // Accumulator object for JSON
-    let mut out = object! {
-        "binary": "triangle_count",
-        "my_pe": my_pe,
-        "num_pes": num_pes
-    };
+    let mut bench = benchmark_record::BenchmarkInformation::new();
+    bench.with_output("my_pe", my_pe.to_string());
+    bench.with_output("num_pes", num_pes.to_string());
+
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
     graph.dump_to_bin(&format!("{file}.bin"));
@@ -166,16 +156,16 @@ fn main() {
     });
     if my_pe == 0 {
         let issue_secs = timer.elapsed().as_secs_f64();
-    println!("issue time: {:?}", issue_secs);
-        out["issue_time_secs"] = issue_secs.into();
+        println!("issue time: {:?}", issue_secs);
+        bench.with_output("issue_time (secs)", issue_secs.to_string());
     };
     // at this point all the triangle counting active messages have been initiated.
 
     world.wait_all(); //wait for all the triangle counting active messages to finish locally
     if my_pe == 0 {
         let local_secs = timer.elapsed().as_secs_f64();
-    println!("local time: {:?}", local_secs);
-        out["local_time_secs"] = local_secs.into();
+        println!("local time: {:?}", local_secs);
+        bench.with_output("local_time (secs)", local_secs.to_string());
     };
 
     world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
@@ -195,64 +185,17 @@ fn main() {
     }
     world.barrier(); //at this point the final triangle counting result is available on PE 0
 
+    let global_secs = timer.elapsed().as_secs_f64();
+    bench.with_output("triangles_counted", (final_cnt.load(Ordering::SeqCst) as u64).to_string());
+    bench.with_output("global_time_secs", global_secs.to_string());
+
     if my_pe == 0 {
-        let global_secs = timer.elapsed().as_secs_f64();
         println!(
             "triangles counted: {:?} global time: {:?}",
             final_cnt.load(Ordering::SeqCst),
             global_secs
         );
-        out["triangles_counted"] = (final_cnt.load(Ordering::SeqCst) as u64).into();
-        out["global_time_secs"] = global_secs.into();
-        // print and append JSON
-        println!("{}", json::stringify(out.clone()));
-        append_json_line("triangle_count", &out);
+        bench.write(&benchmark_record::default_output_path("benchmarking"));
     };
 
-}
-
-// ===== HELPER FUNCTIONS - OUTPUT TO JSON =====
-// Function to auto-detect version of Lamellar in Cargo.toml project and place the outputted JSON in that directory (call in append_json_line)
-// returns it as a string
-fn lamellar_version() -> Option<String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let lock_path = format!("{}/Cargo.lock", manifest_dir);
-
-    if let Ok(contents) = fs::read_to_string(lock_path) {
-        for line in contents.lines() {
-            if line.trim_start().starts_with("name = \"lamellar\"") {
-                // next line will have version
-                if let Some(version_line) = contents.lines().skip_while(|l| !l.contains("name = \"lamellar\"")).nth(1) {
-                    if let Some(version) = version_line.split('=').nth(1) {
-                        return Some(version.trim().trim_matches('"').to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-// Create directory we are putting the JSON output in
-fn one_level_up() -> PathBuf {
-    let exe_dir = env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let base = exe_dir.parent().unwrap_or(&exe_dir).to_path_buf();
-    if let Some(ver) = lamellar_version() {
-        base.join(format!("Outputs/{}", ver))
-    } else {
-        base.join("Outputs")
-    }
-}
-
-// Function to append output to target file as JSON
-fn append_json_line(script_stem: &str, obj: &JsonValue) {
-    let dir = one_level_up();
-    let _ = fs::create_dir_all(&dir);
-    let path = dir.join(format!("{script_stem}.json"));
-    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(f, "{}", json::stringify(obj.clone()));
-    }
 }

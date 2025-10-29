@@ -2,11 +2,7 @@ use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
-
-use std::path::PathBuf;
 use std::time::Instant;
-
-// === Structured benchmark logging ===
 use benchmark_record::BenchmarkInformation;
 
 #[lamellar::AmLocalData]
@@ -115,14 +111,13 @@ fn main() {
     // --- args / world -------------------------------------------------------
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
-    let launch_threads = if args.len() > 2 {
-        match &args[2].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
+    let launch_threads = args
+        .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -136,35 +131,9 @@ fn main() {
         println!("num nodes {:?}", graph.num_nodes());
     }
 
-    // --- output path with git short hash (once per run) ---------------------
-    // Build it once; we'll append one JSONL line per buf_size.
-    let out_path: PathBuf = {
-        let mut base = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-
-        // create a temp bench just to read git; or you can build it outside and reuse
-        let temp_bench = BenchmarkInformation::with_name("triangle_count_buffered");
-        let short_hash = temp_bench
-            .git
-            .get("short_hash")
-            .cloned()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "unknown".to_string());
-        let safe_hash: String = short_hash.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-
-        base.push(format!("triangle_count_buffered_{}.jsonl", safe_hash));
-        base
-    };
-    if my_pe == 0 {
-        if let Some(parent) = out_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-    }
-
     // --- per-thread batch size (same as original) ---------------------------
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
+    let benchmark_result_file = benchmark_record::default_output_path("benchmarking");
 
     // --- main loop over buffer sizes (preserved) ----------------------------
     for buf_size in [10usize, 100, 1000, 10000, 100000, 1000000].iter().copied() {
@@ -174,15 +143,10 @@ fn main() {
 
         // fresh record per buf_size (one JSON line per iteration)
         let mut bench = BenchmarkInformation::with_name("triangle_count_buffered");
-        bench.parameters = args.clone();
-        bench.output.insert("num_pes".into(), num_pes.to_string());
-        bench
-            .output
-            .insert("launch_threads".into(), launch_threads.to_string());
-        bench.output.insert("buf_size".into(), buf_size.to_string());
-        bench
-            .output
-            .insert("num_nodes".into(), graph.num_nodes().to_string());
+        bench.with_output("num_pes", num_pes.to_string());
+        bench.with_output("launch_threads", launch_threads.to_string());
+        bench.with_output("buf_size", buf_size.to_string());
+        bench.with_output("num_nodes", graph.num_nodes().to_string());
 
         world.barrier();
         let timer = Instant::now();
@@ -216,9 +180,7 @@ fn main() {
         if my_pe == 0 {
             println!("issue time: {:.6}", issue_secs);
         }
-        bench
-            .output
-            .insert("issue_time_secs".into(), format!("{:.6}", issue_secs));
+        bench.with_output("issue_time_secs", format!("{:.6}", issue_secs));
 
         // wait for local completion
         world.wait_all();
@@ -226,9 +188,7 @@ fn main() {
         if my_pe == 0 {
             println!("local time: {:.6}", local_secs);
         }
-        bench
-            .output
-            .insert("local_time_secs".into(), format!("{:.6}", local_secs));
+        bench.with_output("local_time_secs", format!("{:.6}", local_secs));
 
         // global completion
         world.barrier();
@@ -241,35 +201,25 @@ fn main() {
                 final_cnt_sum, global_secs
             );
         }
-        bench
-            .output
-            .insert("global_time_secs".into(), format!("{:.6}", global_secs));
+        bench.with_output("global_time_secs", format!("{:.6}", global_secs));
 
         // record triangle count (or null)
         if let Some(sum) = final_cnt_sum {
-            bench
-                .output
-                .insert("triangles_counted".into(), (sum as u64).to_string());
+            bench.with_output("triangles_counted", (sum as u64).to_string());
         } else {
-            bench.output.insert("triangles_counted".into(), "null".into());
+            bench.with_output("triangles_counted", "<None>".into());
         }
 
         // network stats
         let mb_sent = world.MB_sent();
-        bench
-            .output
-            .insert("MB_sent".into(), format!("{:.6}", mb_sent));
-        bench.output.insert(
-            "MB_per_sec".into(),
-            format!("{:.6}", mb_sent / global_secs.max(1e-12)),
-        );
+        bench.with_output("MB_sent",  mb_sent.to_string());
+        bench.with_output("MB_per_sec", (mb_sent / global_secs.max(1e-12)).to_string());
 
-        // write one JSONL line (only PE 0)
         if my_pe == 0 {
-            bench.write(&out_path);
-            println!();
+            bench.write(&benchmark_result_file);
+            println!("Benchmark Results for buf_size: {buf_size}");
+            bench.display(Some(3));
         }
-
         // reset the counter array for the next buf_size
         world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0)));
     }
