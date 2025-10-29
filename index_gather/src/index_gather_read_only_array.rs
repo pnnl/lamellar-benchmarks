@@ -1,10 +1,7 @@
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use rand::prelude::*;
-use std::path::PathBuf;
 use std::time::Instant;
-
-// === Benchmark metadata utility ===
 use benchmark_record::BenchmarkInformation;
 
 const COUNTS_LOCAL_LEN: usize = 1_000_000;
@@ -29,16 +26,9 @@ fn main() {
 
     // --- benchmark record ---
     let mut bench = BenchmarkInformation::with_name("index_gather_read_only_array");
-    bench.parameters = args.clone();
-    bench
-        .output
-        .insert("updates_total".into(), (l_num_updates * num_pes).to_string());
-    bench
-        .output
-        .insert("updates_per_pe".into(), l_num_updates.to_string());
-    bench
-        .output
-        .insert("table_size_per_pe".into(), COUNTS_LOCAL_LEN.to_string());
+    bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    bench.with_output("updates_per_pe", l_num_updates.to_string());
+    bench.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
 
     // --- array setup ---
     let global_count = COUNTS_LOCAL_LEN * num_pes;
@@ -86,61 +76,20 @@ fn main() {
     let duration = now.elapsed().as_secs_f64();
 
     // --- metrics ---
-    bench
-        .output
-        .insert("num_pes".into(), num_pes.to_string());
-    bench
-        .output
-        .insert("global_time_secs".into(), format!("{:.6}", duration));
+    bench.with_output("num_pes", num_pes.to_string());
+    bench.with_output("global_time_secs", duration.to_string());
 
     let global_mups = ((l_num_updates * num_pes) as f64 / 1_000_000.0) / duration;
-    bench
-        .output
-        .insert("MUPS".into(), format!("{:.6}", global_mups));
+    bench.with_output("MUPS", global_mups.to_string());
 
     let mb_sent = world.MB_sent();
-    bench
-        .output
-        .insert("MB_sent".into(), format!("{:.6}", mb_sent));
-    bench.output.insert(
-        "MB_per_sec".into(),
-        format!("{:.6}", mb_sent / duration),
-    );
-    bench.output.insert(
-        "gb_s_injection_rate".into(),
-        format!("{:.6}", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / duration),
-    );
-
-    // --- build output path with git short hash ---
-    let out_path: PathBuf = {
-        let mut base = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-
-        let short_hash = bench
-            .git
-            .get("short_hash")
-            .cloned()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        // sanitize for filenames
-        let safe_hash: String = short_hash.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-
-        let file_name = format!("index_gather_read_only_array_{}.jsonl", safe_hash);
-        base.push(file_name);
-        base
-    };
+    bench.with_output("MB_sent", mb_sent.to_string());
+    bench.with_output("MB_per_sec", (mb_sent / duration).to_string());
+    bench.with_output("GB_s_injection_rate", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9 / duration).to_string());
+    
 
     if my_pe == 0 {
-        if let Some(parent) = out_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        println!(
-            "PE {my_pe}: Global time: {:.6}s, MUPS: {:.6} -> {:?}",
-            duration, global_mups, out_path
-        );
-        bench.write(&out_path);
+        println!("Global time: {:.3}s, MUPS: {:.3}", duration, global_mups);
+        bench.write(&benchmark_record::default_output_path("benchmarking"));
     }
 }

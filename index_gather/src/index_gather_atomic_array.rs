@@ -2,9 +2,6 @@ use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
-use std::path::PathBuf;
-
-
 use benchmark_record::BenchmarkInformation;
 
 const COUNTS_LOCAL_LEN: usize = 1_000_000;
@@ -28,11 +25,7 @@ fn main() {
 
     // === Initialize Benchmark Record ===
     let mut bench = BenchmarkInformation::new();
-    bench.parameters = args.clone(); // no need to keep track of this here - use the object we already have to avoid cloning
-    bench.output.insert(
-        "updates_total".to_string(),
-        (l_num_updates * num_pes).to_string(),
-    );
+    bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
 
     let global_count = COUNTS_LOCAL_LEN * num_pes;
 
@@ -77,48 +70,21 @@ fn main() {
     let duration = now.elapsed().as_secs_f64();
 
     // === Collect Results ===
-    bench.output.insert("num_pes".to_string(), num_pes.to_string());
-    bench.output.insert("updates_per_pe".to_string(), l_num_updates.to_string());
-    bench.output
-        .insert("global_time_secs".to_string(), format!("{:.4}", duration));
+    bench.with_output("updates_per_pe", l_num_updates.to_string());
+    bench.with_output("num_pes", num_pes.to_string());
+    bench.with_output("global_time_secs", duration.to_string());
 
     let global_mups =
         ((l_num_updates * num_pes) as f64 / 1_000_000.0) / duration;
-    bench.output
-        .insert("MUPS".to_string(), format!("{:.3}", global_mups));
+    bench.with_output("MUPS", global_mups.to_string());
 
     let mb_sent = world.MB_sent();
-    bench.output
-        .insert("MB_sent".to_string(), format!("{:.3}", mb_sent));
-    bench.output.insert(
-        "MB_per_sec".to_string(),
-        format!("{:.3}", mb_sent / duration),
-    );
-    bench.output.insert(
-        "gb_s_injection_rate".to_string(),
-        format!("{:.3}", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / duration), // just take the value and do it as a .tostring
-// no need to format this 
-    );
-
-    // === Output and Save ===
-    println!("Ouptutting to file");
-    // === Building Output File ===
-    let out_path: PathBuf = {
-        // put the file next to the binary; tweak as you like
-        let mut base = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    // make a new copy of the short_hash to avoid ownership issues
-        let short_hash  = bench.git.get("short_hash").cloned().unwrap_or_default();
-        let file_name = format!("index_gather_atomic_array_{}.jsonl", short_hash);
-        base.push(&file_name);
-        base
-    };
+    bench.with_output("MB_sent", mb_sent.to_string());
+    bench.with_output("MB_per_sec", (mb_sent / duration).to_string());
+    bench.with_output("gb_s_injection_rate", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9 / duration).to_string());
 
     if my_pe == 0 {
         println!("Global time: {:.3}s, MUPS: {:.3}", duration, global_mups);
-        //result_record.write(&benchmark_record::default_output_path()); 
-        bench.write(&out_path);
+        bench.write(&benchmark_record::default_output_path("benchmarking"));
     }
 }
