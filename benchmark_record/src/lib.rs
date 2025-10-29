@@ -12,18 +12,18 @@ const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl
 
 pub struct BenchmarkInformation {
     pub benchark_name: String,
-    pub executable: PathBuf,
-    pub parameters: Vec<String>,
-    pub run_date: String,
-    pub output: HashMap<String, String>,
-    pub build_type: String,
-    pub package_info: HashMap<String, String>,
-    pub git: HashMap<String, String>,
-    pub slurm_params: HashMap<String, String>,
-    pub system: HashMap<String, String>,
-    pub environment_vars: HashMap<String, String>,
-    pub rust_edition: String,
-    pub rust_compiler: String,
+    executable: PathBuf,
+    parameters: Vec<String>,
+    run_date: String,
+    output: HashMap<String, String>,
+    build_type: String,
+    package_info: HashMap<String, String>,
+    git: HashMap<String, String>,
+    slurm_params: HashMap<String, String>,
+    system: HashMap<String, String>,
+    environment_vars: HashMap<String, String>,
+    rust_edition: String,
+    rust_compiler: String,
 }
 
 impl BenchmarkInformation  {
@@ -96,6 +96,12 @@ impl BenchmarkInformation  {
     /// Will create the file if it does not exist, appends to it if it does.
     pub fn write(&self, file: &PathBuf) {
         let json_obj = self.as_json();
+
+        // Try to create parent directories
+        if let Some(parent) = file.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+                
         if let Ok(mut f) = OpenOptions::new().create(true).write(true).append(true).open(file) {
             let _ = writeln!(f, "{}", json::stringify(json_obj));
         }
@@ -313,9 +319,9 @@ pub fn default_benchmark_name() -> String {
 }
 
 /// Generate a default output file name based on the benchmark name and current timestamp
-pub fn default_output_path() -> PathBuf {
+pub fn default_output_path(root: &str) -> PathBuf {
     let stem  = default_benchmark_name();
-    PathBuf::from(format!("{stem}_result.jsonl"))
+    PathBuf::from(format!("{root}/{stem}_result.jsonl"))
 }
 
 #[cfg(test)]
@@ -348,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_default_output_path() {
-        let output_path = default_output_path();
+        let output_path = default_output_path(".");
         let output_path_str = output_path.to_string_lossy().to_string();
         println!("Default output file name: {output_path_str}");
 
