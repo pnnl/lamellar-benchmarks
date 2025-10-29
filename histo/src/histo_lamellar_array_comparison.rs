@@ -92,7 +92,7 @@ fn main() {
         l_num_updates * num_pes,
         lamellar::array::Distribution::Block,
     );
-    let results_file = &benchmark_record::default_output_path();
+    let results_file = &benchmark_record::default_output_path("benchmarking");
     let rng: Arc<Mutex<StdRng>> = Arc::new(Mutex::new(SeedableRng::seed_from_u64(my_pe as u64)));
     let counts = counts.block();
 

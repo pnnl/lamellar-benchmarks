@@ -183,7 +183,7 @@ fn main() {
 
     // append to our JSON file
     if my_pe == 0 {
-        result_record.write(&benchmark_record::default_output_path());
+        result_record.write(&benchmark_record::default_output_path("benchmarking"));
         println!("Benchmark Results:");
         result_record.display(Some(3));
     }
