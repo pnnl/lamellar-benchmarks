@@ -5,8 +5,6 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::collections::HashMap;
 use json::JsonValue;
-use sysinfo;
-use chrono;
 
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
@@ -36,10 +34,10 @@ impl BenchmarkInformation  {
 
     /// Create a new BenchmarkInformation instance with the given benchmark name
     pub fn with_name(benchark_name: &str) -> Self {
-        let executable = executable();
+        let executable_name = executable();
         Self {
             benchark_name: benchark_name.to_string(),
-            executable: executable,
+            executable: executable_name,
             parameters: env::args().skip(1).collect(),
             run_date: BenchmarkInformation::get_run_date(),
             output: HashMap::new(),
@@ -102,7 +100,7 @@ impl BenchmarkInformation  {
             let _ = fs::create_dir_all(parent);
         }
                 
-        if let Ok(mut f) = OpenOptions::new().create(true).write(true).append(true).open(file) {
+        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(file) {
             let _ = writeln!(f, "{}", json::stringify(json_obj));
         }
     }
@@ -124,7 +122,7 @@ impl BenchmarkInformation  {
         let exec = executable();
         let alt_name = PathBuf::from("<unknown>");
         let parent = exec.parent().unwrap_or(alt_name.as_path());
-        let build_type = parent.file_name().unwrap_or(&OsStr::new("<unknown>")).to_string_lossy().to_string();
+        let build_type = parent.file_name().unwrap_or(OsStr::new("<unknown>")).to_string_lossy().to_string();
         if ["debug", "release"].contains(&build_type.as_str()) {
             build_type
         } else {
@@ -171,10 +169,9 @@ impl BenchmarkInformation  {
 
         if let Ok(contents) = fs::read_to_string(cargo_toml_path) {
             for line in contents.lines() {
-                if line.trim_start().starts_with("edition = ") {
-                    if let Some(edition) = line.split('=').nth(1) {
+                if line.trim_start().starts_with("edition = ") 
+                   && let Some(edition) = line.split('=').nth(1) {
                         return edition.trim().trim_matches('"').to_string();
-                    }
                 }
             }
         }
@@ -187,16 +184,14 @@ impl BenchmarkInformation  {
         let executable = executable();
 
         if let Ok(output) = std::process::Command::new("strings")
-            .args(&["-a", executable.to_str().unwrap_or("")])
+            .args(["-a", executable.to_str().unwrap_or("")])
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for line in output_str.lines() {
                 if line.starts_with("rustc version") {
                 return line.to_string();
                 }
-            }
             }
         }
         "<unknown>".to_string()
@@ -213,8 +208,8 @@ impl BenchmarkInformation  {
         if let Ok(contents) = fs::read_to_string(lock_path) {
             let mut lines = contents.lines();
             while let Some(line) = lines.next() {
-                if line.trim_start().starts_with("name = ") {
-                    if let Some(name) = line.split('=').nth(1) {
+                if line.trim_start().starts_with("name = ")
+                    &&  let Some(name) = line.split('=').nth(1) {
                         let name = name.trim().trim_matches('"').to_string();
                         if !CHECK_PACKAGES.contains(&name.as_str()) {
                             continue;
@@ -224,21 +219,17 @@ impl BenchmarkInformation  {
                         let mut source = String::new();
 
                         // Look ahead for version line
-                        if let Some(version_line) = lines.next() {
-                            if version_line.trim_start().starts_with("version = ") {
-                                if let Some(v) = version_line.split('=').nth(1) {
-                                    version = v.trim().trim_matches('"').to_string();
-                                }
-                            }
+                        if let Some(version_line) = lines.next() 
+                            && version_line.trim_start().starts_with("version = ") 
+                            && let Some(v) = version_line.split('=').nth(1) {
+                                version = v.trim().trim_matches('"').to_string();                           
                         }
 
                         // Look ahead for source line
-                        if let Some(source_line) = lines.next() {
-                            if source_line.trim_start().starts_with("source = ") {
-                                if let Some(s) = source_line.split('=').nth(1) {
-                                    source = s.trim().trim_matches('"').to_string();
-                                }
-                            }
+                        if let Some(source_line) = lines.next() 
+                            && source_line.trim_start().starts_with("source = ") 
+                            && let Some(s) = source_line.split('=').nth(1) {
+                                source = s.trim().trim_matches('"').to_string();
                         }
 
                         // Store as "version/source" format
@@ -247,7 +238,6 @@ impl BenchmarkInformation  {
                             package_info.insert(name, combined);
                         }
 
-                    }
                 }
             }
         }
@@ -261,46 +251,38 @@ impl BenchmarkInformation  {
         
         // Get long hash
         if let Ok(output) = std::process::Command::new("git")
-            .args(&["rev-parse", "HEAD"])
+            .args(["rev-parse", "HEAD"])
             .output()
-        {
-            if output.status.success() {
-                let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                git_info.insert("commit_hash".to_string(), commit_hash);
-            }
+            && output.status.success() {
+            let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            git_info.insert("commit_hash".to_string(), commit_hash);
         }
         
         // Get short hash
         if let Ok(output) = std::process::Command::new("git")
-            .args(&["rev-parse", "--short", "HEAD"])
+            .args(["rev-parse", "--short", "HEAD"])
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 let short_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 git_info.insert("short_hash".to_string(), short_hash);
-            }
         }
         
         // Get commit date
         if let Ok(output) = std::process::Command::new("git")
-            .args(&["log", "-1", "--format=%cd", "--date=iso"])
+            .args(["log", "-1", "--format=%cd", "--date=iso"])
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 let commit_date = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 git_info.insert("commit_date".to_string(), commit_date);
-            }
         }
         
         // Get commit message
         if let Ok(output) = std::process::Command::new("git")
-            .args(&["log", "-1", "--format=%s"])
+            .args(["log", "-1", "--format=%s"])
             .output()
-        {
-            if output.status.success() {
-                let commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                git_info.insert("commit_message".to_string(), commit_message);
-            }
+            && output.status.success() {
+            let commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            git_info.insert("commit_message".to_string(), commit_message);
         }
         
         git_info
@@ -315,7 +297,7 @@ fn executable() -> PathBuf {
 
 /// Generate a default benchmark name based on the executable file name
 pub fn default_benchmark_name() -> String {
-    executable().file_stem().unwrap_or(&OsStr::new("__unknown__")).to_string_lossy().to_string()
+    executable().file_stem().unwrap_or(OsStr::new("__unknown__")).to_string_lossy().to_string()
 }
 
 /// Generate a default output file name based on the benchmark name and current timestamp
