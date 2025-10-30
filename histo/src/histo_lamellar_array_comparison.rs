@@ -17,7 +17,7 @@ struct HistoResult {
 }
 
 fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
-    array_type: &str,
+    _array_type: &str,
     counts: LamellarWriteArray<T>,
     rand_index: &ReadOnlyArray<usize>,
     world: &LamellarWorld,
@@ -54,7 +54,7 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
             mb_sent,
             mb_sent / global_time,
         );
-        println!("MUPS: {:?}, {:?}", global_mups, array_type);
+        println!("MUPS: {:?}, {:?}", global_mups, _array_type);
         */
     }
 
