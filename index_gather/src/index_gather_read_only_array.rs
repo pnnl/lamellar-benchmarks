@@ -25,7 +25,7 @@ fn main() {
         .unwrap_or(1000);
 
     // --- benchmark record ---
-    let mut bench = BenchmarkInformation::with_name("index_gather_read_only_array");
+    let mut bench = BenchmarkInformation::new();
     bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
     bench.with_output("updates_per_pe", l_num_updates.to_string());
     bench.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());

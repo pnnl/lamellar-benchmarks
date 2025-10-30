@@ -25,7 +25,7 @@ fn main() {
         .unwrap_or(DEFAULT_TARGET_FACTOR);
 
     // --- benchmark record ---
-    let mut bench = BenchmarkInformation::with_name("randperm");
+    let mut bench = BenchmarkInformation::new();
     bench.with_output("num_pes", num_pes.to_string());
     bench.with_output("global_count", global_count.to_string());
     bench.with_output("target_factor", target_factor.to_string());

@@ -142,7 +142,7 @@ fn main() {
         }
 
         // fresh record per buf_size (one JSON line per iteration)
-        let mut bench = BenchmarkInformation::with_name("triangle_count_buffered");
+        let mut bench = BenchmarkInformation::new();
         bench.with_output("num_pes", num_pes.to_string());
         bench.with_output("launch_threads", launch_threads.to_string());
         bench.with_output("buf_size", buf_size.to_string());
