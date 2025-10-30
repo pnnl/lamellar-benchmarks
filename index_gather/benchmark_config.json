@@ -1,0 +1,16 @@
+{
+  "group_name": "index_gather",
+  "benchmarks": [
+    "index_gather_atomic_array",
+    "index_gather_read_only_array"
+  ],
+  "benchmark_dir": ".",
+  "n": 3,
+  "benchmark_parameters": [],
+  "lamellar_versions": ["0.7.1"],
+  "slurm_configurations": [
+    { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [2], "cpus-per-task": [32] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [4], "cpus-per-task": [16] }
+  ]
+}

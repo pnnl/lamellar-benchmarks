@@ -1,26 +1,37 @@
 use lamellar::array::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
+use benchmark_record::BenchmarkInformation;
+
+const DEFAULT_GLOBAL_COUNT: usize = 1000;
+const DEFAULT_TARGET_FACTOR: usize = 10;
 
 fn main() {
+    // --- world / args ---
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
+
+    // args: <global_count> <target_factor>
     let global_count = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(1000); //size of permuted array
+        .unwrap_or(DEFAULT_GLOBAL_COUNT);
+
     let target_factor = args
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(10); //multiplication factor for target array
+        .unwrap_or(DEFAULT_TARGET_FACTOR);
 
-    if my_pe == 0 {
-        println!("array size {}", global_count);
-        println!("target array size {}", global_count * target_factor);
-    }
+    // --- benchmark record ---
+    let mut bench = BenchmarkInformation::new();
+    bench.with_output("num_pes", num_pes.to_string());
+    bench.with_output("global_count", global_count.to_string());
+    bench.with_output("target_factor", target_factor.to_string());
+    bench.with_output("table_size_total", (global_count * target_factor).to_string());
 
-    // start with unsafe because they are faster to initialize than AtomicArrays
+    // --- array setup ---
     let darts_array = UnsafeArray::<usize>::new(
         world.team(),
         global_count,
@@ -33,47 +44,49 @@ fn main() {
     );
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
-    //Ensure all arrays finish building...
+    // Ensure arrays finish building
     let darts_array = darts_array.block();
     let target_array = target_array.block();
 
-    // initialize arrays
+    // initialize arrays: darts holds 0..global_count, target is all MAX (empty)
     let darts_init = unsafe {
         darts_array
             .dist_iter_mut()
             .enumerate()
             .for_each(|(i, x)| *x = i)
-    }; // each PE some slice in [0..global_count]
-    let target_init = unsafe { target_array.dist_iter_mut().for_each(|x| *x = usize::MAX) };
+    };
+    let target_init = unsafe {
+        target_array
+            .dist_iter_mut()
+            .for_each(|x| *x = usize::MAX)
+    };
     world.block_on(darts_init);
     world.block_on(target_init);
     world.wait_all();
 
+    // Convert to read-only for darts; atomic for target
     let darts_array = darts_array.into_read_only().block();
     let target_array = target_array.into_atomic().block();
-    let local_darts = darts_array.local_data(); //will use this slice for first iteration
+
+    // local darts slice
+    let local_darts = darts_array.local_data();
 
     world.barrier();
-    if my_pe == 0 {
-        println!("start");
-    }
     let now = Instant::now();
 
-    // ====== perform the actual random permute========//
+    // ====== perform the actual random permute ====== //
     let rand_index = (0..local_darts.len())
-        .map(|_| rng.gen_range(0, global_count * target_factor))
+        .map(|_| rng.gen_range(0, global_count * target_factor)) // rand 0.6 signature
         .collect::<Vec<usize>>();
 
-    // launch initial set of darts, and collect any that didnt stick
+    // launch initial set of darts, and collect any that didn't stick
     let mut remaining_darts = world
         .block_on(target_array.batch_compare_exchange(&rand_index, usize::MAX, local_darts))
         .iter()
         .enumerate()
-        .filter_map(|(i, elem)| {
-            match elem {
-                Ok(_val) => None,               //the dart stuck!
-                Err(_) => Some(local_darts[i]), //something else was there, try again
-            }
+        .filter_map(|(i, elem)| match elem {
+            Ok(_val) => None,                   // dart stuck
+            Err(_prev) => Some(local_darts[i]), // collision: try again
         })
         .collect::<Vec<usize>>();
 
@@ -82,66 +95,72 @@ fn main() {
         let rand_index = (0..remaining_darts.len())
             .map(|_| rng.gen_range(0, global_count * target_factor))
             .collect::<Vec<usize>>();
+
         remaining_darts = world
-            .block_on(target_array.batch_compare_exchange(
-                &rand_index,
-                usize::MAX,
-                remaining_darts.clone(),
-            ))
+            .block_on(target_array.batch_compare_exchange(&rand_index, usize::MAX, &remaining_darts))
             .iter()
             .enumerate()
-            .filter_map(|(i, elem)| {
-                match elem {
-                    Ok(_val) => None,                   //the dart stuck!
-                    Err(_) => Some(remaining_darts[i]), //something else was there, try again
-                }
+            .filter_map(|(i, elem)| match elem {
+                Ok(_val) => None,
+                Err(_prev) => Some(remaining_darts[i]),
             })
             .collect::<Vec<usize>>();
     }
-    world.wait_all(); //my work is done
-    if my_pe == 0 {
-        println!("local run time {:?} ", now.elapsed(),);
-    }
-    world.barrier(); //all work is done
-    if my_pe == 0 {
-        println!("permute time {:?} ", now.elapsed(),);
-    }
+
+    world.wait_all();
+    world.barrier();
+
+    let permute_secs = now.elapsed().as_secs_f64();
+
+    // Collect: filter out MAX entries and gather to a ReadOnlyArray
     let collect_start = Instant::now();
     let the_array = world.block_on(
         target_array
             .dist_iter()
             .filter_map(|elem| {
-                let elem = elem.load(); //elements are atomic so we cant just read directly
-                if elem < usize::MAX {
-                    Some(elem)
-                } else {
-                    None
-                }
+                let elem = elem.load();
+                if elem < usize::MAX { Some(elem) } else { None }
             })
             .collect::<ReadOnlyArray<usize>>(lamellar::array::Distribution::Block),
-    ); //need to work on collect performance from within the runtime
-       // =============================================================//
+    );
+    let collect_secs = collect_start.elapsed().as_secs_f64();
 
-    let global_time = now.elapsed().as_secs_f64();
+    // Global metrics
+    let global_time = permute_secs; // total permute time measured above
+    bench.with_output("permute_time_secs", format!("{:.6}", permute_secs));
+    bench.with_output("collect_time_secs", format!("{:.6}", collect_secs));
+    bench.with_output("global_time_secs", format!("{:.6}", global_time));
+
+    let total_updates = global_count; // one write per element across PEs
+    let mups = (total_updates as f64 / 1_000_000.0) / global_time.max(1e-12);
+    bench.with_output("MUPS", format!("{:.6}", mups));
+
+    let mb_sent = world.MB_sent();
+    bench.with_output("MB_sent", format!("{:.6}", mb_sent));
+    bench.with_output("MB_per_sec", format!("{:.6}", mb_sent / global_time.max(1e-12)));
+
+    // optional correctness check
     if my_pe == 0 {
-        println!("collect time: {:?}", collect_start.elapsed());
-        println!(
-            "global time {:?} MB {:?} MB/s: {:?} ",
-            global_time,
-            (world.MB_sent()),
-            (world.MB_sent()) / global_time,
-        );
-        println!("Secs: {:?}", global_time,);
         if let Some(sum) = world.block_on(the_array.sum()) {
-            println!(
-                "reduced sum: {sum} calculated sum {} ",
-                (global_count * (global_count + 1) / 2) - global_count
-            );
-            if sum != (global_count * (global_count + 1) / 2) - global_count {
-                println!("Error! randperm not as expected");
-            }
+            let expected = (global_count * (global_count + 1) / 2) - global_count; // n(n-1)/2
+            bench.with_output("reduced_sum", (sum as u64).to_string());
+            bench.with_output("expected_sum", (expected as u64).to_string());
+            bench.with_output("sum_match", (sum == expected).to_string());
         } else {
-            println!("Error! randperm computation failed");
+            bench.with_output("reduced_sum", "null".into());
+            bench.with_output("expected_sum", "null".into());
+            bench.with_output("sum_match", "false".into());
         }
+    }
+
+    if my_pe == 0 {
+        let result_path = benchmark_record::default_output_path("benchmarking");
+        println!(
+            "PE {my_pe}: permute {:.6}s, collect {:.6}s, MUPS {:.6} -> {:?}",
+            permute_secs, collect_secs, mups, result_path
+        );
+        bench.write(&result_path);
+        println!("Benchmark Results");
+        bench.display(Some(3));
     }
 }

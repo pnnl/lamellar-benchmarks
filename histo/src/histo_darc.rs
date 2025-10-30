@@ -1,3 +1,11 @@
+// this code sets up a distributed counter array - a 'histogram' (like all other codes)
+// It builds a vector of atomic counters that’s shared across all processes/PEs using Lamellar’s Darc (a distributed, ref-counted container).
+// Then, each PE creates a list of random indices into the histogram.
+// For each random index, the program sends a Lamellar active message to the PE responsible for that bin, 
+// asking it to atomically increment the counter at that offset. This simulates a typical irregular, communication-heavy HPC workload.
+// Then it measures the local run time, global run time, and MUPs.
+// Tests: communication between nodes, synchronization, and throughput. 
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 
@@ -5,6 +13,7 @@ use rand::prelude::*;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+use benchmark_record;
 
 const COUNTS_LOCAL_LEN: usize = 10000000;
 
@@ -72,10 +81,13 @@ fn histo(
 //===== HISTO END ======
 
 fn main() {
+
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
+
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
         .get(1)
@@ -105,44 +117,30 @@ fn main() {
     let now = Instant::now();
     let launch_tasks = histo(l_num_updates, num_threads, &world, rand_index, &counts);
 
-    if my_pe == 0 {
-        println!("{:?} issue time {:?} ", my_pe, now.elapsed());
-    }
+    result_record.with_output("issue_start_time", now.elapsed().as_secs_f64().to_string());
+
     world.block_on(async move {
         for task in launch_tasks {
             task.await;
         }
     });
-    if my_pe == 0 {
-        println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
-    }
-    world.wait_all();
 
-    if my_pe == 0 {
-        println!(
-            "local run time {:?} local mups: {:?}",
-            now.elapsed(),
-            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
-        );
-    }
+    result_record.with_output("issue_complete_time", now.elapsed().as_secs_f64().to_string());
+    world.wait_all();
+    result_record.with_output("local_run_time", now.elapsed().as_secs_f64().to_string());
     world.barrier();
+    
+
     let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        println!(
-            "MUPS: {:?}",
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
-    }
-    if my_pe == 0 {
-        println!(
-            "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",
-            my_pe,
-            global_time,
-            world.MB_sent(),
-            world.MB_sent() / global_time,
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
-    }
+    let total_updates = (l_num_updates * num_pes) as f64;
+    let global_mups = (total_updates / 1_000_000.0) / global_time;
+    let mb_sent = world.MB_sent();
+    let mb_per_sec = mb_sent / global_time;
+
+    result_record.with_output("global_execution_time (secs)", global_time.to_string());
+    result_record.with_output("MUPS", global_mups.to_string());
+    result_record.with_output("MB_sent", mb_sent.to_string());
+    result_record.with_output("MB_per_sec", mb_per_sec.to_string());
 
     println!(
         "pe {:?} sum {:?}",
@@ -152,4 +150,10 @@ fn main() {
             .map(|e| e.load(Ordering::Relaxed))
             .sum::<usize>()
     );
+
+    if my_pe == 0 {
+        result_record.write(&benchmark_record::default_output_path("benchmarking"));
+        println!("Benchmark Results:");
+        result_record.display(Some(3));
+    }
 }

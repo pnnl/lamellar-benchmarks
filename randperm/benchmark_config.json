@@ -1,0 +1,20 @@
+{
+  "group_name": "randperm",
+  "benchmarks": [
+    "randperm"
+  ],
+  "benchmark_dir": ".",
+  "n": 3,
+  "benchmark_parameters": [ 
+    "1000 10",
+    "1000 20",
+    "10000 10",
+    "10000 20"
+  ],
+  "lamellar_versions": ["0.7.1"],
+  "slurm_configurations": [
+    { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [2], "cpus-per-task": [32] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [4], "cpus-per-task": [16] }
+  ]
+}

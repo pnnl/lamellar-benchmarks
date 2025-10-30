@@ -1,8 +1,8 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
-
 use std::sync::atomic::{AtomicUsize, Ordering};
+use benchmark_record;
 
 #[lamellar::AmData]
 struct CntAm {
@@ -104,17 +104,22 @@ impl LamellarAM for TcAm {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
-    let launch_threads = if args.len() > 2 {
-        match &args[2].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
+    let launch_threads = args
+        .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
+
+    let mut bench = benchmark_record::BenchmarkInformation::new();
+    bench.with_output("my_pe", my_pe.to_string());
+    bench.with_output("num_pes", num_pes.to_string());
+
     //this loads, reorders, and distributes the graph to all PEs
     let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
     graph.dump_to_bin(&format!("{file}.bin"));
@@ -150,13 +155,17 @@ fn main() {
         }
     });
     if my_pe == 0 {
-        println!("issue time: {:?}", timer.elapsed().as_secs_f64())
+        let issue_secs = timer.elapsed().as_secs_f64();
+        println!("issue time: {:?}", issue_secs);
+        bench.with_output("issue_time (secs)", issue_secs.to_string());
     };
     // at this point all the triangle counting active messages have been initiated.
 
     world.wait_all(); //wait for all the triangle counting active messages to finish locally
     if my_pe == 0 {
-        println!("local time: {:?}", timer.elapsed().as_secs_f64())
+        let local_secs = timer.elapsed().as_secs_f64();
+        println!("local time: {:?}", local_secs);
+        bench.with_output("local_time (secs)", local_secs.to_string());
     };
 
     world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
@@ -176,11 +185,17 @@ fn main() {
     }
     world.barrier(); //at this point the final triangle counting result is available on PE 0
 
+    let global_secs = timer.elapsed().as_secs_f64();
+    bench.with_output("triangles_counted", (final_cnt.load(Ordering::SeqCst) as u64).to_string());
+    bench.with_output("global_time_secs", global_secs.to_string());
+
     if my_pe == 0 {
         println!(
             "triangles counted: {:?} global time: {:?}",
             final_cnt.load(Ordering::SeqCst),
-            timer.elapsed().as_secs_f64()
-        )
+            global_secs
+        );
+        bench.write(&benchmark_record::default_output_path("benchmarking"));
     };
+
 }

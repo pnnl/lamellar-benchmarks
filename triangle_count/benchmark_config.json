@@ -1,0 +1,17 @@
+{
+  "group_name": "triangle_counts",
+  "benchmarks": [
+    "triangle_count",
+    "triangle_count_buffered"
+  ],
+  "benchmark_dir": ".",
+  "n": 3,
+  "lamellar_versions": ["0.7.1"],
+  "benchmark_parameters": ["input_graphs/graph500-scale18-ef16_adj.tsv"],
+  "slurm_configurations": [
+    { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [2], "cpus-per-task": [32] },
+    { "nodes": [1, 2, 4], "ntasks-per-node": [4], "cpus-per-task": [16] }
+  ]
+}
+

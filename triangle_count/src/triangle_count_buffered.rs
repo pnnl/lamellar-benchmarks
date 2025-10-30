@@ -2,13 +2,15 @@ use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
+use std::time::Instant;
+use benchmark_record::BenchmarkInformation;
 
 #[lamellar::AmLocalData]
 struct LaunchAm {
     graph: Graph,
     start: u32,
     end: u32,
-    final_cnt: AtomicArray<usize>, //Instead of Darc<AtomicUsize> (as in the non buffered version), we can also use a atomic array to keep track of the counts.
+    final_cnt: AtomicArray<usize>, // count per-PE (one slot per PE)
     buf_size: usize,
 }
 
@@ -19,6 +21,7 @@ impl LamellarAM for LaunchAm {
         let graph_data = self.graph.data();
         let mut buffer = vec![];
         let mut cur_len = 0;
+
         for node_0 in (self.start..self.end).filter(|n| self.graph.node_is_local(n)) {
             let neighs = graph_data
                 .neighbors_iter(&node_0)
@@ -26,7 +29,7 @@ impl LamellarAM for LaunchAm {
                 .map(|n| *n)
                 .collect::<Vec<u32>>();
             cur_len += neighs.len();
-            buffer.push((node_0, neighs)); // pack the node and neighbors into the buffer
+            buffer.push((node_0, neighs)); // pack node + neighbors
             if cur_len > self.buf_size {
                 let _ = task_group
                     .exec_am_all(BufferedTcAm {
@@ -39,8 +42,9 @@ impl LamellarAM for LaunchAm {
                 cur_len = 0;
             }
         }
+
         if cur_len > 0 {
-            //send the remaining data
+            // send remaining
             let _ = task_group
                 .exec_am_all(BufferedTcAm {
                     graph: graph_data.clone(),
@@ -49,6 +53,7 @@ impl LamellarAM for LaunchAm {
                 })
                 .spawn();
         }
+
         task_group.await_all().await;
     }
 }
@@ -88,9 +93,8 @@ impl LamellarAM for BufferedTcAm {
     async fn exec() {
         let mut cnt = 0;
         for (_node_0, neighbors) in &self.data {
-            // this loop is not present in the non-buffered version
+            // loop over neighbors that are local to this PE
             for node_1 in neighbors.iter().filter(|n| self.graph.node_is_local(n)) {
-                //check to make sure node_1 is local to this pe
                 let neighs_1 = self
                     .graph
                     .neighbors_iter(node_1)
@@ -98,43 +102,56 @@ impl LamellarAM for BufferedTcAm {
                 cnt += BufferedTcAm::sorted_intersection_count(neighbors.iter(), neighs_1);
             }
         }
-        self.final_cnt.local_data().at(0).fetch_add(cnt); //we only need to update our local portion of the count, and we know each pe only has a single element of the cnt array
+        // one element per PE: update local slot
+        self.final_cnt.local_data().at(0).fetch_add(cnt);
     }
 }
 
 fn main() {
+    // --- args / world -------------------------------------------------------
     let args: Vec<String> = std::env::args().collect();
     let file = &args[1];
-    let launch_threads = if args.len() > 2 {
-        match &args[2].parse::<usize>() {
-            Ok(x) => *x,
-            Err(_) => 2,
-        }
-    } else {
-        2
-    };
+    let launch_threads = args
+        .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        });
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    //this loads, reorders, and distributes the graph to all PEs
-    let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
+    let num_pes = world.num_pes();
 
-    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block(); // convert it to an atomic array (which is accessible to all PEs)
+    // --- graph & counters ---------------------------------------------------
+    let graph: Graph = Graph::new(file, GraphType::MapGraph, world.clone());
+    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
 
     if my_pe == 0 {
-        println!("num nodes {:?}", graph.num_nodes())
-    };
-    // this section of code creates and executes a number of "LaunchAMs" so that we
-    // can use multiple threads to initiate the triangle counting active message.
-    let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
+        println!("num nodes {:?}", graph.num_nodes());
+    }
 
-    for buf_size in [10, 100, 1000, 10000, 100000, 1000000].iter() {
-        // for buf_size in [100000].iter() {
+    // --- per-thread batch size (same as original) ---------------------------
+    let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
+    let benchmark_result_file = benchmark_record::default_output_path("benchmarking");
+
+    // --- main loop over buffer sizes (preserved) ----------------------------
+    for buf_size in [10usize, 100, 1000, 10000, 100000, 1000000].iter().copied() {
         if my_pe == 0 {
             println!("using buf_size: {:?}", buf_size);
         }
+
+        // fresh record per buf_size (one JSON line per iteration)
+        let mut bench = BenchmarkInformation::new();
+        bench.with_output("num_pes", num_pes.to_string());
+        bench.with_output("launch_threads", launch_threads.to_string());
+        bench.with_output("buf_size", buf_size.to_string());
+        bench.with_output("num_nodes", graph.num_nodes().to_string());
+
         world.barrier();
-        let timer = std::time::Instant::now();
+        let timer = Instant::now();
+
+        // spawn LaunchAMs
         let mut reqs = vec![];
         for tid in 0..launch_threads {
             let start = (tid as f32 * batch_size).round() as u32;
@@ -143,43 +160,67 @@ fn main() {
                 world
                     .exec_am_local(LaunchAm {
                         graph: graph.clone(),
-                        start: start,
-                        end: end,
+                        start,
+                        end,
                         final_cnt: final_cnt.clone(),
-                        buf_size: *buf_size,
+                        buf_size,
                     })
                     .spawn(),
             );
         }
 
-        //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
-        // calling wait_all() here will block until all the AMs including the LaunchAMs and the TcAMs have finished.
+        // wait for LaunchAMs to finish (issue time)
         world.block_on(async move {
             for req in reqs {
                 req.await;
             }
         });
+
+        let issue_secs = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64())
-        };
-        // at this point all the triangle counting active messages have been initiated.
+            println!("issue time: {:.6}", issue_secs);
+        }
+        bench.with_output("issue_time_secs", format!("{:.6}", issue_secs));
 
-        world.wait_all(); //wait for all the triangle counting active messages to finish locally
+        // wait for local completion
+        world.wait_all();
+        let local_secs = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            println!("local time: {:?}", timer.elapsed().as_secs_f64())
-        };
+            println!("local time: {:.6}", local_secs);
+        }
+        bench.with_output("local_time_secs", format!("{:.6}", local_secs));
 
-        world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
+        // global completion
+        world.barrier();
+        let final_cnt_sum = world.block_on(final_cnt.sum()); // reduce count across PEs
 
-        let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
+        let global_secs = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
             println!(
-                "triangles counted: {:?}\nglobal time: {:?}",
-                final_cnt_sum,
-                timer.elapsed().as_secs_f64()
+                "triangles counted: {:?}\nglobal time: {:.6}",
+                final_cnt_sum, global_secs
             );
-            println!();
         }
-        world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0))); //reset the final count array
+        bench.with_output("global_time_secs", format!("{:.6}", global_secs));
+
+        // record triangle count (or null)
+        if let Some(sum) = final_cnt_sum {
+            bench.with_output("triangles_counted", (sum as u64).to_string());
+        } else {
+            bench.with_output("triangles_counted", "<None>".into());
+        }
+
+        // network stats
+        let mb_sent = world.MB_sent();
+        bench.with_output("MB_sent",  mb_sent.to_string());
+        bench.with_output("MB_per_sec", (mb_sent / global_secs.max(1e-12)).to_string());
+
+        if my_pe == 0 {
+            bench.write(&benchmark_result_file);
+            println!("Benchmark Results for buf_size: {buf_size}");
+            bench.display(Some(3));
+        }
+        // reset the counter array for the next buf_size
+        world.block_on(final_cnt.dist_iter().for_each(|x| x.store(0)));
     }
 }

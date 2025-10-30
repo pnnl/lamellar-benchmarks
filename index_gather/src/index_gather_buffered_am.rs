@@ -1,12 +1,13 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
-
 use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
+use benchmark_record::BenchmarkInformation;
 
-const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
-                                         //===== HISTO BEGIN ======
+const COUNTS_LOCAL_LEN: usize = 1_000_000; // this will be 800MB on each PE
+
+// ===== INDEX_GATHER (Buffered AM) =====
 
 #[lamellar::AmData(Clone, Debug)]
 struct IndexGatherBufferedAM {
@@ -39,6 +40,7 @@ impl LamellarAM for LaunchAm {
         let mut buffs: std::vec::Vec<std::vec::Vec<usize>> =
             vec![Vec::with_capacity(self.buffer_amt); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
+
         for idx in unsafe { self.rand_index.as_slice().unwrap() } {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
@@ -50,7 +52,7 @@ impl LamellarAM for LaunchAm {
                     .exec_am_pe(
                         rank,
                         IndexGatherBufferedAM {
-                            buff: buff,
+                            buff,
                             counts: self.counts.clone(),
                         },
                     )
@@ -58,15 +60,16 @@ impl LamellarAM for LaunchAm {
                 buffs[rank].clear();
             }
         }
-        //send any remaining buffered updates
+
+        // send any remaining buffered updates
         for rank in 0..num_pes {
             let buff = buffs[rank].clone();
-            if buff.len() > 0 {
+            if !buff.is_empty() {
                 task_group
                     .exec_am_pe(
                         rank,
                         IndexGatherBufferedAM {
-                            buff: buff,
+                            buff,
                             counts: self.counts.clone(),
                         },
                     )
@@ -92,13 +95,13 @@ fn histo(
         launch_tasks.push(world.exec_am_local(LaunchAm {
             rand_index: rand_index.sub_region(start..end),
             counts: counts.clone(),
-            buffer_amt: buffer_amt,
+            buffer_amt,
         }));
     }
     launch_tasks
 }
 
-//===== HISTO END ======
+// ===== MAIN =====
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -106,8 +109,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
+
     let l_num_updates = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
@@ -117,6 +122,7 @@ fn main() {
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1000);
+
     let num_threads = args
         .get(3)
         .and_then(|s| s.parse::<usize>().ok())
@@ -125,11 +131,11 @@ fn main() {
             Err(_) => 1,
         });
 
-    if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
-    }
+    // === Initialize Benchmark Record ===
+    let mut bench = BenchmarkInformation::new();
+    bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    bench.with_output("updates_per_pe", l_num_updates.to_string());
+    bench.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
@@ -141,12 +147,15 @@ fn main() {
             *elem = 0;
         }
         for elem in rand_index.as_mut_slice().unwrap().iter_mut() {
+            // NOTE: rand 0.8+ API
             *elem = rng.gen_range(0, global_count);
         }
     }
 
+    // === Execute benchmark ===
     world.barrier();
     let now = Instant::now();
+
     let launch_tasks = histo(
         l_num_updates,
         num_threads,
@@ -156,53 +165,37 @@ fn main() {
         buffer_amt,
     );
 
-    if my_pe == 0 {
-        println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
-    }
     world.block_on(async move {
         for task in launch_tasks {
             task.await;
         }
     });
-    if my_pe == 0 {
-        println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
-    }
+
     world.wait_all();
-    if my_pe == 0 {
-        println!(
-            "local run time {:?} local mups: {:?}",
-            now.elapsed(),
-            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
-        );
-    }
     world.barrier();
+
     let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        println!(
-            "MUPS: {:?}",
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
-        println!("Secs: {:?}", global_time,);
-        println!(
-            "GB/s Injection rate: {:?}",
-            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
-        );
-    }
+
+    // === Collect metrics ===
+    bench.with_output("num_pes", num_pes.to_string());
+    bench.with_output("num_threads", num_threads.to_string());
+    bench.with_output("global_execution_time_secs", global_time.to_string());
+
+    let global_mups = ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time;
+    bench.with_output("MUPS", global_mups.to_string());
+
+    let mb_sent = world.MB_sent();
+    bench.with_output("MB_sent", mb_sent.to_string());
+    bench.with_output("MB_per_sec", (mb_sent / global_time).to_string());
+    bench.with_output("GB_s_injection_rate", (8.0 * (l_num_updates * 2) as f64 * 1.0E-9 / global_time).to_string());
+ 
+
+    // Optional: sanity metric (sum of counts)
+    let pe_sum: u64 = unsafe { counts.as_slice().unwrap().iter().sum::<usize>() as u64 };
+    bench.with_output("pe_sum", pe_sum.to_string());
 
     if my_pe == 0 {
-        println!(
-            "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",
-            my_pe,
-            global_time,
-            world.MB_sent(),
-            world.MB_sent() / global_time,
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
+        println!("Global time: {:.3}s, MUPS: {:.3}", global_time, global_mups);
+        bench.write(&benchmark_record::default_output_path("benchmarking"));
     }
-
-    // println!(
-    //     "pe {:?} sum {:?}",
-    //     my_pe,
-    //     counts.as_slice().unwrap().iter().sum::<usize>()
-    // );
 }

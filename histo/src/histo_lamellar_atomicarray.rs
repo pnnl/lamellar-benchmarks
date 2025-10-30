@@ -5,8 +5,7 @@ use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-
-//===== HISTO BEGIN ======
+use benchmark_record;
 
 fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
     let _ = counts.batch_add(rand_index.local_data(), 1).spawn();
@@ -27,11 +26,11 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1000);
 
-    if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
-    }
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
+
+    result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    result_record.with_output("updates_per_pe", l_num_updates.to_string());
+    result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
 
     let unsafe_counts = UnsafeArray::<usize>::new(
         world.team(),
@@ -49,7 +48,7 @@ fn main() {
     let unsafe_counts = unsafe_counts.block();
 
     // initialize arrays
-    let counts_init = unsafe { unsafe_counts.dist_iter_mut().for_each(|x| *x = 0) };
+    let counts_init = unsafe { unsafe_counts.dist_iter_mut().for_each(|x| *x = 0).spawn() };
     // rand_index.dist_iter_mut().for_each(move |x| *x = rng.lock().gen_range(0,global_count)).wait(); //this is slow because of the lock on the rng so we will do unsafe slice version instead...
 
     let rand_index = rand_index.block();
@@ -67,37 +66,28 @@ fn main() {
 
     let now = Instant::now();
     histo(&counts, &rand_index);
-    if my_pe == 0 {
-        println!("{:?} issue time {:?} ", my_pe, now.elapsed());
-    }
+    result_record.with_output("issue_time (sec)", now.elapsed().as_secs_f64().to_string());
+    
     counts.wait_all();
-    if my_pe == 0 {
-        println!(
-            "local run time {:?} local mups: {:?}",
-            now.elapsed(),
-            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
-        );
-    }
+    let local_run = now.elapsed();
+    
+    result_record.with_output("local_run_time (secs)", local_run.as_secs_f64().to_string());
+    result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / local_run.as_secs_f64()).to_string());
+
     counts.barrier();
     let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        println!(
-            "global time {:?} MB {:?} MB/s: {:?} ",
-            global_time,
-            (world.MB_sent()),
-            (world.MB_sent()) / global_time,
-        );
-        println!(
-            "MUPS: {:?}",
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time,
-        );
-        println!("Secs: {:?}", global_time,);
+    
+    let mb_sent = world.MB_sent();
+    result_record.with_output("global_run_time (secs)", global_time.to_string());
+    result_record.with_output("MB_sent", mb_sent.to_string());
+    result_record.with_output("MB_per_sec", (mb_sent / global_time).to_string());
+    result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
+    result_record.with_output("gb_per_s_injection_rate", ((8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time).to_string());
 
-        println!(
-            "GB/s Injection rate: {:?}",
-            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
-        );
-        println!("(({l_num_updates}*{num_pes})/1_000_000) ");
-    }
     // println!("pe {:?} sum {:?}", my_pe, world.block_on(counts.sum()));
+    if my_pe == 0 {
+        result_record.write(&benchmark_record::default_output_path("benchmarking"));
+        println!("Benchmark Results:");
+        result_record.display(Some(3));
+    }
 }

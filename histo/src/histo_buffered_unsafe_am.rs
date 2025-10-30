@@ -4,9 +4,11 @@ use lamellar::memregion::prelude::*;
 use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
+use benchmark_record;
 
-const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each pe
-                                         //===== HISTO BEGIN ======
+const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each
+
+//===== HISTO BEGIN ======
 
 #[lamellar::AmData(Clone, Debug)]
 struct HistoBufferedAM {
@@ -106,6 +108,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    let mut result_record = benchmark_record::BenchmarkInformation::new();
+
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
@@ -125,11 +129,10 @@ fn main() {
             Err(_) => 1,
         });
 
-    if my_pe == 0 {
-        println!("updates total {}", l_num_updates * num_pes);
-        println!("updates per pe {}", l_num_updates);
-        println!("table size per pe{}", COUNTS_LOCAL_LEN);
-    }
+    
+    result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
+    result_record.with_output("updates_per_pe", l_num_updates.to_string());
+    result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());
 
     let rand_index = world.alloc_one_sided_mem_region(l_num_updates);
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
@@ -155,53 +158,33 @@ fn main() {
         buffer_amt,
     );
 
-    if my_pe == 0 {
-        println!("{:?} issue time {:?} ", my_pe, now.elapsed(),);
-    }
+    result_record.with_output("issue_time (secs)", now.elapsed().as_secs_f64().to_string());
     world.block_on(async move {
         for task in launch_tasks {
             task.await;
         }
     });
-    if my_pe == 0 {
-        println!("{:?} launch task time {:?} ", my_pe, now.elapsed(),);
-    }
+    result_record.with_output("launch_task_time (secs)", now.elapsed().as_secs_f64().to_string());
+
     world.wait_all();
-    if my_pe == 0 {
-        println!(
-            "local run time {:?} local mups: {:?}",
-            now.elapsed(),
-            (l_num_updates as f32 / 1_000_000.0) / now.elapsed().as_secs_f32()
-        );
-    }
+    result_record.with_output("local_run_time (secs)", now.elapsed().as_secs_f64().to_string());
+    result_record.with_output("local_mups", ((l_num_updates as f64 / 1_000_000.0) / now.elapsed().as_secs_f64()).to_string());
     world.barrier();
+
     let global_time = now.elapsed().as_secs_f64();
-    if my_pe == 0 {
-        println!(
-            "MUPS: {:?}",
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
-        println!("Secs: {:?}", global_time,);
-        println!(
-            "GB/s Injection rate: {:?}",
-            (8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time,
-        );
-    }
+    result_record.with_output("MUPS", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
+    result_record.with_output("global_execution_time (secs)", global_time.to_string());
+    result_record.with_output("gb_per_s_injection_rate", ((8.0 * (l_num_updates * 2) as f64 * 1.0E-9) / global_time).to_string());
+    result_record.with_output("global_time (secs)", global_time.to_string());
+    result_record.with_output("MB_sent", world.MB_sent().to_string());
+    result_record.with_output("MB_per_s", (world.MB_sent() / global_time).to_string());
+    result_record.with_output("global_mups", (((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time).to_string());
+    result_record.with_output("pe_sum", (unsafe { counts.as_slice().unwrap().iter().sum::<usize>() } as u64).to_string());
 
+    // append to our JSON file
     if my_pe == 0 {
-        println!(
-            "{:?} global time {:?} MB {:?} MB/s: {:?} global mups: {:?} ",
-            my_pe,
-            global_time,
-            world.MB_sent(),
-            world.MB_sent() / global_time,
-            ((l_num_updates * num_pes) as f64 / 1_000_000.0) / global_time
-        );
+        result_record.write(&benchmark_record::default_output_path("benchmarking"));
+        println!("Benchmark Results:");
+        result_record.display(Some(3));
     }
-
-    // println!(
-    //     "pe {:?} sum {:?}",
-    //     my_pe,
-    //     counts.as_slice().unwrap().iter().sum::<usize>()
-    // );
 }
