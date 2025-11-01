@@ -19,3 +19,8 @@ Cargo.lock
 # Unzipped graph files
 *.tsv
 *.tsv.bin
+
+
+# json files
+
+*.json

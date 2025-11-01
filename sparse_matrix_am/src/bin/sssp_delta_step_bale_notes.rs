@@ -128,3 +128,6 @@
 //         p = tent[v] + c  // possible new price of w
 
 //         relax (w, p, B)  // won't add w to B[i]
+
+
+fn main() {}

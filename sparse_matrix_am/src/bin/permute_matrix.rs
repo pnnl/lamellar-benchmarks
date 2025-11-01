@@ -193,6 +193,7 @@ fn main() {
         println!("Time to initialize matrix:          {:?}", time_to_initialize );
         println!("Time to permute:                    {:?}", time_to_permute );
         println!("");
+        println!("{:?}", time_to_permute.as_secs() as f64 + time_to_permute.subsec_nanos() as f64 * 1e-9); // we add this extra line at the end so we can feed the run time into a bash script, if desired
 
     }    
     
