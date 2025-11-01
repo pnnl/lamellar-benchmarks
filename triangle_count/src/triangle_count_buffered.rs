@@ -133,7 +133,6 @@ fn main() {
 
     // --- per-thread batch size (same as original) ---------------------------
     let batch_size = (graph.num_nodes() as f32) / (launch_threads as f32);
-    let benchmark_result_file = benchmark_record::default_output_path("benchmarking");
 
     // --- main loop over buffer sizes (preserved) ----------------------------
     for buf_size in [10usize, 100, 1000, 10000, 100000, 1000000].iter().copied() {
@@ -143,6 +142,8 @@ fn main() {
 
         // fresh record per buf_size (one JSON line per iteration)
         let mut bench = BenchmarkInformation::new();
+        let benchmark_result_file = bench.default_output_path("benchmarking");
+
         bench.with_output("num_pes", num_pes.to_string());
         bench.with_output("launch_threads", launch_threads.to_string());
         bench.with_output("buf_size", buf_size.to_string());

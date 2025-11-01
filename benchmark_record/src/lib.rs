@@ -9,7 +9,7 @@ use std::path::PathBuf;
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
 pub struct BenchmarkInformation {
-    pub benchark_name: String,
+    pub benchmark_name: String,
     executable: PathBuf,
     parameters: Vec<String>,
     run_date: String,
@@ -36,7 +36,7 @@ impl BenchmarkInformation {
     pub fn with_name(benchark_name: &str) -> Self {
         let executable_name = executable();
         Self {
-            benchark_name: benchark_name.to_string(),
+            benchmark_name: benchark_name.to_string(),
             executable: executable_name,
             parameters: env::args().skip(1).collect(),
             run_date: BenchmarkInformation::get_run_date(),
@@ -61,7 +61,7 @@ impl BenchmarkInformation {
     /// This is not intended as a stable API, but may be useful for some cases...use with caution.
     pub fn as_json(&self) -> JsonValue {
         json::object! {
-            "benchark name" => self.benchark_name.clone(),
+            "benchark name" => self.benchmark_name.clone(),
             "executable" => self.executable.to_string_lossy().to_string(),
             "parameters" => self.parameters.clone(),
             "run_date" => self.run_date.clone(),
@@ -103,6 +103,15 @@ impl BenchmarkInformation {
             let _ = writeln!(f, "{}", json::stringify(json_obj));
         }
     }
+
+    /// Generate a default output file name based on the benchmark name and slurm ID or current time.
+    pub fn default_output_path(&self, root: &str) -> PathBuf {
+        let stem = self.benchmark_name.clone();
+        let time = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let id = self.slurm_params.get("SLURM_JOB_ID").unwrap_or(&time);        
+        PathBuf::from(format!("{root}/{stem}_{id}_result.jsonl"))
+    }
+
 
     /// Collects all environment variables that start with the given prefix into a HashMap
     fn collect_env_vars(prefix: &str) -> HashMap<String, String> {
@@ -317,12 +326,6 @@ pub fn default_benchmark_name() -> String {
         .to_string()
 }
 
-/// Generate a default output file name based on the benchmark name and current timestamp
-pub fn default_output_path(root: &str) -> PathBuf {
-    let stem = default_benchmark_name();
-    PathBuf::from(format!("{root}/{stem}_result.jsonl"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,7 +343,7 @@ mod tests {
     #[test]
     fn test_named() {
         let benchmark_info = BenchmarkInformation::with_name("MyBenchmark");
-        assert_eq!(benchmark_info.benchark_name, "MyBenchmark");
+        assert_eq!(benchmark_info.benchmark_name, "MyBenchmark");
     }
 
     #[test]
@@ -352,7 +355,8 @@ mod tests {
 
     #[test]
     fn test_default_output_path() {
-        let output_path = default_output_path(".");
+        let benchmark_info = BenchmarkInformation::new();
+        let output_path = benchmark_info.default_output_path(".");
         let output_path_str = output_path.to_string_lossy().to_string();
         println!("Default output file name: {output_path_str}");
 

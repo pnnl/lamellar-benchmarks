@@ -140,7 +140,7 @@ fn main() {
     result_record.with_output("pe_sum", (unsafe { counts.as_slice().unwrap().iter().sum::<usize>() } as u64).to_string());
 
     if my_pe == 0 {
-        result_record.write(&benchmark_record::default_output_path("benchmarking"));
+        result_record.write(&result_record.default_output_path("benchmarking"));
         println!("Benchmark Results:");
         result_record.display(Some(3));
     }

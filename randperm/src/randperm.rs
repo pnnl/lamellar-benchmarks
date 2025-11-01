@@ -154,7 +154,7 @@ fn main() {
     }
 
     if my_pe == 0 {
-        let result_path = benchmark_record::default_output_path("benchmarking");
+        let result_path = bench.default_output_path("benchmarking");
         println!(
             "PE {my_pe}: permute {:.6}s, collect {:.6}s, MUPS {:.6} -> {:?}",
             permute_secs, collect_secs, mups, result_path

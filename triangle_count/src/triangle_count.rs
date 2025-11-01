@@ -195,7 +195,7 @@ fn main() {
             final_cnt.load(Ordering::SeqCst),
             global_secs
         );
-        bench.write(&benchmark_record::default_output_path("benchmarking"));
+        bench.write(&bench.default_output_path("benchmarking"));
     };
 
 }

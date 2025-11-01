@@ -196,6 +196,6 @@ fn main() {
 
     if my_pe == 0 {
         println!("Global time: {:.3}s, MUPS: {:.3}", global_time, global_mups);
-        bench.write(&benchmark_record::default_output_path("benchmarking"));
+        bench.write(&bench.default_output_path("benchmarking"));
     }
 }
