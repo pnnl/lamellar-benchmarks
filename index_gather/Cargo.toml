@@ -1,6 +1,6 @@
 [package]
 name = "index_gather"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Ryan D. Friese", "Joseph A. Cottam"]
 edition = "2021"
 

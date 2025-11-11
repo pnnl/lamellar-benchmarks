@@ -1,6 +1,6 @@
 [package]
 name = "lamellar_graph"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["frie869 <ryan.friese@pnnl.gov>", "Joseph A. Cottam"]
 edition = "2021"
 
