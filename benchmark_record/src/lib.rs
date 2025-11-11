@@ -91,7 +91,9 @@ impl BenchmarkInformation {
     /// Write the captured information to a specified file in JSON format.
     /// Assumes the file is in JSON-lines format and appends to the end.
     /// Will create the file if it does not exist, appends to it if it does.
-    pub fn write(&self, file: &PathBuf) {
+    /// 
+    /// TODO: Should this return a Result<()>?  The write and flush do...
+    pub fn write(&self, file: &PathBuf){
         let json_obj = self.as_json();
 
         // Try to create parent directories
@@ -99,9 +101,10 @@ impl BenchmarkInformation {
             let _ = fs::create_dir_all(parent);
         }
 
-        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(file) {
-            let _ = writeln!(f, "{}", json::stringify(json_obj));
-        }
+        let _ = OpenOptions::new().create(true).append(true).open(file).and_then(|mut f| {
+            writeln!(f, "{}", json::stringify(json_obj))?;
+            f.sync_data()
+        });
     }
 
     /// Generate a default output file name based on the benchmark name and slurm ID or current time.
