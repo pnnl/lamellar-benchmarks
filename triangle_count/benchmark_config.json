@@ -9,7 +9,9 @@
   "n": 3,
   "package_configurations": [
       {"lamellar": "{ version = \"0.7.0\", features = [\"enable-rofi\"]}"},
-      {"lamellar": "{ version = \"0.7.0\"}"}
+      {"lamellar": "{ version = \"0.7.0\"}"},
+      {"lamellar": "{ version = \"0.7.1\", features = [\"enable-rofi\"]}"},
+      {"lamellar": "{ version = \"0.7.1\"}"}
   ],
   "benchmark_parameters": ["input_graphs/graph500-scale18-ef16_adj.tsv"],
   "slurm_configurations": [

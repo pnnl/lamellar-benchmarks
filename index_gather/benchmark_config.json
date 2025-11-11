@@ -10,7 +10,9 @@
   "benchmark_parameters": [],
   "package_configurations": [
       {"lamellar": "{ version = \"0.7.0\", features = [\"enable-rofi\"]}"},
-      {"lamellar": "{ version = \"0.7.0\"}"}
+      {"lamellar": "{ version = \"0.7.0\"}"},
+      {"lamellar": "{ version = \"0.7.1\", features = [\"enable-rofi\"]}"},
+      {"lamellar": "{ version = \"0.7.1\"}"}
   ],
   "slurm_configurations": [
     { "nodes": [1, 2, 4], "ntasks-per-node": [1], "cpus-per-task": [64] },
