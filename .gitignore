@@ -3,6 +3,7 @@
 Cargo.lock
 nohup.out
 **/benchmarking
+*.sh
 
 # mac-specific file
 .DS_Store
