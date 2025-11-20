@@ -16,6 +16,7 @@ pub struct BenchmarkInformation {
     output: HashMap<String, String>,
     build_type: String,
     package_info: HashMap<String, String>,
+    compile_info: HashMap<String, String>,
     git: HashMap<String, String>,
     slurm_params: HashMap<String, String>,
     system: HashMap<String, String>,
@@ -43,6 +44,7 @@ impl BenchmarkInformation {
             output: HashMap::new(),
             build_type: BenchmarkInformation::get_build_type(),
             package_info: BenchmarkInformation::get_package_info(),
+            compile_info: HashMap::new(),
             git: BenchmarkInformation::get_git_info(),
             slurm_params: BenchmarkInformation::collect_env_vars("SLURM"),
             system: BenchmarkInformation::get_system_info(),
@@ -50,6 +52,10 @@ impl BenchmarkInformation {
             rust_edition: BenchmarkInformation::get_rust_edition(),
             rust_compiler: BenchmarkInformation::get_rust_compiler(),
         }
+    }
+
+    pub fn with_compile_info(&mut self, key: &str, value: String) {
+        self.compile_info.insert(key.to_string(), value);
     }
 
     /// Add a key/value pair to the output section of the benchmark information.
@@ -68,6 +74,7 @@ impl BenchmarkInformation {
             "output" => self.output.clone(),
             "build type" => self.build_type.clone(),
             "dependencies" => self.package_info.clone(),
+            "compile_info" => self.compile_info.clone(),
             "git" => self.git.clone(),
             "system" => self.system.clone(),
             "environment" => self.environment_vars.clone(),
