@@ -1,25 +1,110 @@
 use std::env;
 use std::collections::HashMap;
-
-// TODO: Record package versions, rust edition and rust compiler information here
-
+use std::fs;
 
 /// Records compile-time information by capturing into into environment variables.
 /// This function should call all of the functions needed to record build time information.
 /// This is likely everything that is made with the define_env_vars! macro.
-pub fn record_build_time_info() {
+pub fn record_build_time_info(manifest_path: String) {
     record_cargo_env_vars();
     record_git_info();
+    record_manifest_info(manifest_path);
 }
 
 
 #[macro_export]
 macro_rules! embed_build_time_info {
-    ($bench:expr) => {
+    ($bench:ident) => {
         benchmark_record::embed_compile_info!($bench);
         benchmark_record::embed_git_info!($bench);
+        benchmark_record::embed_manifest_info!($bench);
+        benchmark_record::embed_package_info!($bench);
     };
 }
+
+
+/// Attempts to read the rust edition from Cargo.toml in the current directory or CARGO_MANIFEST_DIR
+/// Record the edition and specific package version information.
+fn record_manifest_info(manifest_path: String) {
+    let manifest_content = fs::read_to_string(manifest_path);
+    let mut the_edition = String::new();
+    match manifest_content {
+         Ok(contents) => {
+            for line in contents.lines() {
+                if line.trim_start().starts_with("edition = ")
+                    && let Some(edition) = line.split('=').nth(1)
+                {
+                    the_edition = edition.trim().trim_matches('"').to_string();
+                }
+            }
+        },
+        Err(_) => the_edition = "Unknown".to_string()
+    }
+    println!("cargo:rustc-env=BUILD_RUST_EDITION={}", the_edition);
+
+    let mut package_info = HashMap::new();
+
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let lock_path = format!("{}/Cargo.lock", manifest_dir);
+
+    if let Ok(contents) = fs::read_to_string(lock_path) {
+        let mut lines = contents.lines();
+        while let Some(line) = lines.next() {
+            if line.trim_start().starts_with("name = ")
+                && let Some(name) = line.split('=').nth(1)
+            {
+                let name = name.trim().trim_matches('"').to_string();
+                if !CHECK_PACKAGES.contains(&name.as_str()) {
+                    continue;
+                }
+
+                let mut version = String::new();
+                let mut source = String::new();
+
+                // Look ahead for version line
+                if let Some(version_line) = lines.next()
+                    && version_line.trim_start().starts_with("version = ")
+                    && let Some(v) = version_line.split('=').nth(1)
+                {
+                    version = v.trim().trim_matches('"').to_string();
+                }
+
+                // Look ahead for source line
+                if let Some(source_line) = lines.next()
+                    && source_line.trim_start().starts_with("source = ")
+                    && let Some(s) = source_line.split('=').nth(1)
+                {
+                    source = s.trim().trim_matches('"').to_string();
+                }
+
+                // Store as "version/source" format
+                if !version.is_empty() || !source.is_empty() {
+                    let combined = format!("{}/{}", version, source);
+                    package_info.insert(name, combined);
+                }
+            }
+        }
+    }
+    
+    for (key, value) in package_info.iter() {
+        println!("cargo:rustc-env={}={}", key, value);
+        println!("cargo:warning={}={}", key, value);
+
+    }
+
+}
+
+
+#[macro_export]
+macro_rules! embed_manifest_info {
+    ($bench:ident) => {
+        $bench.rust_edition = 
+            option_env!("BUILD_RUST_EDITION")
+                .unwrap_or(concat!("BUILD_RUST_EDITION variable not set"))
+                .to_string();
+    };
+}
+
 
 /// Macro to define both a const array and a corresponding compile-time capture macro.
 /// 
@@ -56,7 +141,7 @@ macro_rules! define_env_vars {
         /// Macro to capture the compile-time values of the defined environment variables
         #[macro_export]
         macro_rules! $macro_name {
-            ($bench:expr) => {
+            ($bench:ident) => {
                 $(
                     $bench.$record_fn(
                         $var_name,
@@ -69,6 +154,16 @@ macro_rules! define_env_vars {
         }
     };
 }
+
+
+// Define a set of package information variables to capture
+define_env_vars!(
+    CHECK_PACKAGES,
+    embed_package_info,
+    with_package_info,
+    ["lamellar", "rofisys", "lamellar-impl"]
+);
+
 
 // Define the default set of environment variables to capture
 define_env_vars!(
@@ -104,11 +199,11 @@ define_env_vars!(
     embed_git_info,
     with_git_info,
     [
-        "GIT_commit_hash",
-        "GIT_short_hash",
-        "GIT_commit_date",
-        "GIT_commit_message",
-        "GIT_status",
+        "commit_hash",
+        "short_hash",
+        "commit_date",
+        "commit_message",
+        "status",
     ]
 );
 
@@ -123,7 +218,7 @@ pub fn record_git_info() -> HashMap<String, String> {
         && output.status.success()
     {
         let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        git_info.insert("GIT_commit_hash".to_string(), commit_hash);
+        git_info.insert("commit_hash".to_string(), commit_hash);
     }
 
     // Get short hash
@@ -133,7 +228,7 @@ pub fn record_git_info() -> HashMap<String, String> {
         && output.status.success()
     {
         let short_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        git_info.insert("GIT_short_hash".to_string(), short_hash);
+        git_info.insert("short_hash".to_string(), short_hash);
     }
 
     // Get commit date
@@ -143,7 +238,7 @@ pub fn record_git_info() -> HashMap<String, String> {
         && output.status.success()
     {
         let commit_date = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        git_info.insert("GIT_commit_date".to_string(), commit_date);
+        git_info.insert("commit_date".to_string(), commit_date);
     }
 
     // Get commit message
@@ -153,7 +248,7 @@ pub fn record_git_info() -> HashMap<String, String> {
         && output.status.success()
     {
         let commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        git_info.insert("GIT_commit_message".to_string(), commit_message);
+        git_info.insert("commit_message".to_string(), commit_message);
     }
 
     // Get git status in short format
@@ -169,10 +264,10 @@ pub fn record_git_info() -> HashMap<String, String> {
             .filter(|line| !line.is_empty())
             .collect::<Vec<&str>>()
             .join(", ");
-        git_info.insert("GIT_status".to_string(), git_status);
+        git_info.insert("status".to_string(), git_status);
     } else {
         // If git command fails, store empty string
-        git_info.insert("GIT_status".to_string(), "command failed".to_string());
+        git_info.insert("status".to_string(), "command failed".to_string());
     }
 
 

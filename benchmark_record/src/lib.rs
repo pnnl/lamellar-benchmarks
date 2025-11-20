@@ -8,8 +8,6 @@ use std::path::PathBuf;
 
 pub mod build_utils;
 
-const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
-
 pub struct BenchmarkInformation {
     pub benchmark_name: String,
     executable: PathBuf,
@@ -22,7 +20,7 @@ pub struct BenchmarkInformation {
     slurm_params: HashMap<String, String>,
     system: HashMap<String, String>,
     environment_vars: HashMap<String, String>,
-    rust_edition: String,
+    pub rust_edition: String,
     rust_compiler: String,
 }
 
@@ -43,23 +41,30 @@ impl BenchmarkInformation {
             parameters: env::args().skip(1).collect(),
             run_date: BenchmarkInformation::get_run_date(),
             output: HashMap::new(),
-            package_info: BenchmarkInformation::get_package_info(),
+            package_info: HashMap::new(),
             compile_info: HashMap::new(),
             git: HashMap::new(),
             slurm_params: BenchmarkInformation::collect_env_vars("SLURM"),
             system: BenchmarkInformation::get_system_info(),
             environment_vars: BenchmarkInformation::collect_env_vars("LAMELLAR"),
-            rust_edition: BenchmarkInformation::get_rust_edition(),
+            rust_edition: "Unknown".to_string(),
             rust_compiler: BenchmarkInformation::get_rust_compiler(),
         }
     }
 
+    /// Add a key/value pair to the compiler info section of the benchmark information.
     pub fn with_compile_info(&mut self, key: &str, value: String) {
         self.compile_info.insert(key.to_string(), value);
     }
 
+    /// Add a key/value pair to the git info section of the benchmark information.
     pub fn with_git_info(&mut self, key: &str, value: String) {
         self.git.insert(key.to_string(), value);
+    }
+
+    /// Add a key/value pair to the package info of the benchmark information.
+    pub fn with_package_info(&mut self, key: &str, value: String) {
+        self.package_info.insert(key.to_string(), value);
     }
 
     /// Add a key/value pair to the output section of the benchmark information.
@@ -173,24 +178,6 @@ impl BenchmarkInformation {
         system_info
     }
 
-    /// Attempts to read the rust edition from Cargo.toml in the current directory or CARGO_MANIFEST_DIR
-    fn get_rust_edition() -> String {
-        // Attempt to read Cargo.toml in the current directory or CARGO_MANIFEST_DIR
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-        let cargo_toml_path = format!("{}/Cargo.toml", manifest_dir);
-
-        if let Ok(contents) = fs::read_to_string(cargo_toml_path) {
-            for line in contents.lines() {
-                if line.trim_start().starts_with("edition = ")
-                    && let Some(edition) = line.split('=').nth(1)
-                {
-                    return edition.trim().trim_matches('"').to_string();
-                }
-            }
-        }
-
-        "<unknown>".to_string()
-    }
 
     /// Inspects the 'strings' portion of the binary to find the rustc version used to compile it.
     fn get_rust_compiler() -> String {
@@ -209,56 +196,6 @@ impl BenchmarkInformation {
             }
         }
         "<unknown>".to_string()
-    }
-
-    /// Look for cargo manifest in the current directory OR in one specified by CARGO_MANIFEST_DIR environment variable.  
-    /// If found, grab depenendencies for packages specified in CHECK_PACKAGES array.
-    fn get_package_info() -> HashMap<String, String> {
-        let mut package_info = HashMap::new();
-
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-        let lock_path = format!("{}/Cargo.lock", manifest_dir);
-
-        if let Ok(contents) = fs::read_to_string(lock_path) {
-            let mut lines = contents.lines();
-            while let Some(line) = lines.next() {
-                if line.trim_start().starts_with("name = ")
-                    && let Some(name) = line.split('=').nth(1)
-                {
-                    let name = name.trim().trim_matches('"').to_string();
-                    if !CHECK_PACKAGES.contains(&name.as_str()) {
-                        continue;
-                    }
-
-                    let mut version = String::new();
-                    let mut source = String::new();
-
-                    // Look ahead for version line
-                    if let Some(version_line) = lines.next()
-                        && version_line.trim_start().starts_with("version = ")
-                        && let Some(v) = version_line.split('=').nth(1)
-                    {
-                        version = v.trim().trim_matches('"').to_string();
-                    }
-
-                    // Look ahead for source line
-                    if let Some(source_line) = lines.next()
-                        && source_line.trim_start().starts_with("source = ")
-                        && let Some(s) = source_line.split('=').nth(1)
-                    {
-                        source = s.trim().trim_matches('"').to_string();
-                    }
-
-                    // Store as "version/source" format
-                    if !version.is_empty() || !source.is_empty() {
-                        let combined = format!("{}/{}", version, source);
-                        package_info.insert(name, combined);
-                    }
-                }
-            }
-        }
-
-        package_info
     }
 }
 
