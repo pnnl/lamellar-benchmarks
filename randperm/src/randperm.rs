@@ -26,6 +26,7 @@ fn main() {
 
     // --- benchmark record ---
     let mut bench = BenchmarkInformation::new();
+    bench.with_compile_info("features", option_env!("BENCHMARK_CONFIG_VALUES").unwrap_or("BENCHMARK_CONFIG_VALUES variable not set").to_string());
     bench.with_output("num_pes", num_pes.to_string());
     bench.with_output("global_count", global_count.to_string());
     bench.with_output("target_factor", target_factor.to_string());
