@@ -1,10 +1,12 @@
 use json::JsonValue;
-use std::collections::HashMap;
 use std::env;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+
+pub mod build_utils;
 
 const CHECK_PACKAGES: [&str; 4] = ["lamellar", "rofi", "rofisys", "lamellar-impl"];
 
@@ -335,6 +337,7 @@ pub fn default_benchmark_name() -> String {
         .to_string_lossy()
         .to_string()
 }
+
 
 #[cfg(test)]
 mod tests {
