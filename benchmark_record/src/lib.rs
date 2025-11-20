@@ -16,7 +16,6 @@ pub struct BenchmarkInformation {
     parameters: Vec<String>,
     run_date: String,
     output: HashMap<String, String>,
-    build_type: String,
     package_info: HashMap<String, String>,
     compile_info: HashMap<String, String>,
     git: HashMap<String, String>,
@@ -44,10 +43,9 @@ impl BenchmarkInformation {
             parameters: env::args().skip(1).collect(),
             run_date: BenchmarkInformation::get_run_date(),
             output: HashMap::new(),
-            build_type: BenchmarkInformation::get_build_type(),
             package_info: BenchmarkInformation::get_package_info(),
             compile_info: HashMap::new(),
-            git: BenchmarkInformation::get_git_info(),
+            git: HashMap::new(),
             slurm_params: BenchmarkInformation::collect_env_vars("SLURM"),
             system: BenchmarkInformation::get_system_info(),
             environment_vars: BenchmarkInformation::collect_env_vars("LAMELLAR"),
@@ -58,6 +56,10 @@ impl BenchmarkInformation {
 
     pub fn with_compile_info(&mut self, key: &str, value: String) {
         self.compile_info.insert(key.to_string(), value);
+    }
+
+    pub fn with_git_info(&mut self, key: &str, value: String) {
+        self.git.insert(key.to_string(), value);
     }
 
     /// Add a key/value pair to the output section of the benchmark information.
@@ -74,7 +76,6 @@ impl BenchmarkInformation {
             "parameters" => self.parameters.clone(),
             "run_date" => self.run_date.clone(),
             "output" => self.output.clone(),
-            "build type" => self.build_type.clone(),
             "dependencies" => self.package_info.clone(),
             "compile_info" => self.compile_info.clone(),
             "git" => self.git.clone(),
@@ -135,23 +136,6 @@ impl BenchmarkInformation {
     fn get_run_date() -> String {
         let datetime = chrono::Local::now();
         datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-    }
-
-    /// If in a standard build context, will be the parent dir.  Else unknown...
-    fn get_build_type() -> String {
-        let exec = executable();
-        let alt_name = PathBuf::from("<unknown>");
-        let parent = exec.parent().unwrap_or(alt_name.as_path());
-        let build_type = parent
-            .file_name()
-            .unwrap_or(OsStr::new("<unknown>"))
-            .to_string_lossy()
-            .to_string();
-        if ["debug", "release"].contains(&build_type.as_str()) {
-            build_type
-        } else {
-            "<unknown>".to_string()
-        }
     }
 
     /// Gathers selected system information using the sysinfo crate.
@@ -276,52 +260,6 @@ impl BenchmarkInformation {
 
         package_info
     }
-
-    fn get_git_info() -> HashMap<String, String> {
-        let mut git_info = HashMap::new();
-
-        // Get long hash
-        if let Ok(output) = std::process::Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .output()
-            && output.status.success()
-        {
-            let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            git_info.insert("commit_hash".to_string(), commit_hash);
-        }
-
-        // Get short hash
-        if let Ok(output) = std::process::Command::new("git")
-            .args(["rev-parse", "--short", "HEAD"])
-            .output()
-            && output.status.success()
-        {
-            let short_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            git_info.insert("short_hash".to_string(), short_hash);
-        }
-
-        // Get commit date
-        if let Ok(output) = std::process::Command::new("git")
-            .args(["log", "-1", "--format=%cd", "--date=iso"])
-            .output()
-            && output.status.success()
-        {
-            let commit_date = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            git_info.insert("commit_date".to_string(), commit_date);
-        }
-
-        // Get commit message
-        if let Ok(output) = std::process::Command::new("git")
-            .args(["log", "-1", "--format=%s"])
-            .output()
-            && output.status.success()
-        {
-            let commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            git_info.insert("commit_message".to_string(), commit_message);
-        }
-
-        git_info
-    }
 }
 
 /// Get the current executable path
@@ -375,59 +313,6 @@ mod tests {
 
         assert!(output_path_str.ends_with(".json"));
         assert!(output_path_str.contains(default_benchmark_name().as_str()));
-    }
-
-    #[test]
-    fn test_git_info() {
-        let git_info = BenchmarkInformation::get_git_info();
-
-        println!("Git info: {:?}", git_info);
-
-        // Check that all expected git fields are present
-        assert!(
-            git_info.contains_key("commit_hash"),
-            "commit_hash should be present"
-        );
-        assert!(
-            git_info.contains_key("short_hash"),
-            "short_hash should be present"
-        );
-        assert!(
-            git_info.contains_key("commit_date"),
-            "commit_date should be present"
-        );
-        assert!(
-            git_info.contains_key("commit_message"),
-            "commit_message should be present"
-        );
-
-        // Check that values are not empty (assuming we're in a git repository)
-        if let Some(commit_hash) = git_info.get("commit_hash") {
-            assert!(!commit_hash.is_empty(), "commit_hash should not be empty");
-            assert!(
-                commit_hash.len() >= 40,
-                "commit_hash should be at least 40 characters"
-            );
-        }
-
-        if let Some(short_hash) = git_info.get("short_hash") {
-            assert!(!short_hash.is_empty(), "short_hash should not be empty");
-            assert!(
-                short_hash.len() >= 7,
-                "short_hash should be at least 7 characters"
-            );
-        }
-
-        if let Some(commit_date) = git_info.get("commit_date") {
-            assert!(!commit_date.is_empty(), "commit_date should not be empty");
-        }
-
-        if let Some(commit_message) = git_info.get("commit_message") {
-            assert!(
-                !commit_message.is_empty(),
-                "commit_message should not be empty"
-            );
-        }
     }
 
     #[test]

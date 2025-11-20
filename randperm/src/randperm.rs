@@ -1,7 +1,7 @@
 use lamellar::array::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
-use benchmark_record::{BenchmarkInformation, capture_compile_vars};
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const DEFAULT_GLOBAL_COUNT: usize = 1000;
 const DEFAULT_TARGET_FACTOR: usize = 10;
@@ -26,7 +26,7 @@ fn main() {
 
     // --- benchmark record ---
     let mut bench = BenchmarkInformation::new();
-    capture_compile_vars!(bench);
+    embed_build_time_info!(bench);
     
     bench.with_output("num_pes", num_pes.to_string());
     bench.with_output("global_count", global_count.to_string());
