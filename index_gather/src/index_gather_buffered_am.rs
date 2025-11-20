@@ -3,7 +3,7 @@ use lamellar::memregion::prelude::*;
 use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
-use benchmark_record::BenchmarkInformation;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const COUNTS_LOCAL_LEN: usize = 1_000_000; // this will be 800MB on each PE
 
@@ -133,6 +133,7 @@ fn main() {
 
     // === Initialize Benchmark Record ===
     let mut bench = BenchmarkInformation::new();
+    embed_build_time_info!(bench);
     bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
     bench.with_output("updates_per_pe", l_num_updates.to_string());
     bench.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());

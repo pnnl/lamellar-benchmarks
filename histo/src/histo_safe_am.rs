@@ -5,7 +5,7 @@ use rand::prelude::*;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use benchmark_record;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const COUNTS_LOCAL_LEN: usize = 10000000;
 
@@ -86,7 +86,8 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let global_count = COUNTS_LOCAL_LEN * num_pes;
-    let mut result_record = benchmark_record::BenchmarkInformation::new();
+    let mut result_record = BenchmarkInformation::new();
+    embed_build_time_info!(result_record);
 
     let l_num_updates = args
         .get(1)

@@ -3,7 +3,7 @@ use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
 use std::time::Instant;
-use benchmark_record::BenchmarkInformation;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 #[lamellar::AmLocalData]
 struct LaunchAm {
@@ -142,8 +142,9 @@ fn main() {
 
         // fresh record per buf_size (one JSON line per iteration)
         let mut bench = BenchmarkInformation::new();
-        let benchmark_result_file = bench.default_output_path("benchmarking");
+        embed_build_time_info!(bench);
 
+        let benchmark_result_file = bench.default_output_path("benchmarking");
         bench.with_output("num_pes", num_pes.to_string());
         bench.with_output("launch_threads", launch_threads.to_string());
         bench.with_output("buf_size", buf_size.to_string());

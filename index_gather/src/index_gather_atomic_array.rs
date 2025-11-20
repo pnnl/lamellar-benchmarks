@@ -2,7 +2,7 @@ use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use rand::prelude::*;
 use std::time::Instant;
-use benchmark_record::BenchmarkInformation;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const COUNTS_LOCAL_LEN: usize = 1_000_000;
 
@@ -25,6 +25,7 @@ fn main() {
 
     // === Initialize Benchmark Record ===
     let mut bench = BenchmarkInformation::new();
+    embed_build_time_info!(bench);
     bench.with_output("updates_total", (l_num_updates * num_pes).to_string());
 
     let global_count = COUNTS_LOCAL_LEN * num_pes;

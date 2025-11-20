@@ -2,7 +2,7 @@ use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar_graph::{Graph, GraphData, GraphType};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use benchmark_record;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 #[lamellar::AmData]
 struct CntAm {
@@ -116,7 +116,9 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    let mut bench = benchmark_record::BenchmarkInformation::new();
+    let mut bench = BenchmarkInformation::new();
+    embed_build_time_info!(bench);
+
     bench.with_output("my_pe", my_pe.to_string());
     bench.with_output("num_pes", num_pes.to_string());
 

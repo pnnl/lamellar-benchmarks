@@ -12,6 +12,9 @@ bincode = "1.3"
 json = "0.12.4"
 benchmark_record = {path = "../benchmark_record"} 
 
+[build-dependencies]
+benchmark_record = {path = "../benchmark_record"}
+
 [features]
 # Enable rofi feature on lamellar
 rofi = ["lamellar/enable-rofi"]

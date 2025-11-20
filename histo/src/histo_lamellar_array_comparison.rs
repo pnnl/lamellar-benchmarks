@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-use benchmark_record;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const COUNTS_LOCAL_LEN: usize = 100_000_000; //this will be 800MBB on each pe
 
@@ -71,7 +71,6 @@ fn histo<T: ElementArithmeticOps + std::fmt::Debug>(
 
 // srun -N <num nodes> target/release/histo_lamellar_array <num updates>
 fn main() {
-
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -111,7 +110,9 @@ fn main() {
     let rand_index = rand_index.into_read_only().block();
     world.barrier();
 
-    let mut result_record = benchmark_record::BenchmarkInformation::new();
+    let mut result_record = BenchmarkInformation::new();
+    embed_build_time_info!(result_record);
+        
     let results_file = &result_record.default_output_path("benchmarking");
 
     let res_unsafe = histo(

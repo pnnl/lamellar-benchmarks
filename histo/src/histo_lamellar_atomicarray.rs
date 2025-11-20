@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use rand::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
-use benchmark_record;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 fn histo(counts: &AtomicArray<usize>, rand_index: &ReadOnlyArray<usize>) {
     let _ = counts.batch_add(rand_index.local_data(), 1).spawn();
@@ -26,8 +26,9 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1000);
 
-    let mut result_record = benchmark_record::BenchmarkInformation::new();
-
+    let mut result_record = BenchmarkInformation::new();
+    embed_build_time_info!(result_record);
+    
     result_record.with_output("updates_total", (l_num_updates * num_pes).to_string());
     result_record.with_output("updates_per_pe", l_num_updates.to_string());
     result_record.with_output("table_size_per_pe", COUNTS_LOCAL_LEN.to_string());

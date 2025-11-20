@@ -4,7 +4,7 @@ use lamellar::memregion::prelude::*;
 use rand::prelude::*;
 use std::future::Future;
 use std::time::Instant;
-use benchmark_record;
+use benchmark_record::{BenchmarkInformation, embed_build_time_info};
 
 const COUNTS_LOCAL_LEN: usize = 1000000; //100_000_000; //this will be 800MB on each
 
@@ -108,8 +108,9 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mut result_record = benchmark_record::BenchmarkInformation::new();
-
+    let mut result_record = BenchmarkInformation::new();
+    embed_build_time_info!(result_record);
+    
     let counts = world.alloc_shared_mem_region(COUNTS_LOCAL_LEN);
     let global_count = COUNTS_LOCAL_LEN * num_pes;
     let l_num_updates = args
