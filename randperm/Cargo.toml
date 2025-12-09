@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 rand = "0.6"
-lamellar = { version = "0.7.1" }
+lamellar = { version = "0.7.1"}
 json = "0.12.4"
 benchmark_record = {path = "../benchmark_record"}
 
