@@ -69,47 +69,55 @@ fn collect_perm(
     let end_offset = end_index % pe_size;
 
     if start_pe == end_pe {
-        let _ = world.exec_am_pe(
-            start_pe as usize,
-            CollectAm {
-                array: the_array.clone(),
-                data,
-                index: start_offset,
-            },
-        );
+        let _ = world
+            .exec_am_pe(
+                start_pe as usize,
+                CollectAm {
+                    array: the_array.clone(),
+                    data,
+                    index: start_offset,
+                },
+            )
+            .spawn();
     } else {
         let mut cur_pe = end_pe;
         while cur_pe >= start_pe {
             if cur_pe == end_pe {
                 let pe_data = data.split_off(data.len() - end_offset - 1);
-                let _ = world.exec_am_pe(
-                    cur_pe as usize,
-                    CollectAm {
-                        array: the_array.clone(),
-                        data: pe_data, //end_offset + 1 is the number of elements in the last pe
-                        index: 0,
-                    },
-                );
+                let _ = world
+                    .exec_am_pe(
+                        cur_pe as usize,
+                        CollectAm {
+                            array: the_array.clone(),
+                            data: pe_data, //end_offset + 1 is the number of elements in the last pe
+                            index: 0,
+                        },
+                    )
+                    .spawn();
             } else if cur_pe == start_pe {
-                let _ = world.exec_am_pe(
-                    cur_pe as usize,
-                    CollectAm {
-                        array: the_array.clone(),
-                        data: data, //this is the remaining data
-                        index: start_offset,
-                    },
-                );
+                let _ = world
+                    .exec_am_pe(
+                        cur_pe as usize,
+                        CollectAm {
+                            array: the_array.clone(),
+                            data: data, //this is the remaining data
+                            index: start_offset,
+                        },
+                    )
+                    .spawn();
                 data = vec![]; //to appease the compiler because we consume data above
             } else {
                 let pe_data = data.split_off(data.len() - pe_size);
-                let _ = world.exec_am_pe(
-                    cur_pe as usize,
-                    CollectAm {
-                        array: the_array.clone(),
-                        data: pe_data, //we take the entire pes range
-                        index: 0,
-                    },
-                );
+                let _ = world
+                    .exec_am_pe(
+                        cur_pe as usize,
+                        CollectAm {
+                            array: the_array.clone(),
+                            data: pe_data, //we take the entire pes range
+                            index: 0,
+                        },
+                    )
+                    .spawn();
             }
             cur_pe -= 1;
         }

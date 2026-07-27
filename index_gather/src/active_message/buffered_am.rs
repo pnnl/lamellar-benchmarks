@@ -62,7 +62,7 @@ impl LamellarAM for UnsafeBufferedAMu32 {
     async fn exec(self) -> Vec<usize> {
         self.indices
             .iter()
-            .map(|i| unsafe { self.table.as_mut_slice().unwrap()[*i as usize] })
+            .map(|i| unsafe { self.table.as_mut_slice()[*i as usize] })
             .collect::<Vec<usize>>()
     }
 }
@@ -79,7 +79,7 @@ impl LamellarAM for UnsafeBufferedAMusize {
     async fn exec(self) -> Vec<usize> {
         self.indices
             .iter()
-            .map(|i| unsafe { self.table.as_mut_slice().unwrap()[*i] })
+            .map(|i| unsafe { self.table.as_mut_slice()[*i] })
             .collect::<Vec<usize>>()
     }
 }
@@ -90,7 +90,7 @@ trait BufferedAm: RemoteActiveMessage + LamellarAM + Serde + AmDist + Clone {
     // type Index: Sync + Send + Clone;
     type AM: LamellarAM;
     fn new(&self) -> Self;
-    fn to_am(self) -> Self::AM;
+    // fn to_am(self) -> Self::AM;
     fn add_index(&mut self, index: usize);
     fn len(&self) -> usize;
 }
@@ -104,9 +104,9 @@ impl BufferedAm for SafeBufferedAMu32 {
             table: self.table.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
+    // fn to_am(self) -> Self::AM {
+    //     self
+    // }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index as u32);
     }
@@ -123,9 +123,9 @@ impl BufferedAm for SafeBufferedAMusize {
             table: self.table.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
+    // fn to_am(self) -> Self::AM {
+    //     self
+    // }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index);
     }
@@ -142,9 +142,9 @@ impl BufferedAm for UnsafeBufferedAMu32 {
             table: self.table.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
+    // fn to_am(self) -> Self::AM {
+    //     self
+    // }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index as u32);
     }
@@ -161,9 +161,9 @@ impl BufferedAm for UnsafeBufferedAMusize {
             table: self.table.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
+    // fn to_am(self) -> Self::AM {
+    //     self
+    // }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index);
     }
@@ -199,14 +199,14 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             if pe_ams[rank].len() >= self.buffer_size {
                 let mut am = self.am_builder.new();
                 std::mem::swap(&mut am, &mut pe_ams[rank]);
-                reqs.push(task_group.exec_am_pe(rank, am));
+                reqs.push(task_group.exec_am_pe(rank, am).spawn());
             }
         }
         //send any remaining buffered updates
 
         for (rank, am) in pe_ams.into_iter().enumerate() {
             if am.len() > 0 {
-                reqs.push(task_group.exec_am_pe(rank, am));
+                reqs.push(task_group.exec_am_pe(rank, am).spawn());
             }
         }
         // println!("send time {:?}", _timer.elapsed());
@@ -230,13 +230,17 @@ fn launch_ams<T: BufferedAm>(
     for tid in 0..ig_config.launch_threads {
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_indices: rand_indices.clone(),
-            slice_start: start,
-            slice_end: end,
-            buffer_size: ig_config.buffer_size,
-            am_builder: am_builder.clone(),
-        }));
+        launch_tasks.push(
+            world
+                .exec_am_local(LaunchAm {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    buffer_size: ig_config.buffer_size,
+                    am_builder: am_builder.clone(),
+                })
+                .spawn(),
+        );
     }
     Box::pin(futures::future::join_all(launch_tasks))
 }
@@ -257,7 +261,9 @@ pub fn index_gather<'a>(
         for i in 0..ig_config.pe_table_size(num_pes) {
             table_inner.push(my_pe * ig_config.pe_table_size(num_pes) + i);
         }
-        let table = Darc::new(world, table_inner).expect("darc should be created");
+        let table = Darc::new(world, table_inner)
+            .block()
+            .expect("darc should be created");
         world.barrier();
         let init_time = timer.elapsed();
         timer = Instant::now();
@@ -283,9 +289,11 @@ pub fn index_gather<'a>(
         };
         (init_time, launch_tasks)
     } else {
-        let table = world.alloc_shared_mem_region(ig_config.pe_table_size(num_pes));
+        let table = world
+            .alloc_shared_mem_region(ig_config.pe_table_size(num_pes))
+            .block();
         unsafe {
-            for elem in table.as_mut_slice().unwrap().iter_mut() {
+            for elem in table.as_mut_slice().iter_mut() {
                 *elem = 0;
             }
         }

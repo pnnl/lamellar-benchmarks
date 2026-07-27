@@ -57,24 +57,28 @@ impl LamellarAM for LaunchAm {
             if buffered_darts[pe].len() >= self.buffer_size {
                 let mut darts = Vec::with_capacity(self.buffer_size);
                 std::mem::swap(&mut buffered_darts[pe], &mut darts);
-                let _ = lamellar::world.exec_am_pe(
-                    pe,
-                    BufferedPushDartAm {
-                        target: self.target.clone(),
-                        vals: darts,
-                    },
-                );
+                let _ = lamellar::world
+                    .exec_am_pe(
+                        pe,
+                        BufferedPushDartAm {
+                            target: self.target.clone(),
+                            vals: darts,
+                        },
+                    )
+                    .spawn();
             }
         }
         for (pe, darts) in buffered_darts.drain(..).enumerate() {
             if darts.len() > 0 {
-                let _ = lamellar::world.exec_am_pe(
-                    pe,
-                    BufferedPushDartAm {
-                        target: self.target.clone(),
-                        vals: darts,
-                    },
-                );
+                let _ = lamellar::world
+                    .exec_am_pe(
+                        pe,
+                        BufferedPushDartAm {
+                            target: self.target.clone(),
+                            vals: darts,
+                        },
+                    )
+                    .spawn();
             }
         }
     }
@@ -96,12 +100,16 @@ fn launch_ams(
             + (my_pe * rand_perm_config.pe_table_size(num_pes));
         let end = (tid as f32 * slice_size + slice_size).round() as usize
             + (my_pe * rand_perm_config.pe_table_size(num_pes));
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            val_start: start,
-            val_end: end,
-            target: target.clone(),
-            buffer_size: rand_perm_config.buffer_size,
-        }));
+        launch_tasks.push(
+            world
+                .exec_am_local(LaunchAm {
+                    val_start: start,
+                    val_end: end,
+                    target: target.clone(),
+                    buffer_size: rand_perm_config.buffer_size,
+                })
+                .spawn(),
+        );
     }
     Box::pin(futures::future::join_all(launch_tasks))
 }
@@ -111,15 +119,18 @@ pub fn rand_perm<'a>(
     rand_perm_config: &RandPermCli,
 ) -> (Duration, Duration, Duration, usize) {
     let num_pes = world.num_pes();
-    let local_lens = AtomicArray::new(world, world.num_pes(), lamellar::Distribution::Block);
-    let the_array =
-        LocalRwDarc::new(world, vec![0; rand_perm_config.pe_table_size(num_pes)]).unwrap();
+    let local_lens =
+        AtomicArray::new(world, world.num_pes(), lamellar::Distribution::Block).block();
+    let the_array = LocalRwDarc::new(world, vec![0; rand_perm_config.pe_table_size(num_pes)])
+        .block()
+        .unwrap();
     world.barrier();
     let mut timer = Instant::now();
     let target = LocalRwDarc::new(
         world,
         Vec::with_capacity(rand_perm_config.pe_table_size(num_pes)),
     )
+    .block()
     .expect("darc should be created");
     world.barrier();
     let _init_time = timer.elapsed();
@@ -129,7 +140,7 @@ pub fn rand_perm<'a>(
     world.wait_all();
     world.barrier();
     let perm_time = timer.elapsed();
-    let target = target.blocking_into_darc();
+    let target = target.into_darc().block();
     let collect_timer = Instant::now();
     let mut data = Vec::with_capacity(target.len());
     data.extend_from_slice(&target);
@@ -138,16 +149,20 @@ pub fn rand_perm<'a>(
 
     let global_finish_time = timer.elapsed();
 
-    let sum = Darc::new(world, AtomicUsize::new(0)).expect("darc should be created");
-    let local_sum = world.block_on(the_array.read()).iter().sum::<usize>();
+    let sum = Darc::new(world, AtomicUsize::new(0))
+        .block()
+        .expect("darc should be created");
+    let local_sum = the_array.read().block().iter().sum::<usize>();
 
-    let _ = world.exec_am_pe(
-        0,
-        super::SumAm {
-            sum: sum.clone(),
-            amt: local_sum,
-        },
-    );
+    let _ = world
+        .exec_am_pe(
+            0,
+            super::SumAm {
+                sum: sum.clone(),
+                amt: local_sum,
+            },
+        )
+        .spawn();
     world.wait_all();
     world.barrier();
 

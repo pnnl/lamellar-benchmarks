@@ -3,6 +3,8 @@ mod graph;
 mod options;
 mod printer;
 
+use lamellar::active_messaging::prelude::*;
+
 use std::collections::HashMap;
 
 use graph::{Graph, GraphType};
@@ -18,6 +20,7 @@ pub enum Variant {
     Single,
 }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -96,4 +99,14 @@ fn main() {
             )
         }
     }
+    world.wait_all();
+    world.barrier();
+    // if world.my_pe() == 0{
+    //     graph.print();
+    // }
+
+
+
+
+    
 }

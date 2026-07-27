@@ -36,7 +36,10 @@ pub fn histo<'a>(
         "LAMELLAR_BATCH_OP_THREADS",
         format!("{}", histo_config.launch_threads),
     );
-    std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", histo_config.buffer_size));
+    std::env::set_var(
+        "LAMELLAR_BATCH_OP_SIZE",
+        format!("{}", histo_config.buffer_size),
+    );
     world.barrier();
     let mut timer = Instant::now();
 
@@ -47,18 +50,20 @@ pub fn histo<'a>(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),
-            );
+            )
+            .block();
             let _init_time = timer.elapsed();
             timer = Instant::now();
             //the actual histo operation
-            array.batch_add(rand_indices.as_slice(), 1)
+            unsafe { array.batch_add(rand_indices.as_slice(), 1) }
         }
         ArrayType::Atomic => {
             let array: AtomicArray<usize> = AtomicArray::new(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),
-            );
+            )
+            .block();
             let _init_time = timer.elapsed();
             timer = Instant::now();
 
@@ -70,7 +75,8 @@ pub fn histo<'a>(
                 world,
                 histo_config.total_table_size(num_pes),
                 distribution.into(),
-            );
+            )
+            .block();
             let _init_time = timer.elapsed();
             timer = Instant::now();
 
@@ -81,7 +87,7 @@ pub fn histo<'a>(
 
     let launch_issue_time = timer.elapsed();
     let launch_finish_time = timer.elapsed();
-    world.block_on(histo_request);
+    histo_request.block();
     let local_finish_time = timer.elapsed();
     world.barrier();
     let global_finish_time = timer.elapsed();

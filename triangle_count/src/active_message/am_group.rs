@@ -100,9 +100,11 @@ pub(crate) fn triangle_count<'a>(
 ) -> (Duration, Duration, Duration) {
     let my_pe = world.my_pe();
     let num_nodes = graph.num_nodes();
+    
 
-    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block);
+    let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
     std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", buf_size));
+    println!("PE {}: starting am group triangle count with {} nodes and buffer size {}", my_pe, num_nodes, buf_size);
     world.barrier();
     let timer = std::time::Instant::now();
 
@@ -111,12 +113,16 @@ pub(crate) fn triangle_count<'a>(
     for tid in 0..tc_config.launch_threads {
         let start_node = (tid as f32 * num_nodes_per_thread).round() as u32;
         let end_node = ((tid + 1) as f32 * num_nodes_per_thread).round() as u32;
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            graph: graph.data(),
-            start_node,
-            end_node,
-            final_cnt: final_cnt.clone(),
-        }));
+        launch_tasks.push(
+            world
+                .exec_am_local(LaunchAm {
+                    graph: graph.data(),
+                    start_node,
+                    end_node,
+                    final_cnt: final_cnt.clone(),
+                })
+                .spawn(),
+        );
     }
 
     //we explicitly wait for all the LaunchAMs to finish so we can explicity calculate the issue time.
@@ -127,7 +133,7 @@ pub(crate) fn triangle_count<'a>(
     world.wait_all(); //wait for all the triangle counting active messages to finish locally
     let local_time = timer.elapsed();
     world.barrier(); //wait for all the triangle counting active messages to finish on all PEs
-    let final_cnt_sum = world.block_on(final_cnt.sum()); //reduce the final count across all PEs
+    let final_cnt_sum = final_cnt.sum().block(); //reduce the final count across all PEs
     let global_time = timer.elapsed();
     if my_pe == 0 {
         println!("triangles counted: {:?}", final_cnt_sum,)

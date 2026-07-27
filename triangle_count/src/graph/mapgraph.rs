@@ -50,20 +50,19 @@ impl MapGraph {
 }
 
 impl GraphOps for MapGraph {
-    fn add_local_neighbors(
-        &mut self,
-        node: u32,
+    async fn get_local_neighbors(
+        &self,
         neighbors: OneSidedMemoryRegion<u32>,
     ) -> OneSidedMemoryRegion<u32> {
-        let lmr_neighbors = self.team.alloc_one_sided_mem_region(neighbors.len());
+        //this is safe as we are consuming the one sided memory region without any clones or other references to it.
+        let mut lmr_neighbors: LamellarBuffer<u32, _> =  self.team.alloc_one_sided_mem_region(neighbors.len()).into();
         unsafe {
-            let neigh_slice = lmr_neighbors.as_mut_slice().unwrap();
             if neighbors.len() > 0 {
-                neigh_slice[neighbors.len() - 1] = std::u32::MAX;
-                neighbors.blocking_get(0, lmr_neighbors.clone());
+                neighbors.get_into_buffer(0, lmr_neighbors.split_off(0)).await;
             }
         }
-        self.neighbors.insert(node, lmr_neighbors.clone());
+        let lmr_neighbors = lmr_neighbors.async_unwrap().await;
+        // self.neighbors.insert(node, lmr_neighbors.clone());
         lmr_neighbors
     }
     fn add_remote_neighbors(&mut self, node: u32, neighbors: OneSidedMemoryRegion<u32>) {
@@ -71,25 +70,18 @@ impl GraphOps for MapGraph {
     }
     fn neighbors(&self, node: &u32) -> std::slice::Iter<'_, u32> {
         if let Some(n) = self.neighbors.get(node) {
-            match unsafe { n.as_slice() } {
-                Ok(n) => n.iter(),
-                Err(_) => panic!(
-                    "node {:?} is not local to pe {:?}",
-                    node,
-                    self.team.world_pe_id()
-                ),
-            }
+            unsafe{ n.as_slice().iter()}
         } else {
             panic!("node {:?} does not exist in graph", node);
         }
     }
-    fn lamellar_neighbors(&self, node: &u32) -> OneSidedMemoryRegion<u32> {
-        if let Some(n) = self.neighbors.get(node) {
-            n.clone()
-        } else {
-            panic!("node {:?} does not exist in graph", node);
-        }
-    }
+    // fn lamellar_neighbors(&self, node: &u32) -> OneSidedMemoryRegion<u32> {
+    //     if let Some(n) = self.neighbors.get(node) {
+    //         n.clone()
+    //     } else {
+    //         panic!("node {:?} does not exist in graph", node);
+    //     }
+    // }
 
     fn num_nodes(&self) -> usize {
         self.neighbors.len()

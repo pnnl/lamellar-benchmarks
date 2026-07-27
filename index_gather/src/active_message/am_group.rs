@@ -57,7 +57,7 @@ struct UnsafeU32Group {
 impl LamellarAM for UnsafeU32Group {
     async fn exec(self) -> usize {
         //this update would be unsafe and has potential for races / dropped updates
-        unsafe { self.table.as_mut_slice().unwrap()[self.index as usize] }
+        unsafe { self.table.as_mut_slice()[self.index as usize] }
     }
 }
 
@@ -72,7 +72,7 @@ struct UnsafeUsizeGroup {
 #[lamellar::am]
 impl LamellarAM for UnsafeUsizeGroup {
     async fn exec(self) -> usize {
-        unsafe { self.table.as_mut_slice().unwrap()[self.index] } //this update would be Unsafe and has potential for races / dropped updates
+        unsafe { self.table.as_mut_slice()[self.index] } //this update would be Unsafe and has potential for races / dropped updates
     }
 }
 
@@ -113,14 +113,14 @@ impl LamellarAM for LaunchAmSafeU32Group {
             );
         }
         let res = tg.exec().await;
-        println!("returned taskgroup! {:?}", res.len());
-        // res.iter()
-        //     .map(|x| match x {
-        //         AmGroupResult::Pe(_, v) => *v,
-        //         _ => panic!("invalid result"),
-        //     })
-        //     .collect::<Vec<_>>()
-        Vec::<usize>::new()
+        // println!("returned taskgroup! {:?}", res.len());
+        res.iter()
+            .map(|x| match x {
+                AmGroupResult::Pe(_, v) => *v,
+                _ => panic!("invalid result"),
+            })
+            .collect::<Vec<_>>()
+        // Vec::<usize>::new()
     }
 }
 
@@ -240,30 +240,38 @@ fn launch_ams(
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
         launch_tasks.push(match am_type {
-            AmType::SafeU32Group(ref table) => world.exec_am_local(LaunchAmSafeU32Group {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                table: table.clone(),
-            }),
-            AmType::SafeUsizeGroup(ref table) => world.exec_am_local(LaunchAmSafeUsizeGroup {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                table: table.clone(),
-            }),
-            AmType::UnsafeU32Group(ref table) => world.exec_am_local(LaunchAmUnsafeU32Group {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                table: table.clone(),
-            }),
-            AmType::UnsafeUsizeGroup(ref table) => world.exec_am_local(LaunchAmUnsafeUsizeGroup {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                table: table.clone(),
-            }),
+            AmType::SafeU32Group(ref table) => world
+                .exec_am_local(LaunchAmSafeU32Group {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    table: table.clone(),
+                })
+                .spawn(),
+            AmType::SafeUsizeGroup(ref table) => world
+                .exec_am_local(LaunchAmSafeUsizeGroup {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    table: table.clone(),
+                })
+                .spawn(),
+            AmType::UnsafeU32Group(ref table) => world
+                .exec_am_local(LaunchAmUnsafeU32Group {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    table: table.clone(),
+                })
+                .spawn(),
+            AmType::UnsafeUsizeGroup(ref table) => world
+                .exec_am_local(LaunchAmUnsafeUsizeGroup {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    table: table.clone(),
+                })
+                .spawn(),
         });
     }
     Box::pin(futures::future::join_all(launch_tasks))
@@ -289,7 +297,9 @@ pub fn index_gather<'a>(
         for i in 0..ig_config.pe_table_size(num_pes) {
             table_inner.push(my_pe * ig_config.pe_table_size(num_pes) + i);
         }
-        let table = Darc::new(world, table_inner).expect("darc should be created");
+        let table = Darc::new(world, table_inner)
+            .block()
+            .expect("darc should be created");
         world.barrier();
         let init_time = timer.elapsed();
         timer = Instant::now();
@@ -306,9 +316,11 @@ pub fn index_gather<'a>(
         };
         (init_time, launch_tasks)
     } else {
-        let table = world.alloc_shared_mem_region(ig_config.pe_table_size(num_pes));
+        let table = world
+            .alloc_shared_mem_region(ig_config.pe_table_size(num_pes))
+            .block();
         unsafe {
-            for elem in table.as_mut_slice().unwrap().iter_mut() {
+            for elem in table.as_mut_slice().iter_mut() {
                 *elem = 0;
             }
         }

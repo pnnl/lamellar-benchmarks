@@ -58,7 +58,7 @@ struct UnsafeU32Group {
 impl LamellarAM for UnsafeU32Group {
     async fn exec(self) {
         //this update would be unsafe and has potential for races / dropped updates
-        unsafe { self.counts.as_mut_slice().unwrap()[self.index as usize] += 1 };
+        unsafe { self.counts.as_mut_slice()[self.index as usize] += 1 };
     }
 }
 
@@ -73,7 +73,7 @@ struct UnsafeUsizeGroup {
 #[lamellar::am]
 impl LamellarAM for UnsafeUsizeGroup {
     async fn exec(self) {
-        unsafe { self.counts.as_mut_slice().unwrap()[self.index] += 1 }; //this update would be Unsafe and has potential for races / dropped updates
+        unsafe { self.counts.as_mut_slice()[self.index] += 1 }; //this update would be Unsafe and has potential for races / dropped updates
     }
 }
 
@@ -211,30 +211,34 @@ fn launch_ams(
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
         launch_tasks.push(match am_type {
-            AmType::SafeU32Group(ref counts) => world.exec_am_local(LaunchAmSafeU32Group {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                counts: counts.clone(),
-            }),
-            AmType::SafeUsizeGroup(ref counts) => world.exec_am_local(LaunchAmSafeUsizeGroup {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                counts: counts.clone(),
-            }),
-            AmType::UnsafeU32Group(ref counts) => world.exec_am_local(LaunchAmUnsafeU32Group {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                counts: counts.clone(),
-            }),
-            AmType::UnsafeUsizeGroup(ref counts) => world.exec_am_local(LaunchAmUnsafeUsizeGroup {
-                rand_indices: rand_indices.clone(),
-                slice_start: start,
-                slice_end: end,
-                counts: counts.clone(),
-            }),
+            AmType::SafeU32Group(ref counts) => world
+                .spawn_am_local(LaunchAmSafeU32Group {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    counts: counts.clone(),
+                }),
+            AmType::SafeUsizeGroup(ref counts) => world
+                .spawn_am_local(LaunchAmSafeUsizeGroup {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    counts: counts.clone(),
+                }),
+            AmType::UnsafeU32Group(ref counts) => world
+                .spawn_am_local(LaunchAmUnsafeU32Group {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    counts: counts.clone(),
+                }),
+            AmType::UnsafeUsizeGroup(ref counts) => world
+                .spawn_am_local(LaunchAmUnsafeUsizeGroup {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    counts: counts.clone(),
+                }),
         });
     }
     Box::pin(futures::future::join_all(launch_tasks))
@@ -248,7 +252,10 @@ pub fn histo<'a>(
     index_size: &IndexSize,
 ) -> (Duration, Duration, Duration, Duration) {
     let num_pes = world.num_pes();
-    std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", histo_config.buffer_size));
+    std::env::set_var(
+        "LAMELLAR_BATCH_OP_SIZE",
+        format!("{}", histo_config.buffer_size),
+    );
     world.barrier();
     let mut timer = Instant::now();
     let (_init_time, launch_tasks) = if safe {
@@ -256,7 +263,9 @@ pub fn histo<'a>(
         for _ in 0..histo_config.pe_table_size(num_pes) {
             counts_inner.push(AtomicUsize::new(0));
         }
-        let counts = Darc::new(world, counts_inner).expect("darc should be created");
+        let counts = Darc::new(world, counts_inner)
+            .block()
+            .expect("darc should be created");
         world.barrier();
         let init_time = timer.elapsed();
         timer = Instant::now();
@@ -276,9 +285,11 @@ pub fn histo<'a>(
         };
         (init_time, launch_tasks)
     } else {
-        let counts = world.alloc_shared_mem_region(histo_config.pe_table_size(num_pes));
+        let counts = world
+            .alloc_shared_mem_region(histo_config.pe_table_size(num_pes))
+            .block();
         unsafe {
-            for elem in counts.as_mut_slice().unwrap().iter_mut() {
+            for elem in counts.as_mut_slice().iter_mut() {
                 *elem = 0;
             }
         }

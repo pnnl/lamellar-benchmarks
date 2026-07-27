@@ -60,7 +60,7 @@ struct UnsafeBufferedAMu32 {
 impl LamellarAM for UnsafeBufferedAMu32 {
     async fn exec(self) {
         for o in &self.indices {
-            unsafe { self.counts.as_mut_slice().unwrap()[*o as usize] += 1 }; //this update would be unsafe and has potential for races / dropped updates
+            unsafe { self.counts.as_mut_slice()[*o as usize] += 1 }; //this update would be unsafe and has potential for races / dropped updates
         }
     }
 }
@@ -76,7 +76,7 @@ struct UnsafeBufferedAMusize {
 impl LamellarAM for UnsafeBufferedAMusize {
     async fn exec(self) {
         for o in &self.indices {
-            unsafe { self.counts.as_mut_slice().unwrap()[*o] += 1 }; //this update would be unsafe and has potential for races / dropped updates
+            unsafe { self.counts.as_mut_slice()[*o] += 1 }; //this update would be unsafe and has potential for races / dropped updates
         }
     }
 }
@@ -87,7 +87,6 @@ trait BufferedAm: RemoteActiveMessage + LamellarAM + Serde + AmDist + Clone {
     // type Index: Sync + Send + Clone;
     type AM: LamellarAM;
     fn new(&self) -> Self;
-    fn to_am(self) -> Self::AM;
     fn add_index(&mut self, index: usize);
     fn len(&self) -> usize;
     fn index_size(&self) -> usize;
@@ -101,9 +100,6 @@ impl BufferedAm for SafeBufferedAMu32 {
             indices: Vec::new(),
             counts: self.counts.clone(),
         }
-    }
-    fn to_am(self) -> Self::AM {
-        self
     }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index as u32);
@@ -124,9 +120,6 @@ impl BufferedAm for SafeBufferedAMusize {
             counts: self.counts.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index);
     }
@@ -146,9 +139,6 @@ impl BufferedAm for UnsafeBufferedAMu32 {
             counts: self.counts.clone(),
         }
     }
-    fn to_am(self) -> Self::AM {
-        self
-    }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index as u32);
     }
@@ -167,9 +157,6 @@ impl BufferedAm for UnsafeBufferedAMusize {
             indices: Vec::new(),
             counts: self.counts.clone(),
         }
-    }
-    fn to_am(self) -> Self::AM {
-        self
     }
     fn add_index(&mut self, index: usize) {
         self.indices.push(index);
@@ -201,6 +188,7 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
         let num_pes = lamellar::num_pes;
         let mut pe_ams = vec![self.am_builder.new(); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
+        let mut pe_cnt = vec![0; num_pes];
         for idx in self.rand_indices[self.slice_start..self.slice_end].iter() {
             let rank = idx % num_pes;
             let offset = idx / num_pes;
@@ -208,15 +196,24 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             if pe_ams[rank].len() * self.am_builder.index_size() >= self.buffer_size {
                 let mut am = self.am_builder.new();
                 std::mem::swap(&mut am, &mut pe_ams[rank]);
-                let _ = task_group.exec_am_pe(rank, am); //we could await here but we will just do a wait_all later instead
+                let _ = task_group.exec_am_pe(rank, am).spawn(); //we could await here but we will just do a wait_all later instead
+                pe_cnt[rank] += 1;
             }
         }
         //send any remaining buffered updates
         let _timer = Instant::now();
         for (rank, am) in pe_ams.into_iter().enumerate() {
             if am.len() > 0 {
-                let _ = task_group.exec_am_pe(rank, am); //we could await here but we will just do a wait_all later instead
+                let _ = task_group.exec_am_pe(rank, am).spawn(); //we could await here but we will just do a wait_all later instead
+                pe_cnt[rank] += 1;
             }
+        }
+        if lamellar::current_pe == 0 {
+            println!(
+                "PE {} issued {:?} AMs",
+                lamellar::current_pe,
+                pe_cnt
+            );
         }
     }
 }
@@ -234,13 +231,16 @@ fn launch_ams<T: BufferedAm>(
     for tid in 0..histo_config.launch_threads {
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
-        launch_tasks.push(world.exec_am_local(LaunchAm {
-            rand_indices: rand_indices.clone(),
-            slice_start: start,
-            slice_end: end,
-            buffer_size: histo_config.buffer_size,
-            am_builder: am_builder.clone(),
-        }));
+        launch_tasks.push(
+            world
+                .spawn_am_local(LaunchAm {
+                    rand_indices: rand_indices.clone(),
+                    slice_start: start,
+                    slice_end: end,
+                    buffer_size: histo_config.buffer_size,
+                    am_builder: am_builder.clone(),
+                }),
+        );
     }
     Box::pin(futures::future::join_all(launch_tasks))
 }
@@ -260,7 +260,9 @@ pub fn histo<'a>(
         for _ in 0..histo_config.pe_table_size(num_pes) {
             counts_inner.push(AtomicUsize::new(0));
         }
-        let counts = Darc::new(world, counts_inner).expect("darc should be created");
+        let counts = Darc::new(world, counts_inner)
+            .block()
+            .expect("darc should be created");
         world.barrier();
         let init_time = timer.elapsed();
         timer = Instant::now();
@@ -286,9 +288,11 @@ pub fn histo<'a>(
         };
         (init_time, launch_tasks)
     } else {
-        let counts = world.alloc_shared_mem_region(histo_config.pe_table_size(num_pes));
+        let counts = world
+            .alloc_shared_mem_region(histo_config.pe_table_size(num_pes))
+            .block();
         unsafe {
-            for elem in counts.as_mut_slice().unwrap().iter_mut() {
+            for elem in counts.as_mut_slice().iter_mut() {
                 *elem = 0;
             }
         }

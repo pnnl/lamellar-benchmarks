@@ -1,17 +1,38 @@
 [workspace]
 
-resolver = "2"
+resolver = "3"
 
-members = [
-    "histo",
-    "index_gather",
-    "randperm",
-    "triangle_count",
-]
+members = ["histo", "index_gather", "randperm", "triangle_count"]
+
+[workspace.dependencies]
+async-std = "1.12.0"
+clap = { version = "4.3.4", features = ["derive", "env"] }
+futures = "0.3"
+#lamellar = { path = "../lamellar-runtime-junction", features = [
+lamellar = { version="0.8.0-rc.1", features = [
+    "enable-ucx",
+    "enable-libfabric",
+    "enable-rofi-c",
+    "with-salloc",
+    "runtime-warnings-panic",
+] }
+lazy_static = "1.3.0"
+parking_lot = { version = "0.12" }
+rand = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+
 
 [profile.release]
-opt-level=3
-lto="fat"
-codegen-units=1
-debug = true 
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = true
 panic = "abort"
+
+[profile.release-dev]
+inherits = "release"
+opt-level = 3
+lto = "thin"
+codegen-units = 255
+debug = true
+strip = false

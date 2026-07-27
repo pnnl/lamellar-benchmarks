@@ -9,16 +9,17 @@ use printer::{print_am_times, print_array_times, print_results};
 
 use clap::{Parser, ValueEnum};
 use rand::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 // #[global_allocator]
 // static ALLOC: dhat::Alloc = dhat::Alloc;
-use tikv_jemallocator::Jemalloc;
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+// use tikv_jemallocator::Jemalloc;
+// #[global_allocator]
+// static GLOBAL: Jemalloc = Jemalloc;
 
-#[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+
+#[derive(ValueEnum, Debug, Clone, Copy, Hash, PartialEq, Eq,Ord,PartialOrd)]
 pub enum Variant {
     TestAm,
     UnsafeAM,
@@ -32,8 +33,9 @@ pub enum Variant {
     LocalLockArray,
 }
 
+
+#[lamellar::main]
 fn main() {
-    // let _profiler = dhat::Profiler::new_heap();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -74,10 +76,10 @@ fn main() {
 
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
 
-    let mut results = HashMap::new();
+    let mut results = BTreeMap::new();
 
     for variant in variants {
-        let variant_results = results.entry(variant).or_insert(HashMap::new());
+        let variant_results = results.entry(variant).or_insert(BTreeMap::new());
 
         for _i in 0..iterations {
             // create new random indicies for each iteration

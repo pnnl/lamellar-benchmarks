@@ -5,11 +5,12 @@ authors = ["Ryan D. Friese"]
 edition = "2021"
 
 [dependencies]
-#lamellar = { git = "https://github.com/pnnl/lamellar-runtime"} #, features = ["enable-rofi"] }
-lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi","tokio-executor"] }
-#lamellar = { path = "../../lamellar-runtime-junction", features = ["enable-rofi"] }
-#lamellar = { version = "0.6.1" , features = ["enable-rofi"] }
-futures = "0.3.28"
-rand = "0.6"
-clap = { version = "4.3.4", features = ["derive", "env"] }
+clap = { workspace = true }
+futures = { workspace = true }
+lamellar = { workspace = true }
+rand = { workspace = true }
 
+[features]
+ofi = ["lamellar/enable-libfabric"]
+ucx = ["lamellar/enable-ucx"]
+rofi-c = ["lamellar/enable-rofi-c"]
