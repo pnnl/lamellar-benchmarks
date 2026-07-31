@@ -11,18 +11,18 @@ pub(crate) fn print_am_times(
     times: (Duration, Duration, Duration, usize),
 ) {
     if my_pe == 0 {
+        let variant_col = format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len());
+        let idx_size_col = format!(
+            "{:<1$}",
+            format!("{idx_size:?}"),
+            cli.max_index_size_len() + cli.max_array_distribution_len() + 1
+        );
+        let t0 = format!("{:<6.4?}", times.0);
+        let t1 = format!("{:<6.4?}", times.1);
+        let t2 = format!("{:<6.4?}", times.2);
         println!(
-            "{} {} {:<13} {:<13} {:<13} {}",
-            format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
-            format!(
-                "{:<1$}",
-                format!("{idx_size:?}"),
-                cli.max_index_size_len() + cli.max_array_distribution_len() + 1
-            ),
-            format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.1),
-            format!("{:<6.4?}", times.2),
-            times.3,
+            "{variant_col} {idx_size_col} {t0:<13} {t1:<13} {t2:<13} {}",
+            times.3
         );
     }
 }
@@ -49,18 +49,18 @@ pub(crate) fn print_array_times(
         } else {
             (std::mem::size_of::<u8>(), "u8")
         };
+        let variant_col = format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len());
+        let dist_col = format!(
+            "{:<1$}",
+            format!("{distribution:?} {index_name}"),
+            cli.max_index_size_len() + cli.max_array_distribution_len() + 1
+        );
+        let t0 = format!("{:<6.4?}", times.0);
+        let t1 = format!("{:<6.4?}", times.1);
+        let t2 = format!("{:<6.4?}", times.2);
         println!(
-            "{} {}  {:<13} {:<13} {:<13} {}",
-            format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
-            format!(
-                "{:<1$}",
-                format!("{distribution:?} {index_name}"),
-                cli.max_index_size_len() + cli.max_array_distribution_len() + 1
-            ),
-            format!("{:<6.4?}", times.0),
-            format!("{:<6.4?}", times.1),
-            format!("{:<6.4?}", times.2),
-            times.3,
+            "{variant_col} {dist_col}  {t0:<13} {t1:<13} {t2:<13} {}",
+            times.3
         );
     }
 }

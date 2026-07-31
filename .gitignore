@@ -1,6 +1,7 @@
-/target
+**/target
 **/*.rs.bk
-Cargo.lock
+**/Cargo.lock
+**/*.out
 
 # mac-specific file
 .DS_Store

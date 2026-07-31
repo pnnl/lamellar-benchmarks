@@ -1,3 +1,6 @@
+// clippy misattributes let_and_return warnings to macro-expanded #[lamellar::am] bodies
+#![allow(clippy::let_and_return)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
@@ -81,6 +84,8 @@ impl LamellarAM for UnsafeUsizeGroup {
 // We likely want to issue updates from multiple threads to improve performance
 // we can use a local Active Messages to do this.
 
+// "Group" postfix distinguishes these from the non-grouped variants in am.rs
+#[allow(clippy::enum_variant_names)]
 enum AmType {
     SafeU32Group(Darc<Vec<usize>>),
     SafeUsizeGroup(Darc<Vec<usize>>),
@@ -277,7 +282,7 @@ fn launch_ams(
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn index_gather<'a>(
+pub fn index_gather(
     world: &lamellar::LamellarWorld,
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,

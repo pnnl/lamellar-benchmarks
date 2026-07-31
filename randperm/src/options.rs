@@ -92,28 +92,18 @@ impl RandPermCli {
     }
 
     pub fn max_index_size_len(&self) -> usize {
-        if let Some(am_index_size) = self
-            .am_index_size
+        self.am_index_size
             .iter()
             .map(|v| format! {"{v:?}"}.len())
             .max()
-        {
-            am_index_size
-        } else {
-            5 //usize
-        }
+            .unwrap_or(5)
     }
 
     pub fn max_array_distribution_len(&self) -> usize {
-        if let Some(array_distribution) = self
-            .array_distribution
+        self.array_distribution
             .iter()
             .map(|v| format! {"{v:?}"}.len())
             .max()
-        {
-            array_distribution
-        } else {
-            6 //cyclic
-        }
+            .unwrap_or(6)
     }
 }

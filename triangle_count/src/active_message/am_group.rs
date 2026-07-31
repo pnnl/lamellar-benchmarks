@@ -78,12 +78,12 @@ impl LamellarAm for LaunchAm {
         for node in (self.start_node..self.end_node).filter(|n| self.graph.node_is_local(n)) {
             task_group.add_am_all(TcGroupAm {
                 graph: self.graph.clone(),
-                node: node,
+                node,
                 neighbors: self
                     .graph
                     .neighbors_iter(&node)
                     .take_while(|n| n < &&node)
-                    .map(|n| *n)
+                    .copied()
                     .collect::<Vec<u32>>(), //only send neighbors that are less than node as an optimization
                 final_cnt: self.final_cnt.clone(),
             });
@@ -92,7 +92,7 @@ impl LamellarAm for LaunchAm {
     }
 }
 
-pub(crate) fn triangle_count<'a>(
+pub(crate) fn triangle_count(
     world: &LamellarWorld,
     tc_config: &TcCli,
     graph: &Graph,
@@ -100,11 +100,13 @@ pub(crate) fn triangle_count<'a>(
 ) -> (Duration, Duration, Duration) {
     let my_pe = world.my_pe();
     let num_nodes = graph.num_nodes();
-    
 
     let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
     std::env::set_var("LAMELLAR_BATCH_OP_SIZE", format!("{}", buf_size));
-    println!("PE {}: starting am group triangle count with {} nodes and buffer size {}", my_pe, num_nodes, buf_size);
+    println!(
+        "PE {}: starting am group triangle count with {} nodes and buffer size {}",
+        my_pe, num_nodes, buf_size
+    );
     world.barrier();
     let timer = std::time::Instant::now();
 

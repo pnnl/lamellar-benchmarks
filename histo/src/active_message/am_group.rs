@@ -82,6 +82,8 @@ impl LamellarAM for UnsafeUsizeGroup {
 // We likely want to issue updates from multiple threads to improve performance
 // we can use a local Active Messages to do this.
 
+// "Group" postfix distinguishes these from the non-grouped variants in am.rs
+#[allow(clippy::enum_variant_names)]
 enum AmType {
     SafeU32Group(Darc<Vec<AtomicUsize>>),
     SafeUsizeGroup(Darc<Vec<AtomicUsize>>),
@@ -211,40 +213,38 @@ fn launch_ams(
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
         launch_tasks.push(match am_type {
-            AmType::SafeU32Group(ref counts) => world
-                .spawn_am_local(LaunchAmSafeU32Group {
+            AmType::SafeU32Group(ref counts) => world.spawn_am_local(LaunchAmSafeU32Group {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::SafeUsizeGroup(ref counts) => world.spawn_am_local(LaunchAmSafeUsizeGroup {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::UnsafeU32Group(ref counts) => world.spawn_am_local(LaunchAmUnsafeU32Group {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::UnsafeUsizeGroup(ref counts) => {
+                world.spawn_am_local(LaunchAmUnsafeUsizeGroup {
                     rand_indices: rand_indices.clone(),
                     slice_start: start,
                     slice_end: end,
                     counts: counts.clone(),
-                }),
-            AmType::SafeUsizeGroup(ref counts) => world
-                .spawn_am_local(LaunchAmSafeUsizeGroup {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
-            AmType::UnsafeU32Group(ref counts) => world
-                .spawn_am_local(LaunchAmUnsafeU32Group {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
-            AmType::UnsafeUsizeGroup(ref counts) => world
-                .spawn_am_local(LaunchAmUnsafeUsizeGroup {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
+                })
+            }
         });
     }
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn histo<'a>(
+pub fn histo(
     world: &lamellar::LamellarWorld,
     histo_config: &HistoCli,
     rand_indices: &Arc<Vec<usize>>,

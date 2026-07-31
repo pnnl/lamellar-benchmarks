@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
@@ -118,7 +120,7 @@ fn launch_ams(
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn rand_perm<'a>(
+pub fn rand_perm(
     world: &lamellar::LamellarWorld,
     rand_perm_config: &RandPermCli,
 ) -> (Duration, Duration, Duration, usize) {

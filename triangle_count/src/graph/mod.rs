@@ -1,10 +1,11 @@
+#![allow(clippy::let_underscore_future)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
 use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
-use std::future::Future;
 // use std::marker::PhantomData;
 
 use std::collections::HashMap;
@@ -13,8 +14,6 @@ use std::collections::HashSet;
 use std::fs::File;
 // use std::io::Write;
 use std::io::{BufRead, BufReader, BufWriter};
-
-use bincode;
 
 #[allow(dead_code)]
 pub mod mapgraph;
@@ -221,7 +220,7 @@ struct LocalNeighborsAM {
 #[lamellar::am]
 impl LamellarAM for LocalNeighborsAM {
     async fn exec() {
-        let  graph = self.graph.read().await;
+        let graph = self.graph.read().await;
         let mut nodes = Vec::with_capacity(self.node_and_neighbors.len());
         let mut remotes = Vec::with_capacity(self.node_and_neighbors.len());
         for (node, neighbors) in &self.node_and_neighbors {
@@ -269,9 +268,8 @@ pub struct Graph {
 impl Graph {
     pub fn new(fpath: &str, graph_type: GraphType, world: LamellarWorld) -> Graph {
         let my_pe = world.my_pe();
-        let graph = match graph_type {
-            _map_graph => GraphData::MapGraph(MapGraph::new(world.team().clone())),
-        };
+        let _ = graph_type;
+        let graph = GraphData::MapGraph(MapGraph::new(world.team().clone()));
         let graph = LocalRwDarc::new(world.team(), graph).block().unwrap(); // we are creating with the world team so should be valid on all pes
 
         Graph::load(fpath, &world, &graph).expect("error reading graph");
@@ -279,9 +277,9 @@ impl Graph {
             println!("Done loading graph!");
         }
         let g = Graph {
-            world: world,
+            world,
             graph: graph.into_darc().block(),
-            my_pe: my_pe,
+            my_pe,
         };
         if g.my_pe == 0 {
             println!("Done creating graph!");
@@ -295,10 +293,8 @@ impl Graph {
         world: &LamellarWorld,
         graph: &LocalRwDarc<GraphData>,
     ) -> Result<(), Box<dyn Error>> {
-        if world.my_pe() == 0 {
-            if !Graph::parse(fpath, b'\t', world, graph).is_ok() {
-                Graph::parse(fpath, b' ', world, graph)?;
-            }
+        if world.my_pe() == 0 && Graph::parse(fpath, b'\t', world, graph).is_err() {
+            Graph::parse(fpath, b' ', world, graph)?;
         }
         world.barrier();
         Ok(())
@@ -321,7 +317,7 @@ impl Graph {
         let mut temp_neighbor_list: Vec<EdgeList>;
         match path.extension().unwrap().to_str().unwrap() {
             "bin" => {
-                let file = File::open(&path)?;
+                let file = File::open(path)?;
                 let mut rdr = BufReader::new(file);
                 num_nodes = bincode::deserialize_from(&mut rdr).unwrap();
                 temp_neighbor_list = vec![EdgeList::Vec(Vec::new()); num_nodes];
@@ -336,7 +332,7 @@ impl Graph {
                 indices = (0..num_nodes).collect::<Vec<_>>();
             }
             "mm" => {
-                let file = File::open(&path)?;
+                let file = File::open(path)?;
                 let rdr = BufReader::new(file);
                 let mut lines = rdr
                     .lines()
@@ -351,7 +347,7 @@ impl Graph {
 
                 temp_neighbor_list = vec![EdgeList::Set(HashSet::new()); num_nodes];
 
-                for line in lines.map(|l| l) {
+                for line in lines {
                     let vals = line.split_whitespace().collect::<Vec<_>>();
                     let e0: usize = vals[0].parse::<usize>().unwrap() - 1;
                     let e1: usize = vals[1].parse::<usize>().unwrap() - 1;
@@ -370,7 +366,7 @@ impl Graph {
                 let mut rdr = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .delimiter(delim)
-                    .from_path(&path)?;
+                    .from_path(path)?;
                 let mut edges = EdgeList::Set(HashSet::new());
                 temp_neighbor_list = vec![];
                 for result in rdr.deserialize() {
@@ -425,8 +421,7 @@ impl Graph {
         let mut temp_nodes = vec![];
         let mut neigh_list = vec![];
         let mut size = 0;
-        let mut i = 0;
-        for nodes in temp_neighbor_list.drain(..) {
+        for (i, nodes) in temp_neighbor_list.drain(..).enumerate() {
             if size > num_edges / 10 {
                 let _ = world
                     .exec_am_local(RelabelAm {
@@ -442,7 +437,6 @@ impl Graph {
             let temp = world.alloc_one_sided_mem_region::<u32>(std::cmp::max(nodes_len, 1));
             neigh_list.push(temp.clone());
             temp_nodes.push((nodes, temp, i));
-            i += 1;
         }
         if size > 0 {
             let _ = world
@@ -462,13 +456,13 @@ impl Graph {
         for pe in 0..world.num_pes() {
             pe_neigh_lists.insert(pe, vec![]);
         }
-        for old_node in 0..neigh_list.len() {
+        for (old_node, region) in neigh_list.iter().enumerate() {
             let new_node = unsafe { relabeled.as_slice()[old_node] as usize };
             let pe = new_node % world.num_pes();
             pe_neigh_lists
                 .get_mut(&pe)
                 .unwrap()
-                .push((new_node as u32, neigh_list[old_node].clone()));
+                .push((new_node as u32, region.clone()));
         }
 
         let num_batches = std::cmp::min(10, neigh_list.len());
@@ -487,7 +481,7 @@ impl Graph {
                     )
                     .spawn();
             }
-            if neigh_lists.len() > 0 {
+            if !neigh_lists.is_empty() {
                 let _ = task_group
                     .exec_am_pe(
                         *pe,
@@ -552,7 +546,7 @@ impl Graph {
                     .neighbors_iter(&n0)
                     .take_while(|n| n < &&n0)
                     .collect::<Vec<_>>();
-                if neighs.len() > 0 {
+                if !neighs.is_empty() {
                     bincode::serialize_into(&mut file, &n0).unwrap();
                     bincode::serialize_into(&mut file, &neighs).unwrap();
                 }
@@ -562,17 +556,15 @@ impl Graph {
 
     pub fn print(&self) {
         for n0 in (0..self.num_nodes()).map(|n| n as u32) {
-           let neighs = if self.node_is_local(&n0) {
-                self
-                    .graph
+            let neighs = if self.node_is_local(&n0) {
+                self.graph
                     .neighbors_iter(&n0)
                     // .take_while(|n| n < &&n0)
                     .collect::<Vec<_>>()
-            }
-            else {
+            } else {
                 vec![]
             };
-            println!("{}: {:?} {:?}", n0, neighs.len() ,neighs);
+            println!("{}: {:?} {:?}", n0, neighs.len(), neighs);
         }
     }
 }

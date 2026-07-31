@@ -78,7 +78,6 @@ fn main() {
             // create new random indicies for each iteration
             let rand_index = Arc::new(
                 (0..l_num_updates)
-                    .into_iter()
                     .map(|_| rng.gen_range(0, global_count))
                     .collect::<Vec<usize>>(),
             );
@@ -96,8 +95,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::UnsafeAM => {
@@ -112,8 +111,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::SafeAm => {
@@ -128,8 +127,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::UnsafeBufferedAm => {
@@ -144,8 +143,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::SafeBufferedAm => {
@@ -160,8 +159,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::UnsafeAmGroup => {
@@ -176,8 +175,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::SafeAmGroup => {
@@ -192,8 +191,8 @@ fn main() {
                         variant_results
                             .entry(format!("{idx_size:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_am_times(&cli, my_pe, num_pes, &variant, &idx_size, times);
+                            .push(times);
+                        print_am_times(&cli, my_pe, num_pes, &variant, idx_size, times);
                     }
                 }
                 Variant::UnsafeArray => {
@@ -208,8 +207,8 @@ fn main() {
                         variant_results
                             .entry(format!("{distribution:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
+                            .push(times);
+                        print_array_times(&cli, my_pe, num_pes, &variant, distribution, times);
                     }
                 }
                 Variant::ReadOnlyArray => {
@@ -224,8 +223,8 @@ fn main() {
                         variant_results
                             .entry(format!("{distribution:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
+                            .push(times);
+                        print_array_times(&cli, my_pe, num_pes, &variant, distribution, times);
                     }
                 }
                 Variant::AtomicArray => {
@@ -240,8 +239,8 @@ fn main() {
                         variant_results
                             .entry(format!("{distribution:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
+                            .push(times);
+                        print_array_times(&cli, my_pe, num_pes, &variant, distribution, times);
                     }
                 }
                 Variant::LocalLockArray => {
@@ -256,8 +255,8 @@ fn main() {
                         variant_results
                             .entry(format!("{distribution:?}"))
                             .or_insert(Vec::new())
-                            .push(times.clone());
-                        print_array_times(&cli, my_pe, num_pes, &variant, &distribution, times);
+                            .push(times);
+                        print_array_times(&cli, my_pe, num_pes, &variant, distribution, times);
                     }
                 }
             }

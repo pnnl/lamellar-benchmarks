@@ -18,14 +18,14 @@ pub(crate) fn print_am_times(
         };
         let l_num_updates = cli.pe_updates(num_pes);
         let g_num_updates = cli.total_updates(num_pes);
+        let variant_col = format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len());
+        let idx_size_col = format!(
+            "{:<1$}",
+            format!("{idx_size:?}"),
+            cli.max_index_size_len() + cli.max_array_distribution_len()
+        );
         println!(
-            "{} {} lmups {:>9.2?}, gmups {:>9.2?}, lGB/s {:>7.2?}, gGB/s {:>7.2?}, {times:>6.4?}",
-            format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
-            format!(
-                "{:<1$}",
-                format!("{idx_size:?}"),
-                cli.max_index_size_len() + cli.max_array_distribution_len()
-            ),
+            "{variant_col} {idx_size_col} lmups {:>9.2?}, gmups {:>9.2?}, lGB/s {:>7.2?}, gGB/s {:>7.2?}, {times:>6.4?}",
             (l_num_updates as f32 / 1_000_000.0) / times.3.as_secs_f32(),
             (g_num_updates as f32 / 1_000_000.0) / times.3.as_secs_f32(),
             ((l_num_updates * payload_size) as f32 / 1_000_000_000.0) / times.3.as_secs_f32(),
@@ -60,14 +60,14 @@ pub(crate) fn print_array_times(
         let l_num_updates = cli.pe_updates(num_pes);
         let g_num_updates = cli.total_updates(num_pes);
 
+        let variant_col = format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len());
+        let dist_col = format!(
+            "{:<1$}",
+            format!("{distribution:?} {index_name}"),
+            cli.max_index_size_len() + cli.max_array_distribution_len()
+        );
         println!(
-            "{} {} lmups {:>9.2?}, gmups {:>9.2?}, lGB/s {:>7.2?}, gGB/s {:>7.2?}, {times:>6.4?}",
-            format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
-            format!(
-                "{:<1$}",
-                format!("{distribution:?} {index_name}"),
-                cli.max_index_size_len() + cli.max_array_distribution_len()
-            ),
+            "{variant_col} {dist_col} lmups {:>9.2?}, gmups {:>9.2?}, lGB/s {:>7.2?}, gGB/s {:>7.2?}, {times:>6.4?}",
             (l_num_updates as f32 / 1_000_000.0) / times.3.as_secs_f32(),
             (g_num_updates as f32 / 1_000_000.0) / times.3.as_secs_f32(),
             ((l_num_updates * payload_size) as f32 / 1_000_000_000.0) / times.3.as_secs_f32(),

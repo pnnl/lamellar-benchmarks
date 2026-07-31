@@ -54,7 +54,7 @@ fn main() {
                         variant_results
                             .entry(*buf_size)
                             .or_insert(Vec::new())
-                            .push(times.clone());
+                            .push(times);
                         print_am_times(my_pe, &variant, *buf_size, times);
                     }
                 }
@@ -66,16 +66,13 @@ fn main() {
                         variant_results
                             .entry(*buf_size)
                             .or_insert(Vec::new())
-                            .push(times.clone());
+                            .push(times);
                         print_am_times(my_pe, &variant, *buf_size, times);
                     }
                 }
                 Variant::Single => {
                     let times = active_message::single::triangle_count(&world, &cli, &graph);
-                    variant_results
-                        .entry(0)
-                        .or_insert(Vec::new())
-                        .push(times.clone());
+                    variant_results.entry(0).or_insert(Vec::new()).push(times);
                     print_am_times(my_pe, &variant, 0, times);
                 }
             }
@@ -95,7 +92,7 @@ fn main() {
                 // num_pes,
                 &format!("{:<1$}", format!("{variant:?}"), cli.max_variant_len()),
                 &format!("{:<1$}", format!("{sub_variant}"), max_buf_len),
-                &times,
+                times,
             )
         }
     }
@@ -104,9 +101,4 @@ fn main() {
     // if world.my_pe() == 0{
     //     graph.print();
     // }
-
-
-
-
-    
 }

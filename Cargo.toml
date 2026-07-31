@@ -9,7 +9,7 @@ async-std = "1.12.0"
 clap = { version = "4.3.4", features = ["derive", "env"] }
 futures = "0.3"
 #lamellar = { path = "../lamellar-runtime-junction", features = [
-lamellar = { version="0.8.0-rc.1", features = [
+lamellar = { version="0.8.1", features = [
     "enable-ucx",
     "enable-libfabric",
     "enable-rofi-c",

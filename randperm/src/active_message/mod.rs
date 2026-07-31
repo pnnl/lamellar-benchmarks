@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 pub mod buffered_cas_am;
 pub mod buffered_cas_am_remote;
 pub mod buffered_push_am;
@@ -100,7 +102,7 @@ fn collect_perm(
                         cur_pe as usize,
                         CollectAm {
                             array: the_array.clone(),
-                            data: data, //this is the remaining data
+                            data, //this is the remaining data
                             index: start_offset,
                         },
                     )

@@ -30,7 +30,7 @@ pub struct MapGraphIter<'a> {
 impl MapGraph {
     pub fn new(team: Arc<LamellarTeam>) -> MapGraph {
         MapGraph {
-            team: team,
+            team,
             neighbors: HashMap::new(),
             // num_nodes: 0,
         }
@@ -55,10 +55,13 @@ impl GraphOps for MapGraph {
         neighbors: OneSidedMemoryRegion<u32>,
     ) -> OneSidedMemoryRegion<u32> {
         //this is safe as we are consuming the one sided memory region without any clones or other references to it.
-        let mut lmr_neighbors: LamellarBuffer<u32, _> =  self.team.alloc_one_sided_mem_region(neighbors.len()).into();
+        let mut lmr_neighbors: LamellarBuffer<u32, _> =
+            self.team.alloc_one_sided_mem_region(neighbors.len()).into();
         unsafe {
             if neighbors.len() > 0 {
-                neighbors.get_into_buffer(0, lmr_neighbors.split_off(0)).await;
+                neighbors
+                    .get_into_buffer(0, lmr_neighbors.split_off(0))
+                    .await;
             }
         }
         let lmr_neighbors = lmr_neighbors.async_unwrap().await;
@@ -70,7 +73,7 @@ impl GraphOps for MapGraph {
     }
     fn neighbors(&self, node: &u32) -> std::slice::Iter<'_, u32> {
         if let Some(n) = self.neighbors.get(node) {
-            unsafe{ n.as_slice().iter()}
+            unsafe { n.as_slice().iter() }
         } else {
             panic!("node {:?} does not exist in graph", node);
         }
@@ -96,7 +99,7 @@ impl GraphOps for MapGraph {
 impl<'a> Iterator for MapGraphIter<'a> {
     type Item = &'a u32;
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|x| x)
+        self.iter.next()
     }
 }
 

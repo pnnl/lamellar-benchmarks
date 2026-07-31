@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use crate::{
     graph::{Graph, GraphData},
     options::TcCli,
@@ -78,7 +80,7 @@ impl LamellarAM for LaunchAm {
                 .graph
                 .neighbors_iter(&node)
                 .take_while(|n| n < &&node)
-                .map(|n| *n)
+                .copied()
                 .collect::<Vec<u32>>();
             cur_len += neighs.len();
             buffer.push((node, neighs)); // pack the node and neighbors into the buffer
@@ -107,7 +109,7 @@ impl LamellarAM for LaunchAm {
     }
 }
 
-pub(crate) fn triangle_count<'a>(
+pub(crate) fn triangle_count(
     world: &LamellarWorld,
     tc_config: &TcCli,
     graph: &Graph,
@@ -117,7 +119,10 @@ pub(crate) fn triangle_count<'a>(
     let num_nodes = graph.num_nodes();
 
     let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
-    println!("PE {}: starting buffered triangle count with {} nodes and buffer size {}", my_pe, num_nodes, buf_size);
+    println!(
+        "PE {}: starting buffered triangle count with {} nodes and buffer size {}",
+        my_pe, num_nodes, buf_size
+    );
     world.barrier();
     let timer = std::time::Instant::now();
 
@@ -136,7 +141,7 @@ pub(crate) fn triangle_count<'a>(
                     start_node,
                     end_node,
                     final_cnt: final_cnt.clone(),
-                    buf_size: buf_size,
+                    buf_size,
                 })
                 .spawn(),
         );

@@ -17,15 +17,15 @@ pub enum ArrayDistribution {
     Block,
     Cyclic,
 }
-impl Into<lamellar::Distribution> for &ArrayDistribution {
-    fn into(self) -> lamellar::Distribution {
-        match self {
+impl From<&ArrayDistribution> for lamellar::Distribution {
+    fn from(val: &ArrayDistribution) -> Self {
+        match val {
             ArrayDistribution::Block => lamellar::Distribution::Block,
             ArrayDistribution::Cyclic => lamellar::Distribution::Cyclic,
         }
     }
 }
-pub fn index_gather<'a>(
+pub fn index_gather(
     world: &lamellar::LamellarWorld,
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,

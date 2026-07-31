@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
@@ -60,7 +62,7 @@ impl LamellarAM for BufferedCasDartAm {
             }
         }
         for (pe, darts) in failed_darts.drain(..).enumerate() {
-            if darts.len() > 0 {
+            if !darts.is_empty() {
                 let _ = lamellar::world
                     .exec_am_pe(
                         pe,
@@ -110,7 +112,7 @@ impl LamellarAM for LaunchAm {
         }
 
         for (pe, darts) in buffered_darts.drain(..).enumerate() {
-            if darts.len() > 0 {
+            if !darts.is_empty() {
                 let _ = lamellar::world
                     .exec_am_pe(
                         pe,
@@ -157,7 +159,7 @@ fn launch_ams(
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn rand_perm<'a>(
+pub fn rand_perm(
     world: &lamellar::LamellarWorld,
     rand_perm_config: &RandPermCli,
 ) -> (Duration, Duration, Duration, usize) {

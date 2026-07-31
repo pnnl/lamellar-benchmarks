@@ -16,15 +16,15 @@ pub enum ArrayDistribution {
     Block,
     Cyclic,
 }
-impl Into<lamellar::Distribution> for &ArrayDistribution {
-    fn into(self) -> lamellar::Distribution {
-        match self {
+impl From<&ArrayDistribution> for lamellar::Distribution {
+    fn from(val: &ArrayDistribution) -> Self {
+        match val {
             ArrayDistribution::Block => lamellar::Distribution::Block,
             ArrayDistribution::Cyclic => lamellar::Distribution::Cyclic,
         }
     }
 }
-pub fn histo<'a>(
+pub fn histo(
     world: &lamellar::LamellarWorld,
     histo_config: &HistoCli,
     rand_indices: &Arc<Vec<usize>>,

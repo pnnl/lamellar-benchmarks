@@ -1,3 +1,6 @@
+// clippy misattributes let_and_return warnings to macro-expanded #[lamellar::am] bodies
+#![allow(clippy::let_and_return)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
@@ -168,7 +171,7 @@ fn launch_ams(
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn index_gather<'a>(
+pub fn index_gather(
     world: &lamellar::LamellarWorld,
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,

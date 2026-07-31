@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use crate::{
     graph::{Graph, GraphData},
     options::TcCli,
@@ -78,12 +80,12 @@ impl LamellarAm for LaunchAm {
             let _ = task_group
                 .exec_am_all(TcAm {
                     graph: self.graph.clone(),
-                    node: node,
+                    node,
                     neighbors: self
                         .graph
                         .neighbors_iter(&node)
                         .take_while(|n| n < &&node)
-                        .map(|n| *n)
+                        .copied()
                         .collect::<Vec<u32>>(), //only send neighbors that are less than node as an optimization
                     final_cnt: self.final_cnt.clone(),
                 })
@@ -92,7 +94,7 @@ impl LamellarAm for LaunchAm {
     }
 }
 
-pub(crate) fn triangle_count<'a>(
+pub(crate) fn triangle_count(
     world: &LamellarWorld,
     tc_config: &TcCli,
     graph: &Graph,
@@ -102,7 +104,10 @@ pub(crate) fn triangle_count<'a>(
 
     let final_cnt = AtomicArray::new(world.team(), world.num_pes(), Distribution::Block).block();
 
-    println!("PE {}: starting single message triangle count with {} nodes", my_pe, num_nodes);
+    println!(
+        "PE {}: starting single message triangle count with {} nodes",
+        my_pe, num_nodes
+    );
     world.barrier();
     let timer = std::time::Instant::now();
 

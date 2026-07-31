@@ -1,3 +1,6 @@
+// clippy misattributes let_and_return warnings to macro-expanded #[lamellar::am] bodies
+#![allow(clippy::let_and_return)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::active_messaging::{AmDist, LamellarAM, RemoteActiveMessage, Serde};
 use lamellar::darc::prelude::*;
@@ -89,7 +92,7 @@ impl LamellarAM for UnsafeBufferedAMusize {
 trait BufferedAm: RemoteActiveMessage + LamellarAM + Serde + AmDist + Clone {
     // type Index: Sync + Send + Clone;
     type AM: LamellarAM;
-    fn new(&self) -> Self;
+    fn blank(&self) -> Self;
     // fn to_am(self) -> Self::AM;
     fn add_index(&mut self, index: usize);
     fn len(&self) -> usize;
@@ -98,7 +101,7 @@ trait BufferedAm: RemoteActiveMessage + LamellarAM + Serde + AmDist + Clone {
 impl BufferedAm for SafeBufferedAMu32 {
     // type Index = u32;
     type AM = Self;
-    fn new(&self) -> Self {
+    fn blank(&self) -> Self {
         Self {
             indices: Vec::new(),
             table: self.table.clone(),
@@ -117,7 +120,7 @@ impl BufferedAm for SafeBufferedAMu32 {
 
 impl BufferedAm for SafeBufferedAMusize {
     type AM = Self;
-    fn new(&self) -> Self {
+    fn blank(&self) -> Self {
         Self {
             indices: Vec::new(),
             table: self.table.clone(),
@@ -136,7 +139,7 @@ impl BufferedAm for SafeBufferedAMusize {
 
 impl BufferedAm for UnsafeBufferedAMu32 {
     type AM = Self;
-    fn new(&self) -> Self {
+    fn blank(&self) -> Self {
         Self {
             indices: Vec::new(),
             table: self.table.clone(),
@@ -155,7 +158,7 @@ impl BufferedAm for UnsafeBufferedAMu32 {
 
 impl BufferedAm for UnsafeBufferedAMusize {
     type AM = Self;
-    fn new(&self) -> Self {
+    fn blank(&self) -> Self {
         Self {
             indices: Vec::new(),
             table: self.table.clone(),
@@ -189,7 +192,7 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
     async fn exec(self) -> Vec<<T as LamellarAM>::Output> {
         // let _timer = Instant::now();
         let num_pes = lamellar::num_pes;
-        let mut pe_ams = vec![self.am_builder.new(); num_pes];
+        let mut pe_ams = vec![self.am_builder.blank(); num_pes];
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
         let mut reqs = vec![];
         for idx in self.rand_indices[self.slice_start..self.slice_end].iter() {
@@ -197,7 +200,7 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
             let offset = idx / num_pes;
             pe_ams[rank].add_index(offset);
             if pe_ams[rank].len() >= self.buffer_size {
-                let mut am = self.am_builder.new();
+                let mut am = self.am_builder.blank();
                 std::mem::swap(&mut am, &mut pe_ams[rank]);
                 reqs.push(task_group.exec_am_pe(rank, am).spawn());
             }
@@ -217,12 +220,14 @@ impl<T: BufferedAm> LamellarAM for LaunchAm<T> {
     }
 }
 
+type LaunchAmsFut<T> = Pin<Box<dyn Future<Output = Vec<Vec<<T as LamellarAM>::Output>>>>>;
+
 fn launch_ams<T: BufferedAm>(
     world: &LamellarWorld,
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,
     am_builder: T,
-) -> Pin<Box<dyn Future<Output = Vec<Vec<<T as LamellarAM>::Output>>>>> {
+) -> LaunchAmsFut<T> {
     let num_pes = world.num_pes();
     let slice_size = ig_config.pe_updates(num_pes) as f32 / ig_config.launch_threads as f32;
     let mut launch_tasks = vec![];
@@ -245,7 +250,7 @@ fn launch_ams<T: BufferedAm>(
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn index_gather<'a>(
+pub fn index_gather(
     world: &lamellar::LamellarWorld,
     ig_config: &IndexGatherCli,
     rand_indices: &Arc<Vec<usize>>,

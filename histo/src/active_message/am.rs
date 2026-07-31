@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::memregion::prelude::*;
@@ -126,14 +128,13 @@ impl LamellarAM for LaunchAmSafeUsize {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            let _ = lamellar::world
-                .spawn_am_pe(
-                    rank,
-                    SafeUsize {
-                        index,
-                        counts: self.counts.clone(),
-                    },
-                ); //we could await here but we will just do a wait_all later instead
+            let _ = lamellar::world.spawn_am_pe(
+                rank,
+                SafeUsize {
+                    index,
+                    counts: self.counts.clone(),
+                },
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -152,14 +153,13 @@ impl LamellarAM for LaunchAmUnsafeU32 {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            let _ = lamellar::world
-                .spawn_am_pe(
-                    rank,
-                    UnsafeU32 {
-                        index: index as u32,
-                        counts: self.counts.clone(),
-                    },
-                ); //we could await here but we will just do a wait_all later instead
+            let _ = lamellar::world.spawn_am_pe(
+                rank,
+                UnsafeU32 {
+                    index: index as u32,
+                    counts: self.counts.clone(),
+                },
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -178,14 +178,13 @@ impl LamellarAM for LaunchAmUnsafeUsize {
         for idx in &self.rand_indices[self.slice_start..self.slice_end] {
             let rank = idx % lamellar::num_pes;
             let index = idx / lamellar::num_pes;
-            let _ = lamellar::world
-                .spawn_am_pe(
-                    rank,
-                    UnsafeUsize {
-                        index,
-                        counts: self.counts.clone(),
-                    },
-                ); //we could await here but we will just do a wait_all later instead
+            let _ = lamellar::world.spawn_am_pe(
+                rank,
+                UnsafeUsize {
+                    index,
+                    counts: self.counts.clone(),
+                },
+            ); //we could await here but we will just do a wait_all later instead
         }
     }
 }
@@ -204,40 +203,36 @@ fn launch_ams(
         let start = (tid as f32 * slice_size).round() as usize;
         let end = (tid as f32 * slice_size + slice_size).round() as usize;
         launch_tasks.push(match am_type {
-            AmType::SafeU32(ref counts) => world
-                .spawn_am_local(LaunchAmSafeU32 {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
-            AmType::SafeUsize(ref counts) => world
-                .spawn_am_local(LaunchAmSafeUsize {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
-            AmType::UnsafeU32(ref counts) => world
-                .spawn_am_local(LaunchAmUnsafeU32 {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
-            AmType::UnsafeUsize(ref counts) => world
-                .spawn_am_local(LaunchAmUnsafeUsize {
-                    rand_indices: rand_indices.clone(),
-                    slice_start: start,
-                    slice_end: end,
-                    counts: counts.clone(),
-                }),
+            AmType::SafeU32(ref counts) => world.spawn_am_local(LaunchAmSafeU32 {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::SafeUsize(ref counts) => world.spawn_am_local(LaunchAmSafeUsize {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::UnsafeU32(ref counts) => world.spawn_am_local(LaunchAmUnsafeU32 {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
+            AmType::UnsafeUsize(ref counts) => world.spawn_am_local(LaunchAmUnsafeUsize {
+                rand_indices: rand_indices.clone(),
+                slice_start: start,
+                slice_end: end,
+                counts: counts.clone(),
+            }),
         });
     }
     Box::pin(futures::future::join_all(launch_tasks))
 }
 
-pub fn histo<'a>(
+pub fn histo(
     world: &lamellar::LamellarWorld,
     histo_config: &HistoCli,
     rand_indices: &Arc<Vec<usize>>,

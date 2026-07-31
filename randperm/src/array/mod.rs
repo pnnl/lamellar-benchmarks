@@ -16,9 +16,9 @@ pub enum ArrayDistribution {
     Block,
     Cyclic,
 }
-impl Into<lamellar::Distribution> for &ArrayDistribution {
-    fn into(self) -> lamellar::Distribution {
-        match self {
+impl From<&ArrayDistribution> for lamellar::Distribution {
+    fn from(val: &ArrayDistribution) -> Self {
+        match val {
             ArrayDistribution::Block => lamellar::Distribution::Block,
             ArrayDistribution::Cyclic => lamellar::Distribution::Cyclic,
         }
@@ -50,7 +50,7 @@ fn array_rand_perm<A: LamellarArray<usize> + CompareExchangeOps<usize>>(
         })
         .collect::<Vec<usize>>();
     // continue launching remaining darts until they all stick
-    while remaining_darts.len() > 0 {
+    while !remaining_darts.is_empty() {
         let rand_index = (0..remaining_darts.len())
             .map(|_| rng.gen_range(0, target_array.len()))
             .collect::<Vec<usize>>();
@@ -97,7 +97,7 @@ fn unsafe_array_rand_perm<A: LamellarArray<usize> + UnsafeCompareExchangeOps<usi
         })
         .collect::<Vec<usize>>();
     // continue launching remaining darts until they all stick
-    while remaining_darts.len() > 0 {
+    while !remaining_darts.is_empty() {
         let rand_index = (0..remaining_darts.len())
             .map(|_| rng.gen_range(0, target_array.len()))
             .collect::<Vec<usize>>();
@@ -119,7 +119,7 @@ fn unsafe_array_rand_perm<A: LamellarArray<usize> + UnsafeCompareExchangeOps<usi
     world.wait_all();
     world.barrier();
 }
-pub fn rand_perm<'a>(
+pub fn rand_perm(
     world: &lamellar::LamellarWorld,
     rand_perm_config: &RandPermCli,
     array_type: ArrayType,
@@ -165,7 +165,7 @@ pub fn rand_perm<'a>(
     let (perm_time, collect_time) = match array_type {
         ArrayType::Unsafe => {
             timer = Instant::now();
-            unsafe_array_rand_perm(&world, &local_darts, &target_array, &mut rng);
+            unsafe_array_rand_perm(world, local_darts, &target_array, &mut rng);
             let perm_time = timer.elapsed();
             darts_array = unsafe {
                 target_array
@@ -179,7 +179,7 @@ pub fn rand_perm<'a>(
         ArrayType::Atomic => {
             let temp = target_array.into_atomic().block();
             timer = Instant::now();
-            array_rand_perm(&world, &local_darts, &temp, &mut rng);
+            array_rand_perm(world, local_darts, &temp, &mut rng);
             let perm_time = timer.elapsed();
             darts_array = temp
                 .dist_iter()
@@ -199,7 +199,7 @@ pub fn rand_perm<'a>(
         ArrayType::LocalLock => {
             let temp = target_array.into_local_lock().block();
             timer = Instant::now();
-            array_rand_perm(&world, &local_darts, &temp, &mut rng);
+            array_rand_perm(world, local_darts, &temp, &mut rng);
             let perm_time = timer.elapsed();
             darts_array = temp
                 .dist_iter()
