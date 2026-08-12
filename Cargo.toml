@@ -2,7 +2,7 @@
 
 resolver = "3"
 
-members = ["histo", "index_gather", "randperm", "triangle_count"]
+members = ["histo", "index_gather", "randperm", "triangle_count","primitives"]
 
 [workspace.dependencies]
 async-std = "1.12.0"
