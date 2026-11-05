@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **This repository is archived and no longer maintained here.**
+> The Lamellar benchmarks now live in the [`pnnl/lamellar`](https://github.com/pnnl/lamellar) monorepo at
+> [`lamellar-benchmarks`](https://github.com/pnnl/lamellar/tree/master/lamellar-benchmarks).
+> Please open issues and pull requests there. The full commit history, branches and tags were carried over
+> (as `benchmarks/<name>` branches and tags in the monorepo); commit SHAs are unchanged.
+
 Benchmarks for the Lamellar Runtime
 =================================================
 
